@@ -6,10 +6,14 @@ from primal_digest.config import (
     thermo_config,
     ALL_DNA,
 )
+from primal_digest.iteraction import all_inter_checker
+from primal_digest.classes import FKmer,RKmer,PrimerPair
+from primal_digest.report import *
+
 import numpy as np
 from Bio import SeqIO
 from collections import Counter
-from primal_digest.iteraction import all_inter_checker
+
 from Bio import Seq
 
 
@@ -29,7 +33,10 @@ This is a test of a new dynamic digestion algo
 """
 
 
-def remove_end_insertion(msa_array):
+def remove_end_insertion(msa_array: np.ndarray) -> np.ndarray:
+    """
+    Removes leading and trailing "-" from an msa
+    """
     tmp_array = msa_array
     ncols = tmp_array.shape[1]
     for row_index in range(0, tmp_array.shape[0]):
@@ -49,14 +56,12 @@ def remove_end_insertion(msa_array):
 
 def expand_ambs(seqs: Iterable[str]) -> set[set]:
     """
-    Takes a list / set of strings and returns a set wuth all ambs expanded
+    Takes a list / set of strings and returns a set with all ambs expanded
     It can return an empty set
     """
     returned_seq = set()
     amb_bases = {"Y", "W", "R", "B", "H", "V", "D", "K", "M", "S"}
     for seq in seqs:
-        if seq.__contains__("N"):
-            break
         # If there is any amb_bases in the seq
         if {base for base in seq} & amb_bases:
             expanded_seqs = set(map("".join, product(*map(ALL_DNA.get, seq))))
@@ -65,136 +70,6 @@ def expand_ambs(seqs: Iterable[str]) -> set[set]:
         else:
             returned_seq.add(seq)
     return returned_seq
-
-
-class FKmer:
-    end: int
-    seqs: set[str]
-
-    def __init__(self, end, seqs) -> None:
-        self.end = end
-        self.seqs = seqs
-
-    def len(self) -> set[int]:
-        return {len(x) for x in self.seqs}
-
-    def starts(self) -> set[int]:
-        return {self.end - len(x) for x in self.seqs}
-
-    def __str__(self, referance, amplicon_prefix, pool) -> str:
-        string_list = []
-        counter = 0
-        seqs = list(self.seqs)
-        seqs.sort()
-        for seq in seqs:
-            string_list.append(
-                f"{referance}\t{self.end-len(seq)}\t{self.end}\t{amplicon_prefix}_LEFT_{counter}\t{pool}\t+\t{seq}\n"
-            )
-            counter += 1
-        return "".join(string_list)
-
-    def __hash__(self) -> int:
-        seqs = list(self.seqs)
-        seqs.sort()
-        return hash(f"{self.end}{self.seqs}")
-
-    def __eq__(self, other):
-        if isinstance(other, FKmer):
-            return self.__hash__() == other.__hash__()
-
-
-class RKmer:
-    start: int
-    seqs: set[str]
-
-    def __init__(self, start, seqs) -> None:
-        self.start = start
-        self.seqs = seqs
-
-    def len(self) -> set[int]:
-        return {len(x) for x in self.seqs}
-
-    def ends(self) -> set[int]:
-        return {len(x) + self.start for x in self.seqs}
-
-    def __str__(self, referance, amplicon_prefix, pool) -> str:
-        string_list = []
-        counter = 0
-        seqs = list(self.seqs)
-        seqs.sort()
-        for seq in seqs:
-            string_list.append(
-                f"{referance}\t{self.start}\t{self.start+len(seq)}\t{amplicon_prefix}_RIGHT_{counter}\t{pool}\t-\t{seq}\n"
-            )
-            counter += 1
-        return "".join(string_list)
-
-    def reverse_complement(self):
-        rev_seqs = {x[::-1] for x in self.seqs}
-        self.seqs = {
-            "".join(AMBIGUOUS_DNA_COMPLEMENT[base.upper()] for base in seq)
-            for seq in rev_seqs
-        }
-        return self
-
-    def __hash__(self) -> int:
-        seqs = list(self.seqs)
-        seqs.sort()
-        return hash(f"{self.start}{self.seqs}")
-
-    def __eq__(self, other):
-        if isinstance(other, RKmer):
-            return self.__hash__() == other.__hash__()
-
-
-class PrimerPair:
-    fprimer: FKmer
-    rprimer: RKmer
-    amplicon_number: int
-    pool: int
-    msa_index: int
-
-    def __init__(self, fprimer, rprimer, amplicon_number=-1, pool=-1, msa_index=-1):
-        self.fprimer = fprimer
-        self.rprimer = rprimer
-        self.amplicon_number = amplicon_number
-        self.pool = pool
-        self.msa_index = msa_index
-
-    def set_amplicon_number(self, amplicon_number) -> None:
-        self.amplicon_number = amplicon_number
-
-    def set_pool_number(self, pool_number) -> None:
-        self.amplicon_number = pool_number
-
-    def start(self) -> int:
-        return max(self.fprimer.starts())
-
-    def end(self) -> int:
-        return min(self.rprimer.ends())
-
-    def inter_free(self, cfg) -> bool:
-        """
-        True means interaction
-        """
-        return all_inter_checker(self.fprimer.seqs, self.rprimer.seqs, cfg=cfg)
-
-    def all_seqs(self) -> set[str]:
-        return [x for x in self.fprimer.seqs] + [x for x in self.rprimer.seqs]
-
-    def __hash__(self) -> int:
-        return hash(f"{self.start}{self.end}{self.all_seqs()}")
-
-    def __str__(self, ref_name, amplicon_prefix):
-        return self.fprimer.__str__(
-            referance=f"{ref_name}",
-            amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
-            pool=self.pool + 1,
-        ) + self.rprimer.__str__(
-            referance=f"{ref_name}",
-            amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
-            pool=self.pool + 1,
-        )
 
 
 def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
@@ -363,14 +238,18 @@ def walk_right(
 
         passing_str = set()
         for exp_str in exp_new_string:
-            results = walk_right(
-                array,
-                col_index_right + 1,
-                col_index_left,
-                row_index,
-                exp_str,
-                cfg,
-            )
+            try:
+                results = walk_right(
+                    array,
+                    col_index_right + 1,
+                    col_index_left,
+                    row_index,
+                    exp_str,
+                    cfg,
+                )
+            except RecursionError:
+                return None
+
             if results is not None:
                 [passing_str.add(x) for x in results]
             else:
@@ -413,14 +292,18 @@ def walk_left(
 
         passing_str = set()
         for exp_str in exp_new_string:
-            results = walk_left(
-                array,
-                col_index_right,
-                col_index_left - 1,
-                row_index,
-                exp_str,
-                cfg,
-            )
+            try:
+                results = walk_left(
+                    array,
+                    col_index_right,
+                    col_index_left - 1,
+                    row_index,
+                    exp_str,
+                    cfg,
+                )
+            except RecursionError:
+                return None
+
             if results is not None:
                 [passing_str.add(x) for x in results]
             else:
@@ -731,6 +614,9 @@ def main():
 
     current_pool = 0
     last_primer_pair = 0
+    
+    failed_pp = set() # List of primerpairs that have failed interactions checkers
+
     for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):
         counter = 1
         keep_looping = True
@@ -753,8 +639,8 @@ def main():
                 last_primer_pair = pp
                 current_pool = (current_pool + 1) % 2
                 counter += 1
-            elif counter == 1 and last_primer_pair != 0:
-                # When the first primer of a new msa is addded to an exsiting pool
+            elif counter == 1 and last_primer_pair != 0: # When the first primer of a new msa is addded to an already populated pool
+                
                 all_seqs_in_other_pool = [
                     y
                     for sublist in (x.all_seqs() for x in pools[(current_pool + 1) % 2])
@@ -860,9 +746,8 @@ def main():
 
                                 new_primerpair = True
                                 break
-
-            else:
-                # Do the normal pp forward walk
+            else: # Do the normal pp forward walk
+                
                 print(last_primer_pair.end())
 
                 if pools[current_pool]:  # If there are primers in the same pool
@@ -959,7 +844,7 @@ def main():
                             new_primerpair = True
                             break
 
-                    if not new_primerpair:  # If all pp in the window have interactions
+                    if not new_primerpair:  # If all primerpairs in the window have interactions
                         pos_pp = [
                             x
                             for x in primerpairs_in_msa
@@ -989,6 +874,11 @@ def main():
                                 new_primerpair = True
                                 break
 
+                        # If code reaches here with no primers selected there are no valid primers
+                        #keep_looping = False
+                        #break
+
+
     all_pp = [y for sublist in (x for x in pools) for y in sublist]
     all_pp.sort(key=lambda pp: (pp.msa_index, pp.amplicon_number))
 
@@ -1013,6 +903,15 @@ def main():
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
         comb = thermo_cfg | cfg
         outfile.write(json.dumps(comb, sort_keys=True))
+
+    # Write the IGV report, if only one msa
+    if len(msa_list) == 1:
+        records = SeqIO.parse(ARG_MSA[0], "fasta")
+        ref = [record for record in records][0]
+        ref.id = "MSA"
+        ref.description = ""
+
+        write_report(all_pp, OUTPUT_DIR, cfg, ref.format("fasta"))
 
 
 if __name__ == "__main__":
