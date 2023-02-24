@@ -20,7 +20,7 @@ def cli():
         "--cores",
         help="The number of cores to use in Kmer digestion and thermo checking",
         type=int,
-        default=1,
+        default=8,
     )
     parser.add_argument(
         "--ampliconsizemax",
