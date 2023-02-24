@@ -1,5 +1,4 @@
 from primer3 import calcTm as p3_calc_tm, calcHairpin as p3_calc_hairpin
-from primal_digest.config import Cfg, config_dict
 from typing import Iterable
 from itertools import groupby
 
