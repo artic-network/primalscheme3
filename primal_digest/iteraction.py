@@ -1,5 +1,4 @@
 import parasail
-from primal_digest.config import Cfg
 from primal_digest.thermo import *
 import re
 
