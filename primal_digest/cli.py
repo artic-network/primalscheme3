@@ -12,8 +12,9 @@ def cli():
         "--msa",
         help="Paths to the MSA files",
         type=str,
-        required=True,
+        #required=True,
         nargs="+",
+        default=["/Users/kentcg/quick_lab_fork/SARS-CoV-2/400/v5.0.0_400/MN908947.3.fasta"]
     )
     parser.add_argument(
         "-c",
@@ -46,7 +47,7 @@ def cli():
         "--output",
         help="The output directory of the primer.bed file",
         type=str,
-        default="output",
+        default="output1000",
     )
     parser.add_argument(
         "--refnames",
@@ -102,6 +103,12 @@ def cli():
         "--use_cache",
         help="Save / Load data from the caches",
         action="store_true",
+    )
+    parser.add_argument(
+        "--npools",
+        help="Number of pools to use",
+        default=1,
+        type=int
     )
 
     args = parser.parse_args()
