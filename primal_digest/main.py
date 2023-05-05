@@ -1,14 +1,14 @@
-from thermo import *
-from cli import cli
-from config import (
+from primal_digest.thermo import *
+from primal_digest.cli import cli
+from primal_digest.config import (
     config_dict,
     thermo_config,
 )
-from iteraction import all_inter_checker
-from classes import FKmer,RKmer,PrimerPair,Scheme
-from report import *
-from digestion import *
-from get_window import *
+from primal_digest.iteraction import all_inter_checker
+from primal_digest.classes import FKmer,RKmer,PrimerPair,Scheme
+from primal_digest.report import *
+from primal_digest.digestion import *
+from primal_digest.get_window import *
 
 import numpy as np
 from Bio import SeqIO
@@ -62,7 +62,6 @@ def main():
     cfg["amplicon_size_max"] = args.ampliconsizemax
     cfg["amplicon_size_min"] = args.ampliconsizemin
     cfg["min_overlap"] = args.minoverlap
-    cfg["use_cache"] = args.use_cache
     cfg["force"] = args.force
     cfg["npools"] = args.npools
 
