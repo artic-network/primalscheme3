@@ -1,8 +1,8 @@
 # Modules
-from thermo import calc_tm
-from config import ALL_DNA
-from classes import RKmer, FKmer
-from thermo import *
+from primal_digest.thermo import calc_tm
+from primal_digest.config import ALL_DNA
+from primal_digest.classes import RKmer, FKmer
+from primal_digest.thermo import *
 
 # Externals
 from typing import Iterable
