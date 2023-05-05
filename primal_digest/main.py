@@ -187,7 +187,7 @@ def main():
         iter_free_primer_pairs: list[PrimerPair] = [
             pp for (bool, pp) in zip(mp_pp_bool, primer_pairs) if not bool
         ]
-        iter_free_primer_pairs.sort(key=lambda pp: (pp.start(), -pp.end()))
+        iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
 
         msa_primerpairs.append(iter_free_primer_pairs)
 
@@ -195,14 +195,14 @@ def main():
 
     for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):
         # Add the first primer
-        scheme.add_primer_pair(primerpairs_in_msa[0])
+        scheme.add_primer_pair(primerpairs_in_msa[0], msa_index)
 
         while True:
             # Try and add an overlapping primer
-            if scheme.try_ol_primerpairs(primerpairs_in_msa, thermo_cfg):
+            if scheme.try_ol_primerpairs(primerpairs_in_msa, thermo_cfg, msa_index):
                 continue
             # Try and add a walking primer
-            elif scheme.try_walk_primerpair(primerpairs_in_msa,thermo_cfg):
+            elif scheme.try_walk_primerpair(primerpairs_in_msa,thermo_cfg, msa_index):
                 continue
             else:
                 break
@@ -210,7 +210,7 @@ def main():
     # Create the output
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
 
-    # Write bed file
+    # Write primer bed file
     with open(OUTPUT_DIR / f"{cfg['output_prefix']}.primer.bed", "w") as outfile:
         for pp in scheme.all_primers():
             st = pp.__str__(
@@ -218,6 +218,13 @@ def main():
                 msa_index_to_ref_name.get(pp.msa_index, "NA"),
             )
             outfile.write(st)
+    
+    # Write amplicon bed file
+    with open(OUTPUT_DIR / f"{cfg['output_prefix']}.amplicon.bed", "w") as outfile:
+        bed_str = []
+        for pp in scheme.all_primers():
+            bed_str.append(f"{msa_index_to_ref_name.get(pp.msa_index, 'NA')}\t{pp.start()}\t{pp.end()}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}")
+        outfile.write("\n".join(bed_str))
 
     # Write the config file, combining the cfg and thermo_cfg
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
