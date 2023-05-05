@@ -1,6 +1,6 @@
 from primal_digest.config import AMBIGUOUS_DNA_COMPLEMENT
 from primal_digest.iteraction import all_inter_checker
-from primal_digest.get_window import get_pp_window
+from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score
 
 class FKmer:
     end: int
@@ -154,19 +154,21 @@ class Scheme():
     def next_pool(self) -> int:
         return (self._current_pool + 1) % self.n_pools
     
-    def add_primer_pair_to_pool(self, primerpair, pool):
+    def add_primer_pair_to_pool(self, primerpair, pool, msa_index):
         primerpair.pool = pool
-        primerpair.amplicon_number = len([pp for sublist in self._pools for pp in sublist])
+        primerpair.msa_index = msa_index
+        primerpair.amplicon_number = len([pp for sublist in self._pools for pp in sublist if pp.msa_index == msa_index])
+        
         
         # Adds the primerpair to the spesified pool
         self._pools[pool].append(primerpair)
         self._current_pool = self.next_pool()
         self._last_pp_added = primerpair
 
-    def add_primer_pair(self, primerpair):
+    def add_primer_pair(self, primerpair, msa_index):
         "Adds primerpair to the current pool, and updates the current pool"
         # Adds the primerpair to the current pool
-        self.add_primer_pair_to_pool(primerpair, self._current_pool)
+        self.add_primer_pair_to_pool(primerpair, self._current_pool,msa_index)
 
     def get_seqs_in_pool(self) -> list[str]:
         return [y for sublist in (x.all_seqs() for x in self._pools[self._current_pool]) for y in sublist]
@@ -181,7 +183,7 @@ class Scheme():
         # This will crash if no primer has been added, but should not be called until one is
         return max(self._last_pp_added.rprimer.ends())
     
-    def try_ol_primerpairs(self, all_pp_list, thermo_cfg) -> bool:
+    def try_ol_primerpairs(self, all_pp_list, thermo_cfg, msa_index) -> bool:
         """
         This will try and add this primerpair into any valid pool.
         Will return true if the primerpair has been added
@@ -198,8 +200,7 @@ class Scheme():
         
         #pos_ol_pp = get_pp_window(all_pp_list, fp_start=self.get_leading_coverage_edge() - self.cfg["min_overlap"] - self.cfg["amplicon_size_max"], fp_end=self.get_leading_coverage_edge() - self.cfg["min_overlap"], rp_end=self.get_leading_amplicon_edge() + self.cfg["min_overlap"])
         # Sort the primerpairs depending on how good they are
-        ## TODO produce a better score function
-        pos_ol_pp.sort(key = lambda pp: (-pp.rprimer.start,len(pp.all_seqs())))
+        pos_ol_pp.sort(key = lambda pp: ol_pp_score(pp.rprimer.start, len(pp.all_seqs()), self.get_leading_coverage_edge() - self.cfg["min_overlap"], self.cfg["min_overlap"]))
 
         # For each primerpair
         for ol_pp in pos_ol_pp:
@@ -207,17 +208,22 @@ class Scheme():
             for pool_index in pos_pools_indexes:
                 # If the pool is empty 
                 if not self._pools[pool_index]:
-                    self.add_primer_pair_to_pool(ol_pp, pool_index)
+                    self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
                     return True
-                # Ensure the new Primerpair doesn't clash with current primers in the pool, either sterically or an interaction  
-                if max(self._pools[pool_index][-1].rprimer.ends()) < min(ol_pp.fprimer.starts()) and not all_inter_checker(ol_pp.all_seqs(), index_to_seqs.get(pool_index), thermo_cfg):
-                    self.add_primer_pair_to_pool(ol_pp, pool_index)
+                
+                # If the last primer is from the same msa and does clash, skip it  
+                if self._pools[pool_index][-1].msa_index == msa_index and max(self._pools[pool_index][-1].rprimer.ends()) >= min(ol_pp.fprimer.starts()):
+                    continue
+                
+                # If the primer passes all the checks, make sure there are no interacts between new pp and pp in pool
+                if not all_inter_checker(ol_pp.all_seqs(), index_to_seqs.get(pool_index), thermo_cfg):
+                    self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
                     return True
 
         # If non of the primers work, return false
         return False
     
-    def try_walk_primerpair(self, all_pp_list, thermo_cfg) -> bool:
+    def try_walk_primerpair(self, all_pp_list, thermo_cfg, msa_index) -> bool:
         """
         Find the next valid primerpair while walking forwards
         """
@@ -231,26 +237,35 @@ class Scheme():
         # Find all posiable valid primerpairs
         pos_walk_pp = [pp for pp in all_pp_list if pp.fprimer.end > (self.get_leading_coverage_edge() - (self.cfg["min_overlap"] * 2))]
         # Sort walk primers by increasing start position
-        # TODO write a better scoring funciton
-        pos_walk_pp.sort(key = lambda pp: (pp.fprimer.end,len(pp.all_seqs())))
+        pos_walk_pp.sort(key = lambda pp: walk_pp_score(pp.fprimer.end, len(pp.all_seqs()), self._last_pp_added.end()))
 
         # For each primer, try each pool
         for walk_pp in pos_walk_pp:
             for pool_index in pos_pools_indexes:
                 # If the pool is empty add the first primer
                 if not self._pools[pool_index]:
-                    self.add_primer_pair_to_pool(walk_pp, pool_index)
+                    self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
                     return True
+                
+                # If the last primer is from the same msa and does clash, skip it  
+                if self._pools[pool_index][-1].msa_index == msa_index and max(self._pools[pool_index][-1].rprimer.ends()) >= min(walk_pp.fprimer.starts()) :
+                    continue
+
                 # Check if the walking primer clashes with the primer already in the pool
-                if max(self._pools[pool_index][-1].rprimer.ends()) < min(walk_pp.fprimer.starts()) and not all_inter_checker(walk_pp.all_seqs(), index_to_seqs.get(pool_index), thermo_cfg): 
-                    self.add_primer_pair_to_pool(walk_pp, pool_index)
+                if not all_inter_checker(walk_pp.all_seqs(), index_to_seqs.get(pool_index), thermo_cfg): 
+                    self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
                     return True
         
         return False
 
     def all_primers(self) -> list[PrimerPair]:
-        return [pp for pool in (x for x in self._pools) for pp in pool]
+        all_pp = [pp for pool in (x for x in self._pools) for pp in pool]
+        all_pp.sort(key= lambda pp: (pp.msa_index, pp.amplicon_number))
+        return all_pp
+    
 
+
+    
 
     
 
