@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "primal_digest"}]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.11"
 primer3-py = "^0.6.1"
 parasail = "^1.3.3"
 biopython = "^1.80"
