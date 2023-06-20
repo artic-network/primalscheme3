@@ -65,19 +65,22 @@ def walk_right(
     row_index: int,
     seq_str: str,
     cfg: dict,
-) -> set[str]:
+) -> set[str] | None:
     passing_str = set()
 
     if calc_tm(seq_str, cfg) < cfg["primer_tm_min"]:
+        # Check the primer cannot walk out of array size
         if col_index_right < array.shape[1] - 1:
             new_base = array[row_index, col_index_right]
         else:
             return None
 
+        # Fix incomplete ends
         if new_base == "":
             new_base = get_most_common_base(array, col_index_right + 1)
         new_string = (seq_str + new_base).replace("-", "")
 
+        # If Sequence contains N prevent it from being added
         if new_string.__contains__("N"):
             return None
         else:
@@ -85,6 +88,7 @@ def walk_right(
 
         passing_str = set()
         for exp_str in exp_new_string:
+            # Try/expect is to catch max Recursion depth Error fairly cleanly
             try:
                 results = walk_right(
                     array,
@@ -115,13 +119,14 @@ def walk_left(
     row_index: int,
     seq_str: str,
     cfg: dict,
-) -> set[str]:
+) -> set[str] | None:
     """
     This will take a string and its indexes and will recurvisly walk left
     until either tm is reached
     """
     passing_str = set()
     if calc_tm(seq_str, cfg) < cfg["primer_tm_min"]:
+        # Prevents walking out of array size
         if col_index_left > 0:
             new_base = array[row_index, col_index_left - 1]
         else:
@@ -132,6 +137,7 @@ def walk_left(
             new_base = get_most_common_base(array, col_index_left - 1)
         new_string = (new_base + seq_str).replace("-", "")
 
+        # Prevents seqs with an N
         if new_string.__contains__("N"):
             return None
         else:
@@ -261,7 +267,9 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
             return None
 
 
-def digest(msa_array, cfg, thermo_cfg, offset=0) -> tuple[list[FKmer], list[RKmer]]:
+def digest(
+    msa_array, cfg, thermo_cfg, offset=0
+) -> tuple[list[FKmer | None], list[RKmer | None]]:
     with Pool(cfg["n_cores"]) as p:
         fprimer_mp = p.map(
             mp_f_digest,
