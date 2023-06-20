@@ -162,11 +162,15 @@ def walk_left(
         return passing_str
 
 
-def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer:
+def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer | None:
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     start_col = data[2]
     offset = data[3]
+
+    # Check that there are no gaps at the first base
+    if "-" in align_array[:, start_col]:
+        return None
 
     total_col_seqs = set()
     for row_index in range(0, align_array.shape[0]):
@@ -211,11 +215,15 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer:
         return None
 
 
-def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer:
+def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     end_col = data[2]
     offset = data[3]
+
+    # Check that there are no gaps at the first base
+    if "-" in align_array[:, end_col]:
+        return None
 
     total_col_seqs = set()
     for row_index in range(0, align_array.shape[0]):
