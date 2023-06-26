@@ -1,4 +1,4 @@
-from primer3 import calcTm as p3_calc_tm, calcHairpin as p3_calc_hairpin
+from primer3 import calc_tm as p3_calc_tm, calc_hairpin as p3_calc_hairpin
 from typing import Iterable
 from itertools import groupby
 
