@@ -5,8 +5,7 @@ from primal_digest.config import (
     thermo_config,
 )
 from primal_digest.iteraction import all_inter_checker
-from primal_digest.classes import FKmer,RKmer,PrimerPair,Scheme
-from primal_digest.report import *
+from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme
 from primal_digest.digestion import *
 from primal_digest.get_window import *
 
@@ -17,7 +16,7 @@ import kmertools
 import json
 
 # Added
-
+import hashlib
 import sys
 import pathlib
 
@@ -34,6 +33,7 @@ def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
     pp = data[0]
     cfg = data[1]
     return all_inter_checker(pp.fprimer.seqs, pp.rprimer.seqs, cfg=cfg)
+
 
 def main():
     args = cli()
@@ -96,8 +96,9 @@ def main():
     unique_f_r_msa: list[list[list[FKmer], list[RKmer]]] = []
 
     for msa_index, msa_array in enumerate(msa_list):
-
-        mp_thermo_pass_fkmers, mp_thermo_pass_rkmers = digest(msa_array,cfg,thermo_cfg)
+        mp_thermo_pass_fkmers, mp_thermo_pass_rkmers = digest(
+            msa_array, cfg, thermo_cfg
+        )
         # Use the custom Rust unique checker
 
         f_kmer_bools = []
@@ -201,34 +202,47 @@ def main():
             if scheme.try_ol_primerpairs(primerpairs_in_msa, thermo_cfg, msa_index):
                 continue
             # Try and add a walking primer
-            elif scheme.try_walk_primerpair(primerpairs_in_msa,thermo_cfg, msa_index):
+            elif scheme.try_walk_primerpair(primerpairs_in_msa, thermo_cfg, msa_index):
                 continue
             else:
                 break
 
-    # Create the output
+    # Create the output dir
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
 
     # Write primer bed file
     with open(OUTPUT_DIR / f"{cfg['output_prefix']}.primer.bed", "w") as outfile:
+        primer_bed_str = []
         for pp in scheme.all_primers():
             st = pp.__str__(
                 msa_index_to_ref_name.get(pp.msa_index, "NA"),
                 msa_index_to_ref_name.get(pp.msa_index, "NA"),
             )
-            outfile.write(st)
-    
+            primer_bed_str.append(st.strip())
+        outfile.write("\n".join(primer_bed_str))
+
     # Write amplicon bed file
     with open(OUTPUT_DIR / f"{cfg['output_prefix']}.amplicon.bed", "w") as outfile:
-        bed_str = []
+        amp_bed_str = []
         for pp in scheme.all_primers():
-            bed_str.append(f"{msa_index_to_ref_name.get(pp.msa_index, 'NA')}\t{pp.start()}\t{pp.end()}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}")
-        outfile.write("\n".join(bed_str))
+            amp_bed_str.append(
+                f"{msa_index_to_ref_name.get(pp.msa_index, 'NA')}\t{pp.start()}\t{pp.end()}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
+            )
+        outfile.write("\n".join(amp_bed_str))
+
+    # Generate the bedfile hash, and add it into the config
+    bed_md5 = hashlib.md5("\n".join(primer_bed_str).encode())
+    cfg["md5_bed"] = bed_md5.hexdigest()
+
+    # Generate the amplicon hash, and add it into the config
+    bed_md5 = hashlib.md5("\n".join(amp_bed_str).encode())
+    cfg["md5_amp"] = bed_md5.hexdigest()
 
     # Write the config file, combining the cfg and thermo_cfg
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
         comb = thermo_cfg | cfg
         outfile.write(json.dumps(comb, sort_keys=True))
+
 
 if __name__ == "__main__":
     main()
