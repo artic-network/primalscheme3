@@ -98,12 +98,7 @@ def cli():
         type=int,
         default=2,
     )
-    parser.add_argument(
-        "--npools",
-        help="Number of pools to use",
-        default=2,
-        type=int
-    )
+    parser.add_argument("--npools", help="Number of pools to use", default=2, type=int)
 
     args = parser.parse_args()
     # If there is an invalid number of cores
