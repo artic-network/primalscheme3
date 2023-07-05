@@ -4,10 +4,11 @@ from primal_digest.config import (
     config_dict,
     thermo_config,
 )
-from primal_digest.iteraction import all_inter_checker
-from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme
+from primaldimer_py import do_pools_interact_py
+from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme, BedPrimer, BedRecord
 from primal_digest.digestion import *
 from primal_digest.get_window import *
+from primal_digest.bedfiles import parse_bedfile
 
 import numpy as np
 from Bio import SeqIO
@@ -32,7 +33,9 @@ def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
     """
     pp = data[0]
     cfg = data[1]
-    return all_inter_checker(pp.fprimer.seqs, pp.rprimer.seqs, cfg=cfg)
+    return do_pools_interact_py(
+        list(pp.fprimer.seqs), list(pp.rprimer.seqs), cfg["dimerscore"]
+    )
 
 
 def main():
@@ -50,6 +53,7 @@ def main():
     thermo_cfg["primer_gc_max"] = args.primer_gc_max
     thermo_cfg["primer_tm_min"] = args.primer_tm_min
     thermo_cfg["primer_tm_max"] = args.primer_tm_max
+    thermo_cfg["dimerscore"] = args.dimerscore
 
     # Run Settings
     cfg["refname"] = args.refnames
@@ -64,6 +68,7 @@ def main():
     cfg["min_overlap"] = args.minoverlap
     cfg["force"] = args.force
     cfg["npools"] = args.npools
+    cfg["dimerscore"] = args.dimerscore
 
     msa_index_to_ref_name = {
         index: msa_name for index, msa_name in enumerate(cfg["refname"])
@@ -193,9 +198,16 @@ def main():
 
     scheme = Scheme(cfg=cfg)
 
+    # If the bedfile flag is given add the primers into the scheme
+    if args.bedfile:
+        current_pools = parse_bedfile(args.bedfile, cfg["npools"])
+        # Assign the bedfile generated pool to the scheme in a hacky way
+        scheme._pools = current_pools
+
     for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):
-        # Add the first primer
-        scheme.add_primer_pair(primerpairs_in_msa[0], msa_index)
+        # Add the first primer, and if no primers can be added move to next msa
+        if not scheme.add_first_primer_pair(primerpairs_in_msa, msa_index):
+            continue
 
         while True:
             # Try and add an overlapping primer
@@ -226,7 +238,7 @@ def main():
         amp_bed_str = []
         for pp in scheme.all_primers():
             amp_bed_str.append(
-                f"{msa_index_to_ref_name.get(pp.msa_index, 'NA')}\t{pp.start()}\t{pp.end()}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
+                f"{msa_index_to_ref_name.get(pp.msa_index, 'NA')}\t{pp.start}\t{pp.end}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
             )
         outfile.write("\n".join(amp_bed_str))
 
