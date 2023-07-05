@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import pathlib
 
 
 def cli():
@@ -99,8 +100,19 @@ def cli():
         default=2,
     )
     parser.add_argument("--npools", help="Number of pools to use", default=2, type=int)
+    parser.add_argument(
+        "--dimerscore", help="Threshold for dimer interaction", default=-26, type=float
+    )
+    parser.add_argument(
+        "--bedfile", help="An existing bedfile to add primers to", type=pathlib.Path
+    )
 
     args = parser.parse_args()
+
+    # Check the bedfile exsists if given
+    if args.bedfile and not args.bedfile.is_file():
+        sys.exit(f"ERROR: No file found at: '{str(args.bedfile.absolute())}'")
+
     # If there is an invalid number of cores
     if int(args.cores) <= 0:
         sys.exit(f"ERROR: {int(args.cores)} is not a valid core count")
