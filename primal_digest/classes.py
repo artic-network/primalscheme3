@@ -1,6 +1,20 @@
 from primal_digest.config import AMBIGUOUS_DNA_COMPLEMENT
-from primal_digest.iteraction import all_inter_checker
+from primaldimer_py import do_pools_interact_py
 from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score
+import abc
+import re
+
+REGEX_PATTERN_PRIMERNAME = re.compile("\d+(_RIGHT|_LEFT|_R|_L)")
+
+
+def re_primer_name(string) -> tuple[str, str] | None:
+    """
+    Will return (amplicon_number, R/L) or None
+    """
+    match = REGEX_PATTERN_PRIMERNAME.search(string)
+    if match:
+        return match.group().split("_")
+    return None
 
 
 class FKmer:
@@ -111,9 +125,11 @@ class PrimerPair:
     def set_pool_number(self, pool_number) -> None:
         self.amplicon_number = pool_number
 
+    @property
     def start(self) -> int:
         return min(self.fprimer.starts())
 
+    @property
     def end(self) -> int:
         return max(self.rprimer.ends())
 
@@ -121,7 +137,9 @@ class PrimerPair:
         """
         True means interaction
         """
-        return all_inter_checker(self.fprimer.seqs, self.rprimer.seqs, cfg=cfg)
+        return do_pools_interact_py(
+            self.fprimer.seqs, self.rprimer.seqs, cfg["dimerscore"]
+        )
 
     def all_seqs(self) -> set[str]:
         return [x for x in self.fprimer.seqs] + [x for x in self.rprimer.seqs]
@@ -141,16 +159,77 @@ class PrimerPair:
         )
 
 
+class BedPrimer:
+    ref: str
+    _start: int
+    _end: int
+    primername: str
+    pool: int
+    direction: str
+    sequence: str
+    # Calc values
+    amplicon_number: int
+
+    def __init__(self, bedline: list[str]) -> None:
+        self.ref = bedline[0]
+        self._start = int(bedline[1])
+        self._end = int(bedline[2])
+        self.primername = bedline[3]
+        self.pool = int(bedline[4]) - 1
+        self.direction = bedline[5]
+        self.sequence = bedline[6]
+
+        # Calc some metrics
+        result = re_primer_name(self.primername)
+        if result is None:
+            self.amplicon_number = 0
+        else:
+            self.amplicon_number = int(result[0])
+
+    def all_seqs(self) -> set[str]:
+        return {self.sequence}
+
+    @property
+    def msa_index(self) -> str:
+        return self.ref
+
+    @property
+    def start(self) -> int:
+        return self._start
+
+    @property
+    def end(self) -> int:
+        return self._end
+
+    def __str__(self, *kwargs) -> str:
+        # I use *kwargs so that it can have the same behavor as PrimerPairs
+        return f"{self.ref}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
+
+
+class BedRecord(abc.ABC):
+    @abc.abstractmethod
+    def all_seqs(self) -> set[str]:
+        pass
+
+    @abc.abstractproperty
+    def msa_index(self) -> str | int:
+        pass
+
+    @abc.abstractproperty
+    def pool(self) -> int:
+        pass
+
+
 class Scheme:
-    _pools: list[list[PrimerPair]]
+    _pools: list[list[BedRecord]]
     _current_pool: int
     npools: int
-    _last_pp_added: PrimerPair
+    _last_pp_added: BedRecord
     cfg: dict
 
     def __init__(self, cfg):
         self.n_pools = cfg["npools"]
-        self._pools = [[] for _ in range(self.n_pools)]
+        self._pools: list[list[BedRecord]] = [[] for _ in range(self.n_pools)]
         self._current_pool = 0
         self._pp_number = 1
         self.cfg = cfg
@@ -176,13 +255,42 @@ class Scheme:
 
         # Adds the primerpair to the spesified pool
         self._pools[pool].append(primerpair)
+        self._current_pool = pool
         self._current_pool = self.next_pool()
         self._last_pp_added = primerpair
 
-    def add_primer_pair(self, primerpair, msa_index):
+    def add_first_primer_pair(self, primerpairs: list[PrimerPair], msa_index) -> bool:
         "Adds primerpair to the current pool, and updates the current pool"
-        # Adds the primerpair to the current pool
-        self.add_primer_pair_to_pool(primerpair, self._current_pool, msa_index)
+
+        # Try and add the first primerpair to an empty pool
+        for pool_index in range(self.n_pools):
+            if not self._pools[pool_index]:
+                self.add_primer_pair_to_pool(primerpairs[0], pool_index, msa_index)
+                return True
+
+        # Create a hashmap of what seqs are in each pool for quicklook up
+        pool_seqs_map: dict[int : list[str]] = {
+            index: [
+                y
+                for sublist in (x.all_seqs() for x in self._pools[index])
+                for y in sublist
+            ]
+            for index in range(self.n_pools)
+        }
+
+        # Adds the first valid primerpair
+        for primerpair in primerpairs:
+            for pool_index in range(self.n_pools):
+                if not do_pools_interact_py(
+                    list(primerpair.all_seqs()),
+                    pool_seqs_map[pool_index],
+                    self.cfg["dimerscore"],
+                ):
+                    self.add_primer_pair_to_pool(primerpair, pool_index, msa_index)
+                    return True
+
+        # If not primerpair can be added return false
+        return False
 
     def get_seqs_in_pool(self) -> list[str]:
         return [
@@ -261,8 +369,10 @@ class Scheme:
                     continue
 
                 # If the primer passes all the checks, make sure there are no interacts between new pp and pp in pool
-                if not all_inter_checker(
-                    ol_pp.all_seqs(), index_to_seqs.get(pool_index), thermo_cfg
+                if not do_pools_interact_py(
+                    ol_pp.all_seqs(),
+                    index_to_seqs.get(pool_index),
+                    self.cfg["dimerscore"],
                 ):
                     self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
                     return True
@@ -319,8 +429,10 @@ class Scheme:
                     continue
 
                 # Check if the walking primer clashes with the primer already in the pool
-                if not all_inter_checker(
-                    walk_pp.all_seqs(), index_to_seqs.get(pool_index), thermo_cfg
+                if not do_pools_interact_py(
+                    walk_pp.all_seqs(),
+                    index_to_seqs.get(pool_index),
+                    self.cfg["dimerscore"],
                 ):
                     self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
                     return True
@@ -329,5 +441,5 @@ class Scheme:
 
     def all_primers(self) -> list[PrimerPair]:
         all_pp = [pp for pool in (x for x in self._pools) for pp in pool]
-        all_pp.sort(key=lambda pp: (pp.msa_index, pp.amplicon_number))
+        all_pp.sort(key=lambda pp: (str(pp.msa_index), pp.amplicon_number))
         return all_pp
