@@ -24,6 +24,7 @@ Currently the best way to use is to use poetry to handle dependencies.
 -   `--force`: Override the output directory. If set, then any existing output directory will be overwritten.
 -   `--minoverlap`: The minimum amount of overlap between primers. Default is `20`.
 -   `--npools`: Number of pools to use. Default is `2`.
+-   `--bedfile`: Add primers to an existing bedfile. Note: The number of pools in bedfile <= --npools. Primal-digest makes no attempt to validate primers or primer-primer interactions in the bedfile.
 
 ## Advanced Arguments
 
