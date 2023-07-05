@@ -9,6 +9,7 @@ from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme, BedPrimer, B
 from primal_digest.digestion import *
 from primal_digest.get_window import *
 from primal_digest.bedfiles import parse_bedfile
+from primal_digest.seq_functions import remove_end_insertion
 
 import numpy as np
 from Bio import SeqIO
