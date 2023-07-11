@@ -5,10 +5,10 @@ from primal_digest.config import (
     thermo_config,
 )
 from primaldimer_py import do_pools_interact_py
-from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme, BedPrimer, BedRecord
-from primal_digest.digestion import *
-from primal_digest.get_window import *
-from primal_digest.bedfiles import parse_bedfile
+from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme
+from primal_digest.digestion import digest
+from primal_digest.get_window import get_r_window_FAST2
+from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
 from primal_digest.seq_functions import remove_end_insertion
 
 import numpy as np
@@ -21,7 +21,9 @@ import json
 import hashlib
 import sys
 import pathlib
+from loguru import logger
 
+logger = logger.opt(colors=True)
 
 """
 This is a test of a new dynamic digestion algo
@@ -47,21 +49,25 @@ def main():
     cfg = config_dict
     thermo_cfg = thermo_config
 
+    logger.remove()  # Remove default stderr logger
+    logger.add(sys.stderr, colorize=True, format="{message}", level="INFO")
+
     # Primer Digestion settings
-    thermo_cfg["kmer_size_max"] = 36
-    thermo_cfg["kmer_size_min"] = 14
+    thermo_cfg["primer_size_min"] = 36
+    thermo_cfg["primer_size_min"] = 18
     thermo_cfg["primer_gc_min"] = args.primer_gc_min
     thermo_cfg["primer_gc_max"] = args.primer_gc_max
     thermo_cfg["primer_tm_min"] = args.primer_tm_min
     thermo_cfg["primer_tm_max"] = args.primer_tm_max
     thermo_cfg["dimerscore"] = args.dimerscore
+    thermo_cfg["reducekmers"] = args.reducekmers
 
     # Run Settings
     cfg["refname"] = args.refnames
     cfg["n_cores"] = args.cores
     cfg["output_prefix"] = args.prefix
     cfg["output_dir"] = str(OUTPUT_DIR)
-    cfg["msa_paths"] = ARG_MSA
+    cfg["msa_paths"] = [str(x) for x in ARG_MSA]
     cfg["mismatches_self"] = args.mismatches_self
     cfg["mismatches_alt"] = args.mismatches_alt
     cfg["amplicon_size_max"] = args.ampliconsizemax
@@ -83,6 +89,41 @@ def main():
             sys.exit(
                 f"ERROR: {OUTPUT_DIR} already exists, please use --force to override"
             )
+    # Create the scheme object early
+    scheme = Scheme(cfg=cfg)
+    # If the bedfile flag is given add the primers into the scheme
+    if args.bedfile:
+        current_pools = parse_bedfile(args.bedfile, cfg["npools"])
+        # Assign the bedfile generated pool to the scheme in a hacky way
+        scheme._pools = current_pools
+        primer_tms = calc_median_bed_tm(current_pools, thermo_cfg)
+
+        logger.info(
+            "Read in bedfile: <blue>{msa_path}</>: <green>{num_pp}</> Primers with median Tm of <green>{tm}</>",
+            msa_path=args.bedfile.name,
+            num_pp=len(
+                [
+                    primer
+                    for primer in (pool for pool in current_pools)
+                    for primer in primer
+                ]
+            ),
+            tm=round(primer_tms[1], 2),
+        )
+
+        # If the bedfile tm is dif to the config Throw error
+        if (
+            primer_tms[0] < thermo_cfg["primer_tm_min"] - 5
+            or primer_tms[2] > thermo_cfg["primer_tm_max"] + 5
+        ):
+            logger.warning(
+                "Tm in bedfile <green>{tm_min}</>:<green>{tm_median}</>:<green>{tm_max}</> (min, median, max) fall outside range of <green>{conf_tm_min}</> to <green>{conf_tm_max}</>)",
+                tm_min=round(primer_tms[0], 1),
+                tm_median=round(primer_tms[1], 1),
+                tm_max=round(primer_tms[2], 1),
+                conf_tm_min=thermo_cfg["primer_tm_min"],
+                conf_tm_max=thermo_cfg["primer_tm_max"],
+            )
 
     # Read in the MSAs
     msa_list: list[np.ndarray] = []
@@ -91,6 +132,13 @@ def main():
         align_array = np.array([record.seq.upper() for record in records], dtype=str)
         align_array = remove_end_insertion(align_array)
         msa_list.append(align_array)
+
+        logger.info(
+            "Read in MSA: <blue>{msa_path}</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
+            msa_path=msa_path.name,
+            msa_rows=align_array.shape[0],
+            msa_cols=align_array.shape[1],
+        )
 
     raw_msa_list: list[np.ndarray] = []
     for msa_path in ARG_MSA:
@@ -166,6 +214,12 @@ def main():
 
         # Append them to the msa
         unique_f_r_msa.append((unique_fkmers, unique_rkmers))
+        logger.info(
+            "<blue>{msa_path}</>: digested to <green>{num_fkmers}</> FKmers and <green>{num_rkmers}</> RKmers",
+            msa_path=msa_path.name,
+            num_fkmers=len(unique_fkmers),
+            num_rkmers=len(unique_rkmers),
+        )
 
     msa_primerpairs = []
     # Generate all valid primerpairs for each msa
@@ -196,14 +250,11 @@ def main():
         iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
 
         msa_primerpairs.append(iter_free_primer_pairs)
-
-    scheme = Scheme(cfg=cfg)
-
-    # If the bedfile flag is given add the primers into the scheme
-    if args.bedfile:
-        current_pools = parse_bedfile(args.bedfile, cfg["npools"])
-        # Assign the bedfile generated pool to the scheme in a hacky way
-        scheme._pools = current_pools
+        logger.info(
+            "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
+            msa_path=msa_path.name,
+            num_pp=len(iter_free_primer_pairs),
+        )
 
     for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):
         # Add the first primer, and if no primers can be added move to next msa
@@ -222,6 +273,8 @@ def main():
 
     # Create the output dir
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
+
+    logger.info("Writting output files")
 
     # Write primer bed file
     with open(OUTPUT_DIR / f"{cfg['output_prefix']}.primer.bed", "w") as outfile:
