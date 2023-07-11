@@ -1,6 +1,7 @@
 from primal_digest.config import AMBIGUOUS_DNA_COMPLEMENT
 from primaldimer_py import do_pools_interact_py
 from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score
+from primal_digest.seq_functions import expand_ambs
 import abc
 import re
 
@@ -187,7 +188,8 @@ class BedPrimer:
             self.amplicon_number = int(result[0])
 
     def all_seqs(self) -> set[str]:
-        return {self.sequence}
+        "Expands ambs bases"
+        return expand_ambs([self.sequence])
 
     @property
     def msa_index(self) -> str:
@@ -410,7 +412,7 @@ class Scheme:
         # Sort walk primers by increasing start position
         pos_walk_pp.sort(
             key=lambda pp: walk_pp_score(
-                pp.fprimer.end, len(pp.all_seqs()), self._last_pp_added.end()
+                pp.fprimer.end, len(pp.all_seqs()), self._last_pp_added.end
             )
         )
 
