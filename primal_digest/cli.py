@@ -12,7 +12,7 @@ def cli():
         "-m",
         "--msa",
         help="Paths to the MSA files",
-        type=str,
+        type=pathlib.Path,
         required=True,
         nargs="+",
     )
@@ -106,7 +106,12 @@ def cli():
     parser.add_argument(
         "--bedfile", help="An existing bedfile to add primers to", type=pathlib.Path
     )
-
+    parser.add_argument(
+        "--reducekmers",
+        help="An existing bedfile to add primers to",
+        type=bool,
+        default=False,
+    )
     args = parser.parse_args()
 
     # Check the bedfile exsists if given
