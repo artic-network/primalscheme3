@@ -6,11 +6,10 @@ from primal_digest.thermo import *
 from primal_digest.seq_functions import expand_ambs, get_most_common_base
 
 # Externals
-from typing import Iterable
-from itertools import product
 import numpy as np
-from collections import Counter
 from multiprocessing import Pool
+import itertools
+import networkx as nx
 
 
 def walk_right(
@@ -135,7 +134,9 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer | None:
 
     total_col_seqs = set()
     for row_index in range(0, align_array.shape[0]):
-        start_array = align_array[row_index, start_col : start_col + 14]
+        start_array = align_array[
+            row_index, start_col : start_col + cfg["primer_size_min"]
+        ]
         start_seq = "".join(start_array).replace("-", "")
 
         if (
@@ -149,7 +150,7 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer | None:
 
         seqs = walk_right(
             array=align_array,
-            col_index_right=start_col + 14,
+            col_index_right=start_col + cfg["primer_size_min"],
             col_index_left=start_col,
             row_index=row_index,
             seq_str=start_seq,
@@ -164,13 +165,16 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer | None:
         if seqs:
             total_col_seqs = total_col_seqs | seqs
 
-    if not total_col_seqs.__contains__(None):
+    if None not in total_col_seqs:
         # Thermo check the kmers
         if thermo_check_kmers(total_col_seqs, cfg) and not forms_hairpin(
             total_col_seqs, cfg=cfg
         ):
             tmp_kmer = RKmer(start=start_col + offset, seqs=total_col_seqs)
             tmp_kmer = tmp_kmer.reverse_complement()
+            # Reduce the number of kmers if asked
+            if cfg["reducekmers"]:
+                tmp_kmer.seqs = reduce_kmers(tmp_kmer.seqs)
             return tmp_kmer
     else:
         return None
@@ -188,9 +192,9 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
 
     total_col_seqs = set()
     for row_index in range(0, align_array.shape[0]):
-        start_seq = "".join(align_array[row_index, end_col - 14 : end_col]).replace(
-            "-", ""
-        )
+        start_seq = "".join(
+            align_array[row_index, end_col - cfg["primer_size_min"] : end_col]
+        ).replace("-", "")
 
         if not start_seq:  # If the start seq is empty go to the next row
             continue
@@ -198,7 +202,7 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
         seqs = walk_left(
             array=align_array,
             col_index_right=end_col,
-            col_index_left=end_col - 14,
+            col_index_left=end_col - cfg["primer_size_min"],
             row_index=row_index,
             seq_str=start_seq,
             cfg=cfg,
@@ -212,14 +216,78 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
         if seqs:
             total_col_seqs = total_col_seqs | seqs
 
-    if not total_col_seqs.__contains__(None):
+    if None not in total_col_seqs:
         # Thermo check the kmers
         if thermo_check_kmers(total_col_seqs, cfg) and not forms_hairpin(
             total_col_seqs, cfg=cfg
         ):
-            return FKmer(end=end_col + offset, seqs=total_col_seqs)
+            tmp_fkmer = FKmer(end=end_col + offset, seqs=total_col_seqs)
+            if cfg["reducekmers"]:
+                tmp_fkmer.seqs = reduce_kmers(tmp_fkmer.seqs)
+            return tmp_fkmer
         else:
             return None
+
+
+def hamming_dist(s1, s2) -> int:
+    """
+    Return the number of subsitutions, starting from the 3p end
+    """
+    return sum((x != y for x, y in zip(s1[::-1], s2[::-1])))
+
+
+def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set[str]:
+    ## Cluster sequences via the 3p end
+    p3_end_dict: dict[str : set[str]] = {}
+    for sequence in seqs:
+        p3_end = sequence[-end_3p:]
+        p5_tail = sequence[:-end_3p]
+        if p3_end in p3_end_dict:
+            p3_end_dict[p3_end].add(p5_tail)
+        else:
+            p3_end_dict[p3_end] = {p5_tail}
+
+    ## Minimise edit distance between all tails within the same p3 cluster
+    for p3_end, p5_tails in p3_end_dict.items():
+        # If only one sequence skip
+        if len(p5_tails) <= 1:
+            continue
+
+        # Create a linkage graph
+        G = nx.Graph()
+        G.add_nodes_from(p5_tails)
+        for s1, s2 in itertools.combinations(p5_tails, 2):
+            if hamming_dist(s1, s2) <= max_edit_dist:
+                # Add edges if the distance is <= hamming dist max
+                G.add_edge(s1, s2)
+
+        # Find the most connected sequence
+        sorted_sequences = sorted(
+            p5_tails, key=lambda seq: len(list(G.neighbors(seq))), reverse=True
+        )
+
+        # Seqs which are included in the scheme
+        included_seqs = set()
+        # Seqs which have a closely related sequence included
+        accounted_seqs = set()
+
+        for sequence in sorted_sequences:
+            # If the sequence is not accounted for and not included
+            if sequence not in accounted_seqs and sequence not in included_seqs:
+                included_seqs.add(sequence)
+                # Add all the neighbor into accounted seqs
+                for neighbor in G.neighbors(sequence):
+                    accounted_seqs.add(neighbor)
+
+        # Update the p3_end_dict to contain the downsampled tails
+        p3_end_dict[p3_end] = included_seqs
+
+    seqs = set()
+    ## Regenerate all the sequences from p3_end_dict
+    for k, v in p3_end_dict.items():
+        for seq in v:
+            seqs.add(f"{seq}{k}")
+    return seqs
 
 
 def digest(
@@ -230,7 +298,7 @@ def digest(
             mp_f_digest,
             [
                 (msa_array, thermo_cfg, end_col, offset)
-                for end_col in range(14, msa_array.shape[1])
+                for end_col in range(thermo_cfg["primer_size_min"], msa_array.shape[1])
             ],
         )
     mp_thermo_pass_fkmers = [x for x in fprimer_mp if x is not None]
@@ -242,7 +310,9 @@ def digest(
             mp_r_digest,
             [
                 (msa_array, thermo_cfg, start_col, offset)
-                for start_col in range(msa_array.shape[1] - 14)
+                for start_col in range(
+                    msa_array.shape[1] - thermo_cfg["primer_size_min"]
+                )
             ],
         )
     mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
