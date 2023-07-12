@@ -6,7 +6,7 @@ from primal_digest.config import (
 )
 from primaldimer_py import do_pools_interact_py
 from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme
-from primal_digest.digestion import digest
+from primal_digest.digestion import digest, generate_valid_primerpairs
 from primal_digest.get_window import get_r_window_FAST2
 from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
 from primal_digest.seq_functions import remove_end_insertion
@@ -28,17 +28,6 @@ logger = logger.opt(colors=True)
 """
 This is a test of a new dynamic digestion algo
 """
-
-
-def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
-    """
-    True means interaction
-    """
-    pp = data[0]
-    cfg = data[1]
-    return do_pools_interact_py(
-        list(pp.fprimer.seqs), list(pp.rprimer.seqs), cfg["dimerscore"]
-    )
 
 
 def main():
@@ -222,38 +211,19 @@ def main():
         )
 
     msa_primerpairs = []
-    # Generate all valid primerpairs for each msa
+    ## Generate all valid primerpairs for each msa
     for msa_index, unique_fr_kmers in enumerate(unique_f_r_msa):
-        wanted_fkmers = unique_fr_kmers[0]
-        wanted_rkmers = unique_fr_kmers[1]
-
-        # Generate all primer pairs
-        primer_pairs: list[PrimerPair] = []
-        for f in wanted_fkmers:
-            pos_r = get_r_window_FAST2(
-                kmers=wanted_rkmers,
-                start=min(f.starts()) + cfg["amplicon_size_min"],
-                end=min(f.starts()) + cfg["amplicon_size_max"],
+        # Generate all primerpairs then interaction check
+        msa_primerpairs.append(
+            generate_valid_primerpairs(
+                unique_fr_kmers[0], unique_fr_kmers[1], cfg, thermo_cfg
             )
-            for r in pos_r:
-                primer_pairs.append(PrimerPair(f, r))
-
-        # Filter out primerpairs if f primer seqs interact with r primer seqs
-        with Pool(cfg["n_cores"]) as p:
-            mp_pp_bool = p.map(
-                mp_pp_inter_free, [(pp, thermo_cfg) for pp in primer_pairs]
-            )
-
-        iter_free_primer_pairs: list[PrimerPair] = [
-            pp for (bool, pp) in zip(mp_pp_bool, primer_pairs) if not bool
-        ]
-        iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
-
-        msa_primerpairs.append(iter_free_primer_pairs)
+        )
+        # Log some stats
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
             msa_path=msa_path.name,
-            num_pp=len(iter_free_primer_pairs),
+            num_pp=len(msa_primerpairs[msa_index]),
         )
 
     for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):

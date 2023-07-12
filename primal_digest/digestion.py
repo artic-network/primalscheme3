@@ -1,15 +1,62 @@
 # Modules
 from primal_digest.thermo import calc_tm
 from primal_digest.config import ALL_DNA
-from primal_digest.classes import RKmer, FKmer
+from primal_digest.classes import RKmer, FKmer, PrimerPair
 from primal_digest.thermo import *
 from primal_digest.seq_functions import expand_ambs, get_most_common_base
+from primal_digest.get_window import get_r_window_FAST2
+from primaldimer_py import do_pools_interact_py
 
 # Externals
 import numpy as np
 from multiprocessing import Pool
 import itertools
 import networkx as nx
+
+
+def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
+    """
+    True means interaction
+    """
+    pp = data[0]
+    cfg = data[1]
+    return do_pools_interact_py(
+        list(pp.fprimer.seqs), list(pp.rprimer.seqs), cfg["dimerscore"]
+    )
+
+
+def generate_valid_primerpairs(
+    fkmers: list[FKmer], rkmers: list[RKmer], cfg: dict, thermo_cfg: dict
+) -> list[PrimerPair]:
+    """
+    Generates all valid primers pairs, and then runs interaction checker and returns passing PP
+    """
+    ## Generate all primerpairs without checking
+    non_checked_pp = []
+    for fkmer in fkmers:
+        fkmer_start = min(fkmer.starts())
+        # Get all rkmers that would make a valid amplicon
+        pos_rkmer = get_r_window_FAST2(
+            kmers=rkmers,
+            start=fkmer_start + cfg["amplicon_size_min"],
+            end=fkmer_start + cfg["amplicon_size_max"],
+        )
+        for rkmer in pos_rkmer:
+            non_checked_pp.append(PrimerPair(fkmer, rkmer))
+
+    ## Interaction check all the primerpairs
+    with Pool(cfg["n_cores"]) as p:
+        mp_pp_bool = p.map(
+            mp_pp_inter_free, [(pp, thermo_cfg) for pp in non_checked_pp]
+        )
+
+    ## Valid primerpairs
+    iter_free_primer_pairs: list[PrimerPair] = [
+        pp for (bool, pp) in zip(mp_pp_bool, non_checked_pp) if not bool
+    ]
+
+    iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
+    return iter_free_primer_pairs
 
 
 def walk_right(
