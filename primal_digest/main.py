@@ -53,7 +53,7 @@ def main():
     logger.add(sys.stderr, colorize=True, format="{message}", level="INFO")
 
     # Primer Digestion settings
-    thermo_cfg["primer_size_min"] = 36
+    thermo_cfg["primer_size_max"] = 36
     thermo_cfg["primer_size_min"] = 18
     thermo_cfg["primer_gc_min"] = args.primer_gc_min
     thermo_cfg["primer_gc_max"] = args.primer_gc_max
