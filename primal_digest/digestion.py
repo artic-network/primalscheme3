@@ -47,7 +47,7 @@ def generate_valid_primerpairs(
     ## Interaction check all the primerpairs
     with Pool(cfg["n_cores"]) as p:
         mp_pp_bool = p.map(
-            mp_pp_inter_free, [(pp, thermo_cfg) for pp in non_checked_pp]
+            mp_pp_inter_free, ((pp, thermo_cfg) for pp in non_checked_pp)
         )
 
     ## Valid primerpairs
@@ -213,15 +213,16 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer | None:
             total_col_seqs = total_col_seqs | seqs
 
     if None not in total_col_seqs:
+        # Downsample the seqs if asked
+        if cfg["reducekmers"]:
+            total_col_seqs = reduce_kmers(total_col_seqs)
+
         # Thermo check the kmers
         if thermo_check_kmers(total_col_seqs, cfg) and not forms_hairpin(
             total_col_seqs, cfg=cfg
         ):
             tmp_kmer = RKmer(start=start_col + offset, seqs=total_col_seqs)
             tmp_kmer = tmp_kmer.reverse_complement()
-            # Reduce the number of kmers if asked
-            if cfg["reducekmers"]:
-                tmp_kmer.seqs = reduce_kmers(tmp_kmer.seqs)
             return tmp_kmer
     else:
         return None
@@ -264,14 +265,15 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
             total_col_seqs = total_col_seqs | seqs
 
     if None not in total_col_seqs:
+        # DownSample the seqs if asked
+        if cfg["reducekmers"]:
+            total_col_seqs = reduce_kmers(total_col_seqs)
+
         # Thermo check the kmers
         if thermo_check_kmers(total_col_seqs, cfg) and not forms_hairpin(
             total_col_seqs, cfg=cfg
         ):
-            tmp_fkmer = FKmer(end=end_col + offset, seqs=total_col_seqs)
-            if cfg["reducekmers"]:
-                tmp_fkmer.seqs = reduce_kmers(tmp_fkmer.seqs)
-            return tmp_fkmer
+            return FKmer(end=end_col + offset, seqs=total_col_seqs)
         else:
             return None
 
