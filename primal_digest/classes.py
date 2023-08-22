@@ -1,9 +1,13 @@
-from primal_digest.config import AMBIGUOUS_DNA_COMPLEMENT
 from primaldimer_py import do_pools_interact_py
-from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score
-from primal_digest.seq_functions import expand_ambs
+
 import abc
 import re
+
+# Module imports
+from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score
+from primal_digest.seq_functions import expand_ambs, reverse_complement
+from primal_digest.config import AMBIGUOUS_DNA_COMPLEMENT
+from primal_digest.mismatches import MatchDB, detect_new_products
 
 REGEX_PATTERN_PRIMERNAME = re.compile("\d+(_RIGHT|_LEFT|_R|_L)")
 
@@ -46,6 +50,23 @@ class FKmer:
             counter += 1
         return "".join(string_list)
 
+    def find_matches(
+        self,
+        matchDB: MatchDB,
+        remove_expected: bool,
+        fuzzy: bool,
+        kmersize: int,
+        msa_index,
+    ) -> set[tuple]:
+        """Returns all matches of this FKmer"""
+        return matchDB.find_fkmer(
+            self,
+            fuzzy=fuzzy,
+            remove_expected=remove_expected,
+            kmersize=kmersize,
+            msaindex=msa_index,
+        )
+
     def __hash__(self) -> int:
         seqs = list(self.seqs)
         seqs.sort()
@@ -86,13 +107,25 @@ class RKmer:
             counter += 1
         return "".join(string_list)
 
-    def reverse_complement(self):
-        rev_seqs = {x[::-1] for x in self.seqs}
-        self.seqs = {
-            "".join(AMBIGUOUS_DNA_COMPLEMENT[base.upper()] for base in seq)
-            for seq in rev_seqs
-        }
-        return self
+    def reverse_complement(self) -> set[str]:
+        return {reverse_complement(x) for x in self.seqs}
+
+    def find_matches(
+        self,
+        matchDB: MatchDB,
+        remove_expected: bool,
+        fuzzy: bool,
+        kmersize: int,
+        msa_index: int,
+    ) -> set[tuple]:
+        """Returns all matches of this FKmer"""
+        return matchDB.find_rkmer(
+            self,
+            fuzzy=fuzzy,
+            remove_expected=remove_expected,
+            kmersize=kmersize,
+            msaindex=msa_index,
+        )
 
     def __hash__(self) -> int:
         seqs = list(self.seqs)
@@ -113,7 +146,14 @@ class PrimerPair:
     pool: int
     msa_index: int
 
-    def __init__(self, fprimer, rprimer, amplicon_number=-1, pool=-1, msa_index=-1):
+    def __init__(
+        self,
+        fprimer,
+        rprimer,
+        msa_index,
+        amplicon_number=-1,
+        pool=-1,
+    ):
         self.fprimer = fprimer
         self.rprimer = rprimer
         self.amplicon_number = amplicon_number
@@ -125,6 +165,25 @@ class PrimerPair:
 
     def set_pool_number(self, pool_number) -> None:
         self.amplicon_number = pool_number
+
+    def find_matches(self, matchDB, fuzzy, remove_expected, kmersize) -> set[tuple]:
+        """
+        Find matches for the FKmer and RKmer
+        """
+        matches = set()
+        # Find the FKmer matches
+        matches.update(
+            self.fprimer.find_matches(
+                matchDB, fuzzy, remove_expected, kmersize, msa_index=self.msa_index
+            )
+        )
+        # Find the RKmer matches
+        matches.update(
+            self.rprimer.find_matches(
+                matchDB, fuzzy, remove_expected, kmersize, self.msa_index
+            )
+        )
+        return matches
 
     @property
     def start(self) -> int:
@@ -208,7 +267,7 @@ class BedPrimer:
         return f"{self.ref}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
 
 
-class BedRecord(abc.ABC):
+class PrimerRecord(abc.ABC):
     @abc.abstractmethod
     def all_seqs(self) -> set[str]:
         pass
@@ -223,18 +282,21 @@ class BedRecord(abc.ABC):
 
 
 class Scheme:
-    _pools: list[list[BedRecord]]
+    _pools: list[list[PrimerRecord]]
     _current_pool: int
     npools: int
-    _last_pp_added: BedRecord
+    _last_pp_added: PrimerRecord
+    _matchDB: MatchDB
     cfg: dict
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, matchDB: MatchDB):
         self.n_pools = cfg["npools"]
-        self._pools: list[list[BedRecord]] = [[] for _ in range(self.n_pools)]
+        self._pools: list[list[PrimerRecord]] = [[] for _ in range(self.n_pools)]
+        self._matches: list[set[tuple]] = [set() for _ in range(self.n_pools)]
         self._current_pool = 0
         self._pp_number = 1
         self.cfg = cfg
+        self._matchDB = matchDB
 
     @property
     def npools(self) -> int:
@@ -243,7 +305,9 @@ class Scheme:
     def next_pool(self) -> int:
         return (self._current_pool + 1) % self.n_pools
 
-    def add_primer_pair_to_pool(self, primerpair, pool, msa_index):
+    def add_primer_pair_to_pool(self, primerpair: PrimerPair, pool, msa_index):
+        """Main method to add a primerpair to a pool"""
+        # Set the primerpair values
         primerpair.pool = pool
         primerpair.msa_index = msa_index
         primerpair.amplicon_number = len(
@@ -255,7 +319,17 @@ class Scheme:
             ]
         )
 
-        # Adds the primerpair to the spesified pool
+        # Adds the primerpair's matches to the pools matches
+        self._matches[pool].update(
+            primerpair.find_matches(
+                self._matchDB,
+                fuzzy=self.cfg["mismatch_fuzzy"],
+                remove_expected=True,
+                kmersize=self.cfg["mismatch_kmersize"],
+            )
+        )
+
+        # Adds the primerpair to the pool
         self._pools[pool].append(primerpair)
         self._current_pool = pool
         self._current_pool = self.next_pool()
@@ -287,6 +361,15 @@ class Scheme:
                     list(primerpair.all_seqs()),
                     pool_seqs_map[pool_index],
                     self.cfg["dimerscore"],
+                ) and not detect_new_products(
+                    primerpair.find_matches(
+                        self._matchDB,
+                        remove_expected=False,
+                        kmersize=self.cfg["mismatch_kmersize"],
+                        fuzzy=self.cfg["mismatch_fuzzy"],
+                    ),
+                    self._matches[pool_index],
+                    self.cfg["mismatch_product_size"],
                 ):
                     self.add_primer_pair_to_pool(primerpair, pool_index, msa_index)
                     return True
@@ -311,7 +394,7 @@ class Scheme:
         # This will crash if no primer has been added, but should not be called until one is
         return max(self._last_pp_added.rprimer.ends())
 
-    def try_ol_primerpairs(self, all_pp_list, thermo_cfg, msa_index) -> bool:
+    def try_ol_primerpairs(self, all_pp_list, cfg, msa_index) -> bool:
         """
         This will try and add this primerpair into any valid pool.
         Will return true if the primerpair has been added
@@ -338,7 +421,7 @@ class Scheme:
         pos_ol_pp = [
             pp
             for pp in all_pp_list
-            if min(pp.fprimer.starts())
+            if pp.fprimer.end
             < self.get_leading_coverage_edge() - self.cfg["min_overlap"]
             and pp.rprimer.start
             > self.get_leading_amplicon_edge() + self.cfg["min_overlap"]
@@ -351,8 +434,9 @@ class Scheme:
                 pp.rprimer.start,
                 len(pp.all_seqs()),
                 self.get_leading_coverage_edge() - self.cfg["min_overlap"],
-                self.cfg["min_overlap"],
-            )
+                self.cfg,
+            ),
+            reverse=True,
         )
 
         # For each primerpair
@@ -375,6 +459,15 @@ class Scheme:
                     ol_pp.all_seqs(),
                     index_to_seqs.get(pool_index),
                     self.cfg["dimerscore"],
+                ) and not detect_new_products(
+                    ol_pp.find_matches(
+                        self._matchDB,
+                        remove_expected=False,
+                        kmersize=self.cfg["mismatch_kmersize"],
+                        fuzzy=self.cfg["mismatch_fuzzy"],
+                    ),
+                    self._matches[pool_index],
+                    self.cfg["mismatch_product_size"],
                 ):
                     self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
                     return True
@@ -382,7 +475,7 @@ class Scheme:
         # If non of the primers work, return false
         return False
 
-    def try_walk_primerpair(self, all_pp_list, thermo_cfg, msa_index) -> bool:
+    def try_walk_primerpair(self, all_pp_list, cfg, msa_index) -> bool:
         """
         Find the next valid primerpair while walking forwards
         """
@@ -435,6 +528,15 @@ class Scheme:
                     walk_pp.all_seqs(),
                     index_to_seqs.get(pool_index),
                     self.cfg["dimerscore"],
+                ) and not detect_new_products(
+                    walk_pp.find_matches(
+                        self._matchDB,
+                        remove_expected=False,
+                        kmersize=self.cfg["mismatch_kmersize"],
+                        fuzzy=self.cfg["mismatch_fuzzy"],
+                    ),
+                    self._matches[pool_index],
+                    self.cfg["mismatch_product_size"],
                 ):
                     self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
                     return True
