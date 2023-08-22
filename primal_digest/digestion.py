@@ -1,17 +1,28 @@
 # Modules
 from primal_digest.thermo import calc_tm
-from primal_digest.config import ALL_DNA
 from primal_digest.classes import RKmer, FKmer, PrimerPair
-from primal_digest.thermo import *
+from primal_digest.thermo import calc_tm, thermo_check_kmers, forms_hairpin
 from primal_digest.seq_functions import expand_ambs, get_most_common_base
 from primal_digest.get_window import get_r_window_FAST2
+from primal_digest.errors import (
+    WalksOut,
+    GapOnSetBase,
+    ContainsInvalidBase,
+    CustomErrors,
+    ERROR_SET,
+    CustomRecursionError,
+)
+
+# Submodules
 from primaldimer_py import do_pools_interact_py
+
 
 # Externals
 import numpy as np
 from multiprocessing import Pool
 import itertools
 import networkx as nx
+from collections import Counter
 
 
 def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
@@ -26,7 +37,7 @@ def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
 
 
 def generate_valid_primerpairs(
-    fkmers: list[FKmer], rkmers: list[RKmer], cfg: dict, thermo_cfg: dict
+    fkmers: list[FKmer], rkmers: list[RKmer], cfg: dict, msa_index: int
 ) -> list[PrimerPair]:
     """
     Generates all valid primers pairs, and then runs interaction checker and returns passing PP
@@ -42,13 +53,11 @@ def generate_valid_primerpairs(
             end=fkmer_start + cfg["amplicon_size_max"],
         )
         for rkmer in pos_rkmer:
-            non_checked_pp.append(PrimerPair(fkmer, rkmer))
+            non_checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
 
     ## Interaction check all the primerpairs
     with Pool(cfg["n_cores"]) as p:
-        mp_pp_bool = p.map(
-            mp_pp_inter_free, ((pp, thermo_cfg) for pp in non_checked_pp)
-        )
+        mp_pp_bool = p.map(mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp))
 
     ## Valid primerpairs
     iter_free_primer_pairs: list[PrimerPair] = [
@@ -66,51 +75,45 @@ def walk_right(
     row_index: int,
     seq_str: str,
     cfg: dict,
-) -> set[str] | None:
-    passing_str = set()
-
-    if calc_tm(seq_str, cfg) < cfg["primer_tm_min"]:
-        # Check the primer cannot walk out of array size
-        if col_index_right < array.shape[1] - 1:
-            new_base = array[row_index, col_index_right]
-        else:
-            return None
-
-        # Fix incomplete ends
-        if new_base == "":
-            new_base = get_most_common_base(array, col_index_right + 1)
-        new_string = (seq_str + new_base).replace("-", "")
-
-        # If Sequence contains N prevent it from being added
-        if new_string.__contains__("N"):
-            return None
-        else:
-            exp_new_string: set[str] = expand_ambs([new_string])
-
-        passing_str = set()
-        for exp_str in exp_new_string:
-            # Try/expect is to catch max Recursion depth Error fairly cleanly
-            try:
-                results = walk_right(
-                    array,
-                    col_index_right + 1,
-                    col_index_left,
-                    row_index,
-                    exp_str,
-                    cfg,
-                )
-            except RecursionError:
-                return None
-
-            if results is not None:
-                [passing_str.add(x) for x in results]
-            else:
-                return None
-    else:
+) -> set[str] | Exception:
+    # Guard for correct tm
+    if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
         return {seq_str}
 
-    if len(passing_str) >= 1:
-        return passing_str
+    # Guard prevents walking out of array size
+    if col_index_right >= array.shape[1] - 1:
+        raise WalksOut()
+
+    new_base = array[row_index, col_index_right]
+
+    # Fix incomplete ends
+    if new_base == "":
+        new_base = get_most_common_base(array, col_index_right + 1)
+    new_string = (seq_str + new_base).replace("-", "")
+
+    # Prevent Ns from being added
+    if "N" in new_string:
+        raise ContainsInvalidBase()
+
+    # Guard for invalid bases in the sequence
+    exp_new_string: set[str] | None = expand_ambs([new_string])
+    if exp_new_string is None:
+        raise ContainsInvalidBase()
+
+    passing_str = []
+    for exp_str in exp_new_string:
+        results = wrap_walk(
+            walk_right,
+            array,
+            col_index_right + 1,
+            col_index_left,
+            row_index,
+            exp_str,
+            cfg,
+        )
+        passing_str.extend(results)
+
+    return passing_str
 
 
 def walk_left(
@@ -120,82 +123,117 @@ def walk_left(
     row_index: int,
     seq_str: str,
     cfg: dict,
-) -> set[str] | None:
+) -> set[str] | Exception:
     """
     This will take a string and its indexes and will recurvisly walk left
     until either tm is reached
     """
-    passing_str = set()
-    if calc_tm(seq_str, cfg) < cfg["primer_tm_min"]:
-        # Prevents walking out of array size
-        if col_index_left > 0:
-            new_base = array[row_index, col_index_left - 1]
-        else:
-            return None
 
-        # Ensure it can repair truncated regions
-        if new_base == "":
-            new_base = get_most_common_base(array, col_index_left - 1)
-        new_string = (new_base + seq_str).replace("-", "")
-
-        # Prevents seqs with an N
-        if new_string.__contains__("N"):
-            return None
-        else:
-            exp_new_string: set[str] = expand_ambs([new_string])
-
-        passing_str = set()
-        for exp_str in exp_new_string:
-            try:
-                results = walk_left(
-                    array,
-                    col_index_right,
-                    col_index_left - 1,
-                    row_index,
-                    exp_str,
-                    cfg,
-                )
-            except RecursionError:
-                return None
-
-            if results is not None:
-                [passing_str.add(x) for x in results]
-            else:
-                return None
-    else:
+    # Guard for correct tm
+    if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
         return {seq_str}
 
-    if len(passing_str) >= 1:
-        return passing_str
+    # Guard prevents walking out of array size
+    if col_index_left <= 0:
+        raise WalksOut()
+
+    new_base = array[row_index, col_index_left - 1]
+
+    # Ensure it can repair truncated regions
+    if new_base == "":
+        new_base = get_most_common_base(array, col_index_left - 1)
+    new_string = (new_base + seq_str).replace("-", "")
+
+    # Guard prevents seqs with an N
+    if "N" in new_string:
+        raise ContainsInvalidBase()
+
+    # If invalid bases return None
+    exp_new_string: set[str] | None = expand_ambs([new_string])
+    if exp_new_string is None:
+        raise ContainsInvalidBase()
+
+    passing_str = []
+    for exp_str in exp_new_string:
+        results = wrap_walk(
+            walk_left,
+            array=array,
+            col_index_right=col_index_right,
+            col_index_left=col_index_left - 1,
+            row_index=row_index,
+            seq_str=exp_str,
+            cfg=cfg,
+        )
+        passing_str.extend(results)
+
+    return passing_str
 
 
-def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer | None:
+def wrap_walk(
+    walkfunction,
+    array,
+    col_index_right,
+    col_index_left,
+    row_index,
+    seq_str,
+    cfg,
+) -> list[str | Exception]:
+    return_list = []
+    try:
+        seqs = walkfunction(
+            array=array,
+            col_index_right=col_index_right,
+            col_index_left=col_index_left,
+            row_index=row_index,
+            seq_str=seq_str,
+            cfg=cfg,
+        )
+    except CustomErrors as e:
+        return_list.append(e)
+    except RecursionError:
+        return_list.append(CustomRecursionError())
+    else:
+        return_list.extend(seqs)
+
+    return return_list
+
+
+def mp_r_digest(data: tuple[np.ndarray, dict, int, int, float]) -> RKmer | None:
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     start_col = data[2]
     offset = data[3]
+    min_freq = data[4]
 
-    # Check that there are no gaps at the first base
-    if "-" in align_array[:, start_col]:
+    # Check for gap frequency on first base
+    first_base_counter = Counter(align_array[:, start_col])
+    del first_base_counter[""]
+    num_seqs = sum(first_base_counter.values())
+    first_base_freq = {k: v / num_seqs for k, v in first_base_counter.items()}
+
+    # If the freq of gap is above minfreq
+    if first_base_freq.get("-", 0) > min_freq:
         return None
 
-    total_col_seqs = set()
+    # Create a counter
+    total_col_seqs = Counter()
     for row_index in range(0, align_array.shape[0]):
+        # Check if this row starts on a gap, and if so update the counter and skip
+        if align_array[row_index, start_col] == "-":
+            total_col_seqs.update([GapOnSetBase()])
+            continue
+
         start_array = align_array[
             row_index, start_col : start_col + cfg["primer_size_min"]
         ]
         start_seq = "".join(start_array).replace("-", "")
 
-        if (
-            start_array[0] == ""
-        ):  # If the kmer starts on an invalid base, skip this start position
-            total_col_seqs.add(None)
-            break
-
         if not start_seq:  # If the start seq is empty go to the next row
             continue
 
-        seqs = walk_right(
+        # Get all sequences
+        results = wrap_walk(
+            walk_right,
             array=align_array,
             col_index_right=start_col + cfg["primer_size_min"],
             col_index_left=start_col,
@@ -203,27 +241,40 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, int]) -> RKmer | None:
             seq_str=start_seq,
             cfg=cfg,
         )
-        # If the seq contains N, expand_amps will return {} which is parsed up the stack as None
-        if seqs == None:
-            total_col_seqs.add(None)
-            break
+        # If all mutations matter, return None on any Error
+        if min_freq == 0 and set(results) & ERROR_SET:
+            return None
 
-        # Get a union of the seqs
-        if seqs:
-            total_col_seqs = total_col_seqs | seqs
+        # Add the results to the Counter
+        total_col_seqs.update(results)
 
-    if None not in total_col_seqs:
-        # Downsample the seqs if asked
-        if cfg["reducekmers"]:
-            total_col_seqs = reduce_kmers(total_col_seqs)
+    total_values = sum(total_col_seqs.values())
+    # Filter out values below the threshold freq
+    wanted_seqs = {k for k, v in total_col_seqs.items() if v / total_values > min_freq}
 
-        # Thermo check the kmers
-        if thermo_check_kmers(total_col_seqs, cfg) and not forms_hairpin(
-            total_col_seqs, cfg=cfg
-        ):
-            tmp_kmer = RKmer(start=start_col + offset, seqs=total_col_seqs)
-            tmp_kmer = tmp_kmer.reverse_complement()
-            return tmp_kmer
+    # Guard: If wanted_seqs contains errors return None
+    if ERROR_SET & wanted_seqs:
+        return None
+
+    # Create the Kmer
+    tmp_kmer = RKmer(start=start_col + offset, seqs=wanted_seqs)
+    tmp_kmer.seqs = tmp_kmer.reverse_complement()
+    # Downsample the seqs if asked
+    if cfg["reducekmers"]:
+        tmp_kmer.seqs = reduce_kmers(
+            seqs=tmp_kmer.seqs,
+            max_edit_dist=cfg["editdist_max"],
+            end_3p=cfg["editdist_end3p"],
+        )
+    # Thermo check the kmers
+    if (
+        thermo_check_kmers(tmp_kmer.seqs, cfg)
+        and not forms_hairpin(tmp_kmer.seqs, cfg=cfg)
+        and not do_pools_interact_py(
+            list(tmp_kmer.seqs), list(tmp_kmer.seqs), cfg["dimerscore"]
+        )
+    ):
+        return tmp_kmer
     else:
         return None
 
@@ -233,13 +284,26 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
     cfg: dict = data[1]
     end_col = data[2]
     offset = data[3]
+    min_freq = data[4]
 
-    # Check that there are no gaps at the first base
-    if "-" in align_array[:, end_col]:
+    # Check for gap frequency on first base
+    first_base_counter = Counter(align_array[:, end_col])
+    del first_base_counter[""]
+    num_seqs = sum(first_base_counter.values())
+    first_base_freq = {k: v / num_seqs for k, v in first_base_counter.items()}
+
+    # If the freq of gap is above minfreq
+    if first_base_freq.get("-", 0) > min_freq:
         return None
 
-    total_col_seqs = set()
+    total_col_seqs = Counter()
     for row_index in range(0, align_array.shape[0]):
+        # Check if this row starts on a gap, and if so update the counter and skip
+        if align_array[row_index, end_col] == "-":
+            total_col_seqs.update([GapOnSetBase()])
+            # Skip to next row
+            continue
+
         start_seq = "".join(
             align_array[row_index, end_col - cfg["primer_size_min"] : end_col]
         ).replace("-", "")
@@ -247,7 +311,8 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
         if not start_seq:  # If the start seq is empty go to the next row
             continue
 
-        seqs = walk_left(
+        results = wrap_walk(
+            walk_left,
             array=align_array,
             col_index_right=end_col,
             col_index_left=end_col - cfg["primer_size_min"],
@@ -255,27 +320,37 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
             seq_str=start_seq,
             cfg=cfg,
         )
-        # If the seq contains N, expand_amps will return {} which is parsed up the stack as None
-        if seqs == None:
-            total_col_seqs.add(None)
-            break
-
-            # Get a union of the seqs
-        if seqs:
-            total_col_seqs = total_col_seqs | seqs
-
-    if None not in total_col_seqs:
-        # DownSample the seqs if asked
-        if cfg["reducekmers"]:
-            total_col_seqs = reduce_kmers(total_col_seqs)
-
-        # Thermo check the kmers
-        if thermo_check_kmers(total_col_seqs, cfg) and not forms_hairpin(
-            total_col_seqs, cfg=cfg
-        ):
-            return FKmer(end=end_col + offset, seqs=total_col_seqs)
-        else:
+        if min_freq == 0 and set(results) & ERROR_SET:
             return None
+
+        total_col_seqs.update(results)
+
+    total_values = sum(total_col_seqs.values())
+    # Filter out values below the threshold freq
+    wanted_seqs = {k for k, v in total_col_seqs.items() if v / total_values > min_freq}
+
+    # Guard: If wanted_seqs contains errors return None
+    if ERROR_SET & wanted_seqs:
+        return None
+
+    # DownSample the seqs if asked
+    if cfg["reducekmers"]:
+        wanted_seqs = reduce_kmers(
+            seqs=wanted_seqs,
+            max_edit_dist=cfg["editdist_max"],
+            end_3p=cfg["editdist_end3p"],
+        )
+    # Thermo check the kmers
+    if (
+        thermo_check_kmers(wanted_seqs, cfg)
+        and not forms_hairpin(wanted_seqs, cfg=cfg)
+        and not do_pools_interact_py(
+            list(wanted_seqs), list(wanted_seqs), cfg["dimerscore"]
+        )
+    ):
+        return FKmer(end=end_col + offset, seqs=wanted_seqs)
+    else:
+        return None
 
 
 def hamming_dist(s1, s2) -> int:
@@ -312,7 +387,7 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
 
         # Find the most connected sequence
         sorted_sequences = sorted(
-            p5_tails, key=lambda seq: len(list(G.neighbors(seq))), reverse=True
+            p5_tails, key=lambda seq: (len(list(G.neighbors(seq))), seq), reverse=True
         )
 
         # Seqs which are included in the scheme
@@ -339,32 +414,29 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
     return seqs
 
 
-def digest(
-    msa_array, cfg, thermo_cfg, offset=0
-) -> tuple[list[FKmer | None], list[RKmer | None]]:
+def digest(msa_array, cfg, offset=0) -> tuple[list[FKmer], list[RKmer]]:
     with Pool(cfg["n_cores"]) as p:
         fprimer_mp = p.map(
             mp_f_digest,
             [
-                (msa_array, thermo_cfg, end_col, offset)
-                for end_col in range(thermo_cfg["primer_size_min"], msa_array.shape[1])
+                (msa_array, cfg, end_col, offset, cfg["minbasefreq"])
+                for end_col in range(cfg["primer_size_min"], msa_array.shape[1])
             ],
         )
-    mp_thermo_pass_fkmers = [x for x in fprimer_mp if x is not None]
-    mp_thermo_pass_fkmers.sort(key=lambda fkmer: fkmer.end)
+    pass_fprimer_mp = [x for x in fprimer_mp if x is not None and x.seqs]
+    pass_fprimer_mp.sort(key=lambda fkmer: fkmer.end)
 
     # RPrimers digestion via MP
     with Pool(cfg["n_cores"]) as p:
         rprimer_mp = p.map(
             mp_r_digest,
             [
-                (msa_array, thermo_cfg, start_col, offset)
-                for start_col in range(
-                    msa_array.shape[1] - thermo_cfg["primer_size_min"]
-                )
+                (msa_array, cfg, start_col, offset, cfg["minbasefreq"])
+                for start_col in range(msa_array.shape[1] - cfg["primer_size_min"])
             ],
         )
-    mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
-    mp_thermo_pass_rkmers.sort(key=lambda rkmer: rkmer.start)
+    pass_rprimer_mp = [x for x in rprimer_mp if x is not None and x.seqs]
+    # mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
+    pass_rprimer_mp.sort(key=lambda rkmer: rkmer.start)
 
-    return (mp_thermo_pass_fkmers, mp_thermo_pass_rkmers)
+    return (pass_fprimer_mp, pass_rprimer_mp)
