@@ -1,8 +1,13 @@
-from primal_digest.config import ALL_DNA
+from primal_digest.config import ALL_DNA, ALL_BASES, AMB_BASES, AMBIGUOUS_DNA_COMPLEMENT
 from itertools import product
 from typing import Iterable
 import numpy as np
 from collections import Counter
+
+
+def reverse_complement(kmer_seq: str):
+    rev_seq = kmer_seq[::-1]
+    return "".join(AMBIGUOUS_DNA_COMPLEMENT[base.upper()] for base in rev_seq)
 
 
 def get_most_common_base(array: np.ndarray, col_index: int) -> str:
@@ -33,16 +38,22 @@ def remove_end_insertion(msa_array: np.ndarray) -> np.ndarray:
     return tmp_array
 
 
-def expand_ambs(seqs: Iterable[str]) -> set[set]:
+def expand_ambs(seqs: Iterable[str]) -> set[set] | None:
     """
     Takes a list / set of strings and returns a set with all ambs expanded
-    It can return an empty set
+    Return None on invalid bases (Including N)
     """
     returned_seq = set()
-    amb_bases = {"Y", "W", "R", "B", "H", "V", "D", "K", "M", "S"}
+
     for seq in seqs:
+        bases = {base for base in seq}
+
+        # if invalid bases are in sequence return None
+        if not bases.issubset(ALL_BASES):
+            return None
+
         # If there is any amb_bases in the seq
-        if {base for base in seq} & amb_bases:
+        if bases & AMB_BASES:
             expanded_seqs = set(map("".join, product(*map(ALL_DNA.get, seq))))
             for exp_seq in expanded_seqs:
                 returned_seq.add(exp_seq)
