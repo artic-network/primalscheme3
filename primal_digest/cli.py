@@ -5,6 +5,16 @@ import sys
 import pathlib
 
 
+def check_valid_freq(value):
+    fvalue = float(value)
+    if 0 <= fvalue <= 1:
+        return fvalue
+    else:
+        raise argparse.ArgumentTypeError(
+            "--minbasefreq must be 0 <= value <= 1. value: %s" % value
+        )
+
+
 def cli():
     description = "Generates a primerscheme from an MSA"
     parser = argparse.ArgumentParser(description=description)
@@ -112,6 +122,13 @@ def cli():
         type=bool,
         default=False,
     )
+    parser.add_argument(
+        "--minbasefreq",
+        help="Min freq to be included",
+        type=check_valid_freq,
+        default=0.0,
+    )
+
     args = parser.parse_args()
 
     # Check the bedfile exsists if given
