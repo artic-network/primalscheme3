@@ -188,7 +188,7 @@ class MatchDB:
             kmer = "".join(seq[i : i + kmer_size]).replace("-", "")
 
             if len(kmer) != kmer_size:
-                counter = 1
+                counter = 0
 
                 # Keep walking right until the kmer is the correct size or walks out of index
                 while counter + kmer_size + i < len(seq) and len(kmer) < kmer_size:
@@ -206,14 +206,25 @@ class MatchDB:
 
 
 def generate_single_mismatches(base_seq: str) -> set[str]:
+    """
+    Generates a set of sequences with all single-base mismatches for the given base sequence.
+
+    :param base_seq: The input base sequence.
+    :return: A set containing base sequences with single-base mismatches
+    """
     return_seqs = set([base_seq])
     base_seq = [x for x in base_seq]
     for mut_index, base in enumerate(base_seq):
-        for alt_base in MUTATIONS.get(base):
-            return_seqs.add(
-                "".join(base_seq[0:mut_index] + [alt_base] + base_seq[mut_index + 1 :])
-            )
-
+        # handle invalid bases
+        if alt_bases := MUTATIONS.get(base):
+            for alt_base in alt_bases:
+                return_seqs.add(
+                    "".join(
+                        base_seq[0:mut_index] + [alt_base] + base_seq[mut_index + 1 :]
+                    )
+                )
+        else:
+            raise ValueError(f"Invalid base '{base}' in sequence '{base_seq}'")
     return return_seqs
 
 
@@ -223,7 +234,13 @@ def detect_new_products(
     product_size: int = 2000,
 ) -> bool:
     """
-    Detects if adding the new matches will interact with the old matches
+    Detects if adding the new matches will result in interactions with the old matches.
+
+    :param new_matches: A set of new matched sequences represented as tuples containing
+                        the match position, MSA index, and orientation indicator.
+    :param old_matches: A set of old matched sequences used for comparison.
+    :param product_size: The maximum allowable product size.
+    :return: True if interactions between new and old matches are detected, False otherwise.
     """
     # Split the new matches in forward and reverse
     fmatches = set()
@@ -269,8 +286,12 @@ def detect_products(
     product_size=2000,
 ) -> bool:
     """
-    False means no product
-    matches should be union of all matches (matches1 | matches2)
+    Detect the presence of potential product formations based on matched sequences.
+
+    :param matches: A set of matched sequences represented as tuples containing the match position,
+                    MSA index, and orientation indicator.
+    :param product_size: The maximum allowable product size.
+    :return: True if potential product formations are detected, False otherwise.
     """
 
     # TODO write a hash function that colides when a product is formed.
@@ -292,9 +313,9 @@ def detect_products(
     for fmatch in fmatches:
         for rmatch in rmatches:
             # If from same msa
-            if fmatch[0][0] == rmatch[0][0]:
+            if fmatch[0] == rmatch[0]:
                 # If within product distance
-                if 0 < rmatch[0][1] - fmatch[0][1] < product_size:
+                if 0 < rmatch[1] - fmatch[1] < product_size:
                     return True
 
     return False
@@ -302,7 +323,7 @@ def detect_products(
 
 def main():
     ARG_MSA = [
-        "/Users/kentcg/primal-pannel/nibsc_viral_mutliplex/rhinovirus_a39--185907.fasta",
+        "/Users/kentcg/primal-digest/tests/test_mismatch.fasta",
     ]
     matchdb = MatchDB("test", ARG_MSA, 20)
 
