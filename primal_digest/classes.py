@@ -4,7 +4,7 @@ import abc
 import re
 
 # Module imports
-from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score
+from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score, bt_ol_pp_score
 from primal_digest.seq_functions import expand_ambs, reverse_complement
 from primal_digest.config import AMBIGUOUS_DNA_COMPLEMENT
 from primal_digest.mismatches import MatchDB, detect_new_products
@@ -285,7 +285,7 @@ class Scheme:
     _pools: list[list[PrimerRecord]]
     _current_pool: int
     npools: int
-    _last_pp_added: PrimerRecord
+    _last_pp_added: list[PrimerRecord]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
     cfg: dict
 
@@ -297,6 +297,7 @@ class Scheme:
         self._pp_number = 1
         self.cfg = cfg
         self._matchDB = matchDB
+        self._last_pp_added = []
 
     @property
     def npools(self) -> int:
@@ -304,6 +305,24 @@ class Scheme:
 
     def next_pool(self) -> int:
         return (self._current_pool + 1) % self.n_pools
+
+    def remove_last_primer_pair(self) -> PrimerPair:
+        """This removes a primerpair from a pool"""
+        # Removes the pp from self._last_pp_added
+        last_pp = self._last_pp_added.pop()
+
+        # Remove the primerpair from the pool
+        self._pools[last_pp.pool].remove(last_pp)
+        # Remove the primerpair's matches from the pool's matches
+        self._matches[last_pp.pool].difference_update(
+            last_pp.find_matches(
+                self._matchDB,
+                fuzzy=self.cfg["mismatch_fuzzy"],
+                remove_expected=False,
+                kmersize=self.cfg["mismatch_kmersize"],
+            )
+        )
+        return last_pp
 
     def add_primer_pair_to_pool(self, primerpair: PrimerPair, pool, msa_index):
         """Main method to add a primerpair to a pool"""
@@ -333,7 +352,7 @@ class Scheme:
         self._pools[pool].append(primerpair)
         self._current_pool = pool
         self._current_pool = self.next_pool()
-        self._last_pp_added = primerpair
+        self._last_pp_added.append(primerpair)
 
     def add_first_primer_pair(self, primerpairs: list[PrimerPair], msa_index) -> bool:
         "Adds primerpair to the current pool, and updates the current pool"
@@ -387,19 +406,30 @@ class Scheme:
     def get_leading_coverage_edge(self) -> tuple[int, int]:
         """This will return the furthest primer-trimmed region with coverage"""
         # This will crash if no primer has been added, but should not be called until one is
-        return self._last_pp_added.rprimer.start
+        return self._last_pp_added[-1].rprimer.start
 
     def get_leading_amplicon_edge(self) -> tuple[int, int]:
         """This will return the furthest point of an amplicon"""
         # This will crash if no primer has been added, but should not be called until one is
-        return max(self._last_pp_added.rprimer.ends())
+        return max(self._last_pp_added[-1].rprimer.ends())
 
-    def try_ol_primerpairs(self, all_pp_list, cfg, msa_index) -> bool:
+    def find_ol_primerpairs(self, all_pp_list) -> list[PrimerPair]:
+        # Find pp that could ol, depending on which pool
+        return [
+            pp
+            for pp in all_pp_list
+            if pp.fprimer.end
+            < self.get_leading_coverage_edge() - self.cfg["min_overlap"]
+            and pp.rprimer.start
+            > self.get_leading_amplicon_edge() + self.cfg["min_overlap"]
+        ]
+
+    def try_ol_primerpairs(self, all_pp_list, msa_index) -> bool:
         """
         This will try and add this primerpair into any valid pool.
         Will return true if the primerpair has been added
         """
-        last_pool = self._last_pp_added.pool
+        last_pool = self._last_pp_added[-1].pool
         # Find what other pools to look in
         pos_pools_indexes = [
             (last_pool + i) % self.n_pools
@@ -418,14 +448,7 @@ class Scheme:
         }
 
         # Find pp that could ol, depending on which pool
-        pos_ol_pp = [
-            pp
-            for pp in all_pp_list
-            if pp.fprimer.end
-            < self.get_leading_coverage_edge() - self.cfg["min_overlap"]
-            and pp.rprimer.start
-            > self.get_leading_amplicon_edge() + self.cfg["min_overlap"]
-        ]
+        pos_ol_pp = self.find_ol_primerpairs(all_pp_list)
 
         # pos_ol_pp = get_pp_window(all_pp_list, fp_start=self.get_leading_coverage_edge() - self.cfg["min_overlap"] - self.cfg["amplicon_size_max"], fp_end=self.get_leading_coverage_edge() - self.cfg["min_overlap"], rp_end=self.get_leading_amplicon_edge() + self.cfg["min_overlap"])
         # Sort the primerpairs depending on how good they are
@@ -475,11 +498,87 @@ class Scheme:
         # If non of the primers work, return false
         return False
 
-    def try_walk_primerpair(self, all_pp_list, cfg, msa_index) -> bool:
+    # backtracking
+    def try_backtrack(self, all_pp_list, msa_index) -> bool:
+        """If there are no other valid ol primerpairs, replace the last primerpair added and try again"""
+
+        # Remove the last primerpair added
+        last_pp = self.remove_last_primer_pair()
+
+        # Find all primerpairs that could replace the last primerpair
+        pos_ol_pp = [
+            pp for pp in self.find_ol_primerpairs(all_pp_list) if pp != last_pp
+        ]
+        # Sort the primerpair on score
+        pos_ol_pp.sort(
+            key=lambda pp: bt_ol_pp_score(
+                pp.rprimer.start,
+                len(pp.all_seqs()),
+                self.get_leading_coverage_edge() - self.cfg["min_overlap"],
+                self.cfg,
+            ),
+            reverse=True,
+        )
+
+        # Find what other pools to look in
+        pos_pools_indexes = [
+            (last_pp.pool + i) % self.n_pools
+            for i in range(self.n_pools)
+            if (last_pp.pool + i) % self.n_pools != last_pp.pool
+        ]
+        # Create a hashmap of all sequences in each pool for quick look up
+        index_to_seqs: dict[int : list[str]] = {
+            index: [
+                y
+                for sublist in (x.all_seqs() for x in self._pools[index])
+                for y in sublist
+            ]
+            for index in pos_pools_indexes
+        }
+
+        # For each primerpair
+        for ol_pp in pos_ol_pp:
+            # For each pool
+            for pool_index in pos_pools_indexes:
+                # If the pool is empty
+                if not self._pools[pool_index]:
+                    self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
+                    return True
+
+                # If the last primer is from the same msa and does clash, skip it
+                if self._pools[pool_index][-1].msa_index == msa_index and max(
+                    self._pools[pool_index][-1].rprimer.ends()
+                ) >= min(ol_pp.fprimer.starts()):
+                    continue
+
+                # If the primer passes all the checks, make sure there are no interacts between new pp and pp in pool
+                if not do_pools_interact_py(
+                    ol_pp.all_seqs(),
+                    index_to_seqs.get(pool_index),
+                    self.cfg["dimerscore"],
+                ) and not detect_new_products(
+                    ol_pp.find_matches(
+                        self._matchDB,
+                        remove_expected=False,
+                        kmersize=self.cfg["mismatch_kmersize"],
+                        fuzzy=self.cfg["mismatch_fuzzy"],
+                    ),
+                    self._matches[pool_index],
+                    self.cfg["mismatch_product_size"],
+                ):
+                    self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
+                    return True
+
+        # If non of the primers work, add the last pp back in and return false
+        print("backtrack failed")
+        self.add_primer_pair_to_pool(last_pp, last_pp.pool, msa_index)
+        return False
+
+    def try_walk_primerpair(self, all_pp_list, msa_index) -> bool:
         """
         Find the next valid primerpair while walking forwards
         """
-        last_pool = self._last_pp_added.pool
+        last_pool = self._last_pp_added[-1].pool
         # Find what other pools to look in, can look in same pool
         pos_pools_indexes = [
             (last_pool + i) % self.n_pools for i in range(self.n_pools)
@@ -505,7 +604,7 @@ class Scheme:
         # Sort walk primers by increasing start position
         pos_walk_pp.sort(
             key=lambda pp: walk_pp_score(
-                pp.fprimer.end, len(pp.all_seqs()), self._last_pp_added.end
+                pp.fprimer.end, len(pp.all_seqs()), self._last_pp_added[-1].end
             )
         )
 

@@ -42,8 +42,6 @@ def main():
     cfg["output_prefix"] = args.prefix
     cfg["output_dir"] = str(OUTPUT_DIR)
     cfg["msa_paths"] = [str(x) for x in ARG_MSA]
-    cfg["mismatches_self"] = args.mismatches_self
-    cfg["mismatches_alt"] = args.mismatches_alt
     cfg["amplicon_size_max"] = args.ampliconsizemax
     cfg["amplicon_size_min"] = args.ampliconsizemin
     cfg["min_overlap"] = args.minoverlap
@@ -169,8 +167,6 @@ def main():
             num_rkmers=len(mp_thermo_pass_rkmers),
         )
 
-    ## TODO use the matchdb to find mispriming
-
     msa_primerpairs = []
     ## Generate all valid primerpairs for each msa
     for msa_index, unique_fr_kmers in enumerate(unique_f_r_msa):
@@ -190,15 +186,33 @@ def main():
     for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):
         # Add the first primer, and if no primers can be added move to next msa
         if not scheme.add_first_primer_pair(primerpairs_in_msa, msa_index):
+            logger.info(
+                "Added <blue>first</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
+                primer=scheme._last_pp_added[-1],
+            )
             continue
 
         while True:
             # Try and add an overlapping primer
-            if scheme.try_ol_primerpairs(primerpairs_in_msa, cfg, msa_index):
+            if scheme.try_ol_primerpairs(primerpairs_in_msa, msa_index):
+                logger.info(
+                    "Added <blue>overlapping</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
+                    primer=scheme._last_pp_added[-1],
+                )
+                continue
+            # Try to backtrack
+            elif scheme.try_backtrack(primerpairs_in_msa, msa_index):
+                logger.info(
+                    "Added <blue>backtracking</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
+                    primer=scheme._last_pp_added[-1],
+                )
                 continue
             # Try and add a walking primer
-            elif scheme.try_walk_primerpair(primerpairs_in_msa, cfg, msa_index):
-                continue
+            elif scheme.try_walk_primerpair(primerpairs_in_msa, msa_index):
+                logger.info(
+                    "Added <blue>walking</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
+                    primer=scheme._last_pp_added[-1],
+                )
             else:
                 break
 
