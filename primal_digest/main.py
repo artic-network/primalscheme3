@@ -1,20 +1,15 @@
+# Module imports
 from primal_digest.thermo import *
 from primal_digest.cli import cli
-from primal_digest.config import (
-    config_dict,
-    thermo_config,
-)
-from primaldimer_py import do_pools_interact_py
-from primal_digest.classes import FKmer, RKmer, PrimerPair, Scheme
+from primal_digest.config import config_dict
+from primal_digest.classes import FKmer, RKmer, Scheme
 from primal_digest.digestion import digest, generate_valid_primerpairs
-from primal_digest.get_window import get_r_window_FAST2
 from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
 from primal_digest.seq_functions import remove_end_insertion
+from primal_digest.mismatches import MatchDB
 
 import numpy as np
 from Bio import SeqIO
-from multiprocessing import Pool
-import kmertools
 import json
 
 # Added
@@ -36,22 +31,12 @@ def main():
     OUTPUT_DIR = pathlib.Path(args.output).absolute()
 
     cfg = config_dict
-    thermo_cfg = thermo_config
-
-    logger.remove()  # Remove default stderr logger
-    logger.add(sys.stderr, colorize=True, format="{message}", level="INFO")
-
     # Primer Digestion settings
-    thermo_cfg["primer_size_max"] = 36
-    thermo_cfg["primer_size_min"] = 18
-    thermo_cfg["primer_gc_min"] = args.primer_gc_min
-    thermo_cfg["primer_gc_max"] = args.primer_gc_max
-    thermo_cfg["primer_tm_min"] = args.primer_tm_min
-    thermo_cfg["primer_tm_max"] = args.primer_tm_max
-    thermo_cfg["dimerscore"] = args.dimerscore
-    thermo_cfg["reducekmers"] = args.reducekmers
-
-    # Run Settings
+    cfg["primer_gc_min"] = args.primer_gc_min
+    cfg["primer_gc_max"] = args.primer_gc_max
+    cfg["primer_tm_min"] = args.primer_tm_min
+    cfg["primer_tm_max"] = args.primer_tm_max
+    cfg["dimerscore"] = args.dimerscore
     cfg["refname"] = args.refnames
     cfg["n_cores"] = args.cores
     cfg["output_prefix"] = args.prefix
@@ -64,13 +49,21 @@ def main():
     cfg["min_overlap"] = args.minoverlap
     cfg["force"] = args.force
     cfg["npools"] = args.npools
-    cfg["dimerscore"] = args.dimerscore
-
-    msa_index_to_ref_name = {
+    cfg["reducekmers"] = args.reducekmers
+    cfg["minbasefreq"] = args.minbasefreq
+    cfg["msa_index_to_ref_name"] = {
         index: msa_name for index, msa_name in enumerate(cfg["refname"])
     }
+    # Add the mismatch params to the cfg
+    cfg["mismatch_fuzzy"] = True
+    cfg["mismatch_kmersize"] = 20
+    cfg["mismatch_product_size"] = args.ampliconsizemax
 
-    cfg["msa_index_to_ref_name"] = msa_index_to_ref_name
+    # Add the bedfile path if given
+    if args.bedfile:
+        cfg["bedfile"] = str(args.bedfile)
+    else:
+        cfg["bedfile"] = False
 
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir():
@@ -78,15 +71,41 @@ def main():
             sys.exit(
                 f"ERROR: {OUTPUT_DIR} already exists, please use --force to override"
             )
+    # Create the output dir and a work subdir
+    pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
+    pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
+
+    ## Set up the loggers
+    logger.remove()  # Remove default stderr logger
+    # Add the deep log file
+    logger.add(
+        OUTPUT_DIR / "work/file.log",
+        colorize=False,
+        format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+        enqueue=True,
+    )
+    # Add the nice stdout progress
+    logger.add(sys.stdout, colorize=True, format="{message}", level="INFO")
+
+    # Create the mismatch db
+    logger.info(
+        "Creating the Mismatch Database",
+    )
+    mismatch_db = MatchDB(OUTPUT_DIR / "work/mismatch", ARG_MSA, cfg["primer_size_min"])
+    logger.info(
+        "<green>Created:</> {path}",
+        path=f"{OUTPUT_DIR}/work/mismatch.db",
+    )
+
     # Create the scheme object early
-    scheme = Scheme(cfg=cfg)
+    scheme = Scheme(cfg=cfg, matchDB=mismatch_db)
+
     # If the bedfile flag is given add the primers into the scheme
     if args.bedfile:
         current_pools = parse_bedfile(args.bedfile, cfg["npools"])
         # Assign the bedfile generated pool to the scheme in a hacky way
         scheme._pools = current_pools
-        primer_tms = calc_median_bed_tm(current_pools, thermo_cfg)
-
+        primer_tms = calc_median_bed_tm(current_pools, cfg)
         logger.info(
             "Read in bedfile: <blue>{msa_path}</>: <green>{num_pp}</> Primers with median Tm of <green>{tm}</>",
             msa_path=args.bedfile.name,
@@ -102,16 +121,16 @@ def main():
 
         # If the bedfile tm is dif to the config Throw error
         if (
-            primer_tms[0] < thermo_cfg["primer_tm_min"] - 5
-            or primer_tms[2] > thermo_cfg["primer_tm_max"] + 5
+            primer_tms[0] < cfg["primer_tm_min"] - 5
+            or primer_tms[2] > cfg["primer_tm_max"] + 5
         ):
             logger.warning(
                 "Tm in bedfile <green>{tm_min}</>:<green>{tm_median}</>:<green>{tm_max}</> (min, median, max) fall outside range of <green>{conf_tm_min}</> to <green>{conf_tm_max}</>)",
                 tm_min=round(primer_tms[0], 1),
                 tm_median=round(primer_tms[1], 1),
                 tm_max=round(primer_tms[2], 1),
-                conf_tm_min=thermo_cfg["primer_tm_min"],
-                conf_tm_max=thermo_cfg["primer_tm_max"],
+                conf_tm_min=cfg["primer_tm_min"],
+                conf_tm_max=cfg["primer_tm_max"],
             )
 
     # Read in the MSAs
@@ -139,76 +158,18 @@ def main():
     unique_f_r_msa: list[list[list[FKmer], list[RKmer]]] = []
 
     for msa_index, msa_array in enumerate(msa_list):
-        mp_thermo_pass_fkmers, mp_thermo_pass_rkmers = digest(
-            msa_array, cfg, thermo_cfg
-        )
-        # Use the custom Rust unique checker
-
-        f_kmer_bools = []
-        r_kmer_bools = []
-
-        for index, raw_msa_array in enumerate(raw_msa_list):
-            referance_seqs = ["".join(x) for x in raw_msa_array]
-            if msa_index == index:
-                r_results = kmertools.rkmer_is_unique(
-                    rkmers=[(x.start, list(x.seqs)) for x in mp_thermo_pass_rkmers],
-                    referance_seqs=referance_seqs,
-                    n_cores=cfg["n_cores"],
-                    mismatches=cfg["mismatches_self"],
-                    detect_expected=False,
-                )  # Should be false
-                f_results = kmertools.fkmer_is_unique(
-                    fkmers=[(x.end, list(x.seqs)) for x in mp_thermo_pass_fkmers],
-                    referance_seqs=referance_seqs,
-                    n_cores=cfg["n_cores"],
-                    mismatches=cfg["mismatches_self"],
-                    detect_expected=False,
-                )
-                f_kmer_bools.append(f_results)
-                r_kmer_bools.append(r_results)
-
-            else:
-                r_results = kmertools.rkmer_is_unique(
-                    rkmers=[(x.start, list(x.seqs)) for x in mp_thermo_pass_rkmers],
-                    referance_seqs=referance_seqs,
-                    n_cores=cfg["n_cores"],
-                    mismatches=cfg["mismatches_alt"],
-                    detect_expected=True,
-                )
-                f_results = kmertools.fkmer_is_unique(
-                    fkmers=[(x.end, list(x.seqs)) for x in mp_thermo_pass_fkmers],
-                    referance_seqs=referance_seqs,
-                    n_cores=cfg["n_cores"],
-                    mismatches=cfg["mismatches_alt"],
-                    detect_expected=True,
-                )
-                f_kmer_bools.append(f_results)
-                r_kmer_bools.append(r_results)
-
-        ## Combine the data for each kmer for each msa
-        unique_f_bools = [all(x) for x in zip(*f_kmer_bools)]
-        unique_r_bools = [all(x) for x in zip(*r_kmer_bools)]
-
-        ## Get the unique kmers
-        unique_fkmers = [
-            fkmer
-            for (bool, fkmer) in zip(unique_f_bools, mp_thermo_pass_fkmers)
-            if bool
-        ]
-        unique_rkmers = [
-            rkmer
-            for (bool, rkmer) in zip(unique_r_bools, mp_thermo_pass_rkmers)
-            if bool
-        ]
+        mp_thermo_pass_fkmers, mp_thermo_pass_rkmers = digest(msa_array, cfg)
 
         # Append them to the msa
-        unique_f_r_msa.append((unique_fkmers, unique_rkmers))
+        unique_f_r_msa.append((mp_thermo_pass_fkmers, mp_thermo_pass_rkmers))
         logger.info(
             "<blue>{msa_path}</>: digested to <green>{num_fkmers}</> FKmers and <green>{num_rkmers}</> RKmers",
             msa_path=msa_path.name,
-            num_fkmers=len(unique_fkmers),
-            num_rkmers=len(unique_rkmers),
+            num_fkmers=len(mp_thermo_pass_fkmers),
+            num_rkmers=len(mp_thermo_pass_rkmers),
         )
+
+    ## TODO use the matchdb to find mispriming
 
     msa_primerpairs = []
     ## Generate all valid primerpairs for each msa
@@ -216,7 +177,7 @@ def main():
         # Generate all primerpairs then interaction check
         msa_primerpairs.append(
             generate_valid_primerpairs(
-                unique_fr_kmers[0], unique_fr_kmers[1], cfg, thermo_cfg
+                unique_fr_kmers[0], unique_fr_kmers[1], cfg, msa_index=msa_index
             )
         )
         # Log some stats
@@ -233,16 +194,13 @@ def main():
 
         while True:
             # Try and add an overlapping primer
-            if scheme.try_ol_primerpairs(primerpairs_in_msa, thermo_cfg, msa_index):
+            if scheme.try_ol_primerpairs(primerpairs_in_msa, cfg, msa_index):
                 continue
             # Try and add a walking primer
-            elif scheme.try_walk_primerpair(primerpairs_in_msa, thermo_cfg, msa_index):
+            elif scheme.try_walk_primerpair(primerpairs_in_msa, cfg, msa_index):
                 continue
             else:
                 break
-
-    # Create the output dir
-    pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
 
     logger.info("Writting output files")
 
@@ -251,8 +209,8 @@ def main():
         primer_bed_str = []
         for pp in scheme.all_primers():
             st = pp.__str__(
-                msa_index_to_ref_name.get(pp.msa_index, "NA"),
-                msa_index_to_ref_name.get(pp.msa_index, "NA"),
+                cfg["msa_index_to_ref_name"].get(pp.msa_index, "NA"),
+                cfg["msa_index_to_ref_name"].get(pp.msa_index, "NA"),
             )
             primer_bed_str.append(st.strip())
         outfile.write("\n".join(primer_bed_str))
@@ -262,7 +220,7 @@ def main():
         amp_bed_str = []
         for pp in scheme.all_primers():
             amp_bed_str.append(
-                f"{msa_index_to_ref_name.get(pp.msa_index, 'NA')}\t{pp.start}\t{pp.end}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
+                f"{cfg['msa_index_to_ref_name'].get(pp.msa_index, 'NA')}\t{pp.start}\t{pp.end}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
             )
         outfile.write("\n".join(amp_bed_str))
 
@@ -274,10 +232,9 @@ def main():
     bed_md5 = hashlib.md5("\n".join(amp_bed_str).encode())
     cfg["md5_amp"] = bed_md5.hexdigest()
 
-    # Write the config file, combining the cfg and thermo_cfg
+    # Write the config dict to file
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
-        comb = thermo_cfg | cfg
-        outfile.write(json.dumps(comb, sort_keys=True))
+        outfile.write(json.dumps(cfg, sort_keys=True))
 
 
 if __name__ == "__main__":
