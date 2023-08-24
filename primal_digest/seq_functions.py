@@ -38,7 +38,7 @@ def remove_end_insertion(msa_array: np.ndarray) -> np.ndarray:
     return tmp_array
 
 
-def expand_ambs(seqs: Iterable[str]) -> set[set] | None:
+def expand_ambs(seqs: Iterable[str]) -> set[str] | None:
     """
     Takes a list / set of strings and returns a set with all ambs expanded
     Return None on invalid bases (Including N)
