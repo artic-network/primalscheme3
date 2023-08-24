@@ -6,11 +6,13 @@ This is a command-line interface tool that generates a primer scheme from a Mult
 
 Currently the best way to use is to use poetry to handle dependencies.
 
-    git clone https://github.com/ChrisgKent/primal-digest
-    cd primal-digest
-    poetry install
+```         
+git clone https://github.com/ChrisgKent/primal-digest
+cd primal-digest
+poetry install
 
-    poetry run primal-digest -m msa.fasta -o /path/to/output_dir
+poetry run primal-digest -m msa.fasta -o /path/to/output_dir
+```
 
 ## Basic Arguments
 
@@ -24,7 +26,7 @@ Currently the best way to use is to use poetry to handle dependencies.
 -   `--force`: Override the output directory. If set, then any existing output directory will be overwritten.
 -   `--minoverlap`: The minimum amount of overlap between primers. Default is `20`.
 -   `--npools`: Number of pools to use. Default is `2`.
--   `--bedfile`: Add primers to an existing bedfile. Note: The number of pools in bedfile <= --npools. Primal-digest makes no attempt to validate primers or primer-primer interactions in the bedfile.
+-   `--bedfile`: Add primers to an existing bedfile. Note: The number of pools in bedfile \<= --npools. Primal-digest makes no attempt to validate primers or primer-primer interactions in the bedfile.
 
 ## Advanced Arguments
 
@@ -32,11 +34,16 @@ Currently the best way to use is to use poetry to handle dependencies.
 -   `--primer_gc_max`: The maximum GC content of a primer. Default is `55`.
 -   `--primer_tm_min`: The minimum melting temperature (Tm) of a primer. Default is `59.5`.
 -   `--primer_tm_max`: The maximum melting temperature (Tm) of a primer. Default is `62.5`.
--   `--mismatches_self`: The number of mismatches between the primer sequence and its own genome that should still count as a hit. Default is `1`.
--   `--mismatches_alt`: The number of mismatches between the primer sequence and other genomes that should still count as a hit. Default is `2`.
+
 
 ## Example
 
-    poetry run primal-digest -m msa1.fasta msa2.fasta -o /path/to/output_dir --refnames MSA1 MSA2 --force
+```         
+poetry run primal-digest -m msa1.fasta msa2.fasta -o /path/to/output_dir --refnames MSA1 MSA2 --force
+```
 
 This command will generate primer schemes for `msa1.fasta` and `msa2.fasta` files and store them in `/path/to/output_dir`. The `--force` option will overwrite any existing output directory.
+
+------------------------------------------------------------------------
+
+This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/) ![](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)
