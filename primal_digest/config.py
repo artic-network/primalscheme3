@@ -1,30 +1,9 @@
-class Cfg:
-    amplicon_size_min = 360
-    amplicon_size_max = 400
-    min_overlap = 20
-    mv_conc = 100.0
-    dv_conc = 2.0
-    dntp_conc = 0.8
-    dna_conc = 15.0
-    dimer_max_tm = -10.0
-    dimer_min_identity = 0.8
-    primer_gc_min = 30
-    primer_gc_max = 55
-    primer_tm_min = 59.5
-    primer_tm_max = 62.5
-    primer_homopolymer_max = 5
-    primer_hairpin_th_max = 47.0
-
-
 config_dict = {
     "msa_checksums": [],
     "msa_paths": [],
     "refname": "msa",
     "n_cores": 1,
     "output_prefix": "output",
-}
-
-thermo_config = {
     "amplicon_size_min": 360,
     "amplicon_size_max": 400,
     "min_overlap": 20,
@@ -40,6 +19,10 @@ thermo_config = {
     "primer_tm_max": 62.5,
     "primer_homopolymer_max": 5,
     "primer_hairpin_th_max": 47.0,
+    "editdist_max": 1,
+    "editdist_end3p": 6,
+    "primer_size_max": 36,
+    "primer_size_min": 18,
 }
 
 
@@ -71,6 +54,23 @@ ALL_DNA = {
     "D": "AGT",
     "B": "CGT",
 }
+ALL_BASES = {
+    "A",
+    "C",
+    "G",
+    "T",
+    "M",
+    "R",
+    "W",
+    "S",
+    "Y",
+    "K",
+    "V",
+    "H",
+    "D",
+    "B",
+}
+AMB_BASES = {"Y", "W", "R", "B", "H", "V", "D", "K", "M", "S"}
 AMBIGUOUS_DNA_COMPLEMENT = {
     "A": "T",
     "C": "G",
