@@ -46,4 +46,6 @@ This command will generate primer schemes for `msa1.fasta` and `msa2.fasta` file
 
 ------------------------------------------------------------------------
 
-This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/) ![](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)
+This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/) 
+
+![](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)
