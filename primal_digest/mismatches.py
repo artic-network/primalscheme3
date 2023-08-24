@@ -6,7 +6,7 @@ from typing import Iterable
 import dbm.ndbm
 
 # Module imports
-from primal_digest.seq_functions import reverse_complement
+from primal_digest.seq_functions import reverse_complement, expand_ambs
 
 MUTATIONS = {
     "A": "CGT",
@@ -200,9 +200,16 @@ class MatchDB:
 
                     counter += 1
 
-            # Check Kmer is correct size, and doesn't contain N
-            if len(kmer) == kmer_size and "N" not in kmer:
-                self._write_unique(kmer, (msa_index, i))
+            # Guard Check Kmer is correct size, and doesn't contain N
+            if len(kmer) != kmer_size or "N" in kmer:
+                continue
+            # Expand any ambiguous bases
+            if exp_kmers := expand_ambs([kmer]):
+                # Write each sequence into the db
+                for exp_kmer in exp_kmers:
+                    self._write_unique(exp_kmer, (msa_index, i))
+            else:
+                continue
 
 
 def generate_single_mismatches(base_seq: str) -> set[str]:
