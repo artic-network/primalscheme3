@@ -4,6 +4,9 @@ import argparse
 import sys
 import pathlib
 
+# Module imports
+from primal_digest import __version__
+
 
 def check_valid_freq(value):
     fvalue = float(value)
@@ -18,6 +21,7 @@ def check_valid_freq(value):
 def cli():
     description = "Generates a primerscheme from an MSA"
     parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("-v", "--version", action="version", version=__version__)
     parser.add_argument(
         "-m",
         "--msa",
@@ -97,18 +101,6 @@ def cli():
         type=float,
         default=62.5,
     )
-    parser.add_argument(
-        "--mismatches_self",
-        help="How many mismatches between the primer sequence and its own genome should still count as a hit",
-        type=int,
-        default=1,
-    )
-    parser.add_argument(
-        "--mismatches_alt",
-        help="How many mismatches between the primer sequence and its other genomes should still count as a hit",
-        type=int,
-        default=2,
-    )
     parser.add_argument("--npools", help="Number of pools to use", default=2, type=int)
     parser.add_argument(
         "--dimerscore", help="Threshold for dimer interaction", default=-26, type=float
@@ -118,13 +110,13 @@ def cli():
     )
     parser.add_argument(
         "--reducekmers",
-        help="An existing bedfile to add primers to",
+        help="Should number of sequences in each Kmer be reduced",
         type=bool,
         default=False,
     )
     parser.add_argument(
         "--minbasefreq",
-        help="Min freq to be included",
+        help="Min freq to be included,[0<=x<=1]",
         type=check_valid_freq,
         default=0.0,
     )
@@ -175,15 +167,5 @@ def cli():
     # Check Tms
     if args.primer_tm_max <= args.primer_tm_min:
         sys.exit(f"ERROR: --primer_tm_max cannot be smaller than --primer_tm_min")
-
-    # Check the mismatches are both posative values
-    if args.mismatches_self < 0:
-        sys.exit(
-            f"ERROR: --mismatches_self must be > 0. Got value {args.mismatches_self}"
-        )
-    if args.mismatches_alt < 0:
-        sys.exit(
-            f"ERROR: --mismatches_alt must be > 0. Got value {args.mismatches_alt}"
-        )
 
     return args
