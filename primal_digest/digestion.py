@@ -198,12 +198,11 @@ def wrap_walk(
     return return_list
 
 
-def mp_r_digest(data: tuple[np.ndarray, dict, int, int, float]) -> RKmer | None:
+def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     start_col = data[2]
-    offset = data[3]
-    min_freq = data[4]
+    min_freq = data[3]
 
     # Check for gap frequency on first base
     first_base_counter = Counter(align_array[:, start_col])
@@ -257,7 +256,7 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, int, float]) -> RKmer | None:
         return None
 
     # Create the Kmer
-    tmp_kmer = RKmer(start=start_col + offset, seqs=wanted_seqs)
+    tmp_kmer = RKmer(start=start_col, seqs=wanted_seqs)
     tmp_kmer.seqs = tmp_kmer.reverse_complement()
     # Downsample the seqs if asked
     if cfg["reducekmers"]:
@@ -283,8 +282,7 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     end_col = data[2]
-    offset = data[3]
-    min_freq = data[4]
+    min_freq = data[3]
 
     # Check for gap frequency on first base
     first_base_counter = Counter(align_array[:, end_col])
@@ -348,7 +346,7 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
             list(wanted_seqs), list(wanted_seqs), cfg["dimerscore"]
         )
     ):
-        return FKmer(end=end_col + offset, seqs=wanted_seqs)
+        return FKmer(end=end_col, seqs=wanted_seqs)
     else:
         return None
 
@@ -414,14 +412,29 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
     return seqs
 
 
-def digest(msa_array, cfg, offset=0) -> tuple[list[FKmer], list[RKmer]]:
+def digest(
+    msa_array, cfg, indexes: tuple[list[int], list[int]] | bool = False
+) -> tuple[list[FKmer], list[RKmer]]:
+    """
+    Digest the given MSA array and return the FKmers and RKmers.
+
+    :param msa_array: The input MSA array.
+    :param cfg: A dictionary containing configuration parameters.
+    :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or False to use all indexes.
+    :return: A tuple containing lists of sorted FKmers and RKmers.
+    """
+    # Get the indexes to digest
+    findexes = (
+        indexes[0] if indexes else range(cfg["primer_size_min"], msa_array.shape[1])
+    )
+    rindexes = (
+        indexes[1] if indexes else range(msa_array.shape[1] - cfg["primer_size_min"])
+    )
+
     with Pool(cfg["n_cores"]) as p:
         fprimer_mp = p.map(
             mp_f_digest,
-            [
-                (msa_array, cfg, end_col, offset, cfg["minbasefreq"])
-                for end_col in range(cfg["primer_size_min"], msa_array.shape[1])
-            ],
+            [(msa_array, cfg, end_col, cfg["minbasefreq"]) for end_col in findexes],
         )
     pass_fprimer_mp = [x for x in fprimer_mp if x is not None and x.seqs]
     pass_fprimer_mp.sort(key=lambda fkmer: fkmer.end)
@@ -430,10 +443,7 @@ def digest(msa_array, cfg, offset=0) -> tuple[list[FKmer], list[RKmer]]:
     with Pool(cfg["n_cores"]) as p:
         rprimer_mp = p.map(
             mp_r_digest,
-            [
-                (msa_array, cfg, start_col, offset, cfg["minbasefreq"])
-                for start_col in range(msa_array.shape[1] - cfg["primer_size_min"])
-            ],
+            [(msa_array, cfg, start_col, cfg["minbasefreq"]) for start_col in rindexes],
         )
     pass_rprimer_mp = [x for x in rprimer_mp if x is not None and x.seqs]
     # mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
