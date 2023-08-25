@@ -34,6 +34,11 @@ poetry run primal-digest -m msa.fasta -o /path/to/output_dir
 -   `--primer_gc_max`: The maximum GC content of a primer. Default is `55`.
 -   `--primer_tm_min`: The minimum melting temperature (Tm) of a primer. Default is `59.5`.
 -   `--primer_tm_max`: The maximum melting temperature (Tm) of a primer. Default is `62.5`.
+-   `--dimerscore`: The threshold for dimer interaction. Default is `-26.0`.
+-   `--reducekmers`: Should number of sequences in each Kmer be reduced. Default is `False`.
+-   `--minbasefreq`: The frequency at a SNP/INDEL needs to be at to be included. Default is `0` or all.
+
+
 
 
 ## Example
