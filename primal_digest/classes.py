@@ -6,7 +6,6 @@ import re
 # Module imports
 from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score, bt_ol_pp_score
 from primal_digest.seq_functions import expand_ambs, reverse_complement
-from primal_digest.config import AMBIGUOUS_DNA_COMPLEMENT
 from primal_digest.mismatches import MatchDB, detect_new_products
 
 REGEX_PATTERN_PRIMERNAME = re.compile("\d+(_RIGHT|_LEFT|_R|_L)")
@@ -570,7 +569,6 @@ class Scheme:
                     return True
 
         # If non of the primers work, add the last pp back in and return false
-        print("backtrack failed")
         self.add_primer_pair_to_pool(last_pp, last_pp.pool, msa_index)
         return False
 
