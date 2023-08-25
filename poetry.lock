@@ -50,18 +50,6 @@ files = [
 ]
 
 [[package]]
-name = "diskcache"
-version = "5.6.1"
-description = "Disk Cache -- Disk and file backed persistent cache."
-category = "main"
-optional = false
-python-versions = ">=3"
-files = [
-    {file = "diskcache-5.6.1-py3-none-any.whl", hash = "sha256:558c6a2d5d7c721bb00e40711803d6804850c9f76c426ed81ecc627fe9d2ce2d"},
-    {file = "diskcache-5.6.1.tar.gz", hash = "sha256:e4c978532feff5814c4cc00fe1e11e40501985946643d73220d41ee7737c72c3"},
-]
-
-[[package]]
 name = "jinja2"
 version = "3.1.2"
 description = "A very fast and expressive template engine."
@@ -269,4 +257,4 @@ dev = ["black (>=19.3b0)", "pytest (>=4.6.2)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "e5d4800a43f583ae5339c5bb8a6bde5b2c33af1c899e6a61d30d39717c898238"
+content-hash = "2d7e20d17fe5caab3b47e26545d8975fe28d19b1ce09c00bbae79a277264fc2e"

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "primal-digest"
-version = "0.1.0"
+version = "1.0.0"
 description = ""
 authors = ["ChrisKent <chrisgkent@gmail.com>"]
 readme = "README.md"
@@ -10,7 +10,6 @@ packages = [{include = "primal_digest"}]
 python = "^3.11"
 primer3-py = "^1.2.2"
 biopython = "^1.80"
-diskcache = "^5.4.0"
 Jinja2 = "^3.1.2"
 numpy = "^1.24.2"
 primaldimer_py = {path = "./primaldimer_py/target/wheels/primaldimer_py-0.1.1-cp311-cp311-macosx_11_0_arm64.whl"}
@@ -23,4 +22,3 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 primal-digest = 'primal_digest.main:main'
-tests = 'tests.__init__:main'
