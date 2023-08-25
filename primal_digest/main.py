@@ -64,11 +64,9 @@ def main():
         cfg["bedfile"] = False
 
     # See if the output dir already exsits
-    if OUTPUT_DIR.is_dir():
-        if not args.force:
-            sys.exit(
-                f"ERROR: {OUTPUT_DIR} already exists, please use --force to override"
-            )
+    if OUTPUT_DIR.is_dir() and not args.force:
+        sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
+
     # Create the output dir and a work subdir
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
@@ -145,12 +143,6 @@ def main():
             msa_rows=align_array.shape[0],
             msa_cols=align_array.shape[1],
         )
-
-    raw_msa_list: list[np.ndarray] = []
-    for msa_path in ARG_MSA:
-        records = SeqIO.parse(msa_path, "fasta")
-        align_array = np.array([record.seq.upper() for record in records], dtype=str)
-        raw_msa_list.append(align_array)
 
     # Generate the Kmers for each array in msa_list
     unique_f_r_msa: list[list[list[FKmer], list[RKmer]]] = []
