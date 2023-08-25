@@ -7,6 +7,7 @@ from primal_digest.digestion import digest, generate_valid_primerpairs
 from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
 from primal_digest.seq_functions import remove_end_insertion
 from primal_digest.mismatches import MatchDB
+from primal_digest import __version__
 
 import numpy as np
 from Bio import SeqIO
@@ -31,6 +32,9 @@ def main():
     OUTPUT_DIR = pathlib.Path(args.output).absolute()
 
     cfg = config_dict
+
+    # Add version to config
+    cfg["version"] = __version__
     # Primer Digestion settings
     cfg["primer_gc_min"] = args.primer_gc_min
     cfg["primer_gc_max"] = args.primer_gc_max
@@ -143,6 +147,8 @@ def main():
             msa_rows=align_array.shape[0],
             msa_cols=align_array.shape[1],
         )
+    # Create a lookup dict for the msa index to name
+    msa_index_to_name = {k: v for k, v in enumerate([msa.name for msa in ARG_MSA])}
 
     # Generate the Kmers for each array in msa_list
     unique_f_r_msa: list[list[list[FKmer], list[RKmer]]] = []
@@ -154,7 +160,7 @@ def main():
         unique_f_r_msa.append((mp_thermo_pass_fkmers, mp_thermo_pass_rkmers))
         logger.info(
             "<blue>{msa_path}</>: digested to <green>{num_fkmers}</> FKmers and <green>{num_rkmers}</> RKmers",
-            msa_path=msa_path.name,
+            msa_path=msa_index_to_name.get(msa_index),
             num_fkmers=len(mp_thermo_pass_fkmers),
             num_rkmers=len(mp_thermo_pass_rkmers),
         )
@@ -171,39 +177,51 @@ def main():
         # Log some stats
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
-            msa_path=msa_path.name,
+            msa_path=msa_index_to_name.get(msa_index),
             num_pp=len(msa_primerpairs[msa_index]),
         )
 
     for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):
         # Add the first primer, and if no primers can be added move to next msa
         if not scheme.add_first_primer_pair(primerpairs_in_msa, msa_index):
-            logger.info(
-                "Added <blue>first</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
-                primer=scheme._last_pp_added[-1],
-            )
             continue
+        logger.info(
+            "Added <blue>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+            primer_start=scheme._last_pp_added[-1].start,
+            primer_end=scheme._last_pp_added[-1].end,
+            primer_pool=scheme._last_pp_added[-1].pool + 1,
+            msa_name=msa_index_to_name.get(msa_index),
+        )
 
         while True:
             # Try and add an overlapping primer
             if scheme.try_ol_primerpairs(primerpairs_in_msa, msa_index):
                 logger.info(
-                    "Added <blue>overlapping</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
-                    primer=scheme._last_pp_added[-1],
+                    "Added <blue>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                    primer_start=scheme._last_pp_added[-1].start,
+                    primer_end=scheme._last_pp_added[-1].end,
+                    primer_pool=scheme._last_pp_added[-1].pool + 1,
+                    msa_name=msa_index_to_name.get(msa_index),
                 )
                 continue
             # Try to backtrack
             elif scheme.try_backtrack(primerpairs_in_msa, msa_index):
                 logger.info(
-                    "Added <blue>backtracking</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
-                    primer=scheme._last_pp_added[-1],
+                    "Added <blue>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                    primer_start=scheme._last_pp_added[-1].start,
+                    primer_end=scheme._last_pp_added[-1].end,
+                    primer_pool=scheme._last_pp_added[-1].pool + 1,
+                    msa_name=msa_index_to_name.get(msa_index),
                 )
                 continue
             # Try and add a walking primer
             elif scheme.try_walk_primerpair(primerpairs_in_msa, msa_index):
                 logger.info(
-                    "Added <blue>walking</> primer: {primer.start}\t{primer.end}\t{primer.pool}",
-                    primer=scheme._last_pp_added[-1],
+                    "Added <blue>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                    primer_start=scheme._last_pp_added[-1].start,
+                    primer_end=scheme._last_pp_added[-1].end,
+                    primer_pool=scheme._last_pp_added[-1].pool + 1,
+                    msa_name=msa_index_to_name.get(msa_index),
                 )
             else:
                 break
