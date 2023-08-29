@@ -1,6 +1,6 @@
-FROM ubuntu:rolling
+FROM ubuntu:rolling AS builder
 
-ENV POETRY_VERSION=1.3.2
+ENV POETRY_VERSION=1.6.1
 ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VENV=/opt/poetry-venv
 
@@ -36,10 +36,5 @@ COPY README.md ./
 # Install all deps
 RUN poetry install
 RUN poetry build
-
-
-
-
-
-
+RUN $POETRY_VENV/bin/pip install dist/primal_digest-1.0.0-py3-none-any.whl
 

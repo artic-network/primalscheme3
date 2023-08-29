@@ -12,7 +12,7 @@ primer3-py = "^1.2.2"
 biopython = "^1.80"
 Jinja2 = "^3.1.2"
 numpy = "^1.24.2"
-primaldimer_py = {path = "./primaldimer_py/target/wheels/primaldimer_py-0.1.1-cp311-cp311-macosx_11_0_arm64.whl"}
+primaldimer_py = {path = "./primaldimer_py"}
 networkx = "^3.1"
 loguru = "^0.7.0"
 
