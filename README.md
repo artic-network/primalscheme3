@@ -9,6 +9,8 @@ Currently the best way to use is to use poetry to handle dependencies.
 ```         
 git clone https://github.com/ChrisgKent/primal-digest
 cd primal-digest
+git submodule add git@github.com:ChrisgKent/primaldimer_py.git
+git submodule update --init --recursive
 poetry install
 
 poetry run primal-digest -m msa.fasta -o /path/to/output_dir
