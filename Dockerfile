@@ -36,5 +36,5 @@ COPY README.md ./
 # Install all deps
 RUN poetry install
 RUN poetry build
-RUN $POETRY_VENV/bin/pip install dist/primal_digest-1.0.0-py3-none-any.whl
+RUN $POETRY_VENV/bin/pip install dist/primal_digest-1.0.2-py3-none-any.whl
 

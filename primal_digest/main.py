@@ -8,6 +8,7 @@ from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
 from primal_digest.seq_functions import remove_end_insertion
 from primal_digest.mismatches import MatchDB
 from primal_digest import __version__
+from primal_digest.create_reports import create_plots
 
 import numpy as np
 from Bio import SeqIO
@@ -60,6 +61,9 @@ def main():
     cfg["mismatch_fuzzy"] = True
     cfg["mismatch_kmersize"] = 20
     cfg["mismatch_product_size"] = args.ampliconsizemax
+
+    # Add plots to the cfg
+    cfg["plot"] = args.plot
 
     # Add the bedfile path if given
     if args.bedfile:
@@ -205,15 +209,15 @@ def main():
                 )
                 continue
             # Try to backtrack
-            elif scheme.try_backtrack(primerpairs_in_msa, msa_index):
-                logger.info(
-                    "Added <blue>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                    primer_start=scheme._last_pp_added[-1].start,
-                    primer_end=scheme._last_pp_added[-1].end,
-                    primer_pool=scheme._last_pp_added[-1].pool + 1,
-                    msa_name=msa_index_to_name.get(msa_index),
-                )
-                continue
+            # elif scheme.try_backtrack(primerpairs_in_msa, msa_index):
+            #    logger.info(
+            #        "Added <blue>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+            #        primer_start=scheme._last_pp_added[-1].start,
+            #        primer_end=scheme._last_pp_added[-1].end,
+            #        primer_pool=scheme._last_pp_added[-1].pool + 1,
+            #        msa_name=msa_index_to_name.get(msa_index),
+            #    )
+            #    continue
             # Try and add a walking primer
             elif scheme.try_walk_primerpair(primerpairs_in_msa, msa_index):
                 logger.info(
@@ -259,6 +263,19 @@ def main():
     # Write the config dict to file
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
         outfile.write(json.dumps(cfg, sort_keys=True))
+
+    # Create the fancy plots
+    if cfg["plot"]:
+        chrom_to_msapath = {
+            cfg["msa_index_to_ref_name"].get(msa_index, "NA"): str(msa_path)
+            for msa_index, msa_path in enumerate(ARG_MSA)
+        }
+
+        create_plots(
+            str(OUTPUT_DIR / f"{cfg['output_prefix']}.primer.bed"),
+            OUTPUT_DIR,
+            chrom_to_msapath,
+        )
 
 
 if __name__ == "__main__":

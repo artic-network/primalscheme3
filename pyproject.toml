@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "primal-digest"
-version = "1.0.1"
+version = "1.0.2"
 description = ""
 authors = ["ChrisKent <chrisgkent@gmail.com>"]
 readme = "README.md"
@@ -15,6 +15,8 @@ numpy = "^1.24.2"
 primaldimer_py = {path = "./primaldimer_py"}
 networkx = "^3.1"
 loguru = "^0.7.0"
+kaleido = "0.2.1"
+plotly = "^5.16.1"
 
 [build-system]
 requires = ["poetry-core"]

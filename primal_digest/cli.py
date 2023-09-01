@@ -120,6 +120,12 @@ def cli():
         type=check_valid_freq,
         default=0.0,
     )
+    parser.add_argument(
+        "--plot",
+        type=bool,
+        default=True,
+        help="Should HTML plots be generated",
+    )
 
     args = parser.parse_args()
 
