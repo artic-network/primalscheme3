@@ -5,7 +5,10 @@ import re
 
 # Module imports
 from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score, bt_ol_pp_score
-from primal_digest.seq_functions import expand_ambs, reverse_complement
+from primal_digest.seq_functions import (
+    expand_ambs,
+    reverse_complement,
+)
 from primal_digest.mismatches import MatchDB, detect_new_products
 
 REGEX_PATTERN_PRIMERNAME = re.compile("\d+(_RIGHT|_LEFT|_R|_L)")
@@ -355,6 +358,9 @@ class Scheme:
 
     def add_first_primer_pair(self, primerpairs: list[PrimerPair], msa_index) -> bool:
         "Adds primerpair to the current pool, and updates the current pool"
+        # If there are no primerpairs, return false
+        if not primerpairs:
+            return False
 
         # Try and add the first primerpair to an empty pool
         for pool_index in range(self.n_pools):
