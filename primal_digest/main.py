@@ -8,7 +8,8 @@ from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
 from primal_digest.seq_functions import remove_end_insertion
 from primal_digest.mismatches import MatchDB
 from primal_digest import __version__
-from primal_digest.create_reports import create_plots
+from primal_digest.create_report2 import generate_plot
+from primal_digest.msa import MSA
 
 import numpy as np
 from Bio import SeqIO
@@ -138,74 +139,65 @@ def main():
             )
 
     # Read in the MSAs
-    msa_list: list[np.ndarray] = []
-    for msa_path in ARG_MSA:
-        records = SeqIO.parse(msa_path, "fasta")
-        align_array = np.array([record.seq.upper() for record in records], dtype=str)
-        align_array = remove_end_insertion(align_array)
-        msa_list.append(align_array)
+    msa_list: list[MSA] = []
+    for msa_index, msa_path in enumerate(ARG_MSA):
+        # Read in the MSA
+        msa = MSA(name=msa_path.name, path=msa_path, msa_index=msa_index)
 
         logger.info(
             "Read in MSA: <blue>{msa_path}</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
-            msa_path=msa_path.name,
-            msa_rows=align_array.shape[0],
-            msa_cols=align_array.shape[1],
+            msa_path=msa.name,
+            msa_rows=msa.array.shape[0],
+            msa_cols=msa.array.shape[1],
         )
-    # Create a lookup dict for the msa index to name
-    msa_index_to_name = {k: v for k, v in enumerate([msa.name for msa in ARG_MSA])}
 
-    # Generate the Kmers for each array in msa_list
-    unique_f_r_msa: list[list[list[FKmer], list[RKmer]]] = []
-
-    for msa_index, msa_array in enumerate(msa_list):
-        mp_thermo_pass_fkmers, mp_thermo_pass_rkmers = digest(msa_array, cfg)
-
-        # Append them to the msa
-        unique_f_r_msa.append((mp_thermo_pass_fkmers, mp_thermo_pass_rkmers))
+        # Digest the MSA into FKmers and RKmers
+        msa.digest(cfg)
         logger.info(
             "<blue>{msa_path}</>: digested to <green>{num_fkmers}</> FKmers and <green>{num_rkmers}</> RKmers",
-            msa_path=msa_index_to_name.get(msa_index),
-            num_fkmers=len(mp_thermo_pass_fkmers),
-            num_rkmers=len(mp_thermo_pass_rkmers),
+            msa_path=msa.name,
+            num_fkmers=len(msa.fkmers),
+            num_rkmers=len(msa.rkmers),
         )
 
-    msa_primerpairs = []
-    ## Generate all valid primerpairs for each msa
-    for msa_index, unique_fr_kmers in enumerate(unique_f_r_msa):
         # Generate all primerpairs then interaction check
-        msa_primerpairs.append(
-            generate_valid_primerpairs(
-                unique_fr_kmers[0], unique_fr_kmers[1], cfg, msa_index=msa_index
-            )
-        )
-        # Log some stats
+        msa.generate_primerpairs(cfg)
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
-            msa_path=msa_index_to_name.get(msa_index),
-            num_pp=len(msa_primerpairs[msa_index]),
+            msa_path=msa.name,
+            num_pp=len(msa.primerpairs),
         )
 
-    for msa_index, primerpairs_in_msa in enumerate(msa_primerpairs):
+        # Add the msa to the scheme
+        msa_list.append(msa)
+
+    # Start the Scheme generation
+    for msa in msa_list:
         # Add the first primer, and if no primers can be added move to next msa
-        if not scheme.add_first_primer_pair(primerpairs_in_msa, msa_index):
+        if scheme.add_first_primer_pair(msa.primerpairs, msa.msa_index):
+            logger.info(
+                "Added <blue>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                primer_start=scheme._last_pp_added[-1].start,
+                primer_end=scheme._last_pp_added[-1].end,
+                primer_pool=scheme._last_pp_added[-1].pool + 1,
+                msa_name=msa.name,
+            )
+        else:
+            logger.warning(
+                "No valid primers found for <blue>{msa_name}</>",
+                msa_name=msa.name,
+            )
             continue
-        logger.info(
-            "Added <blue>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-            primer_start=scheme._last_pp_added[-1].start,
-            primer_end=scheme._last_pp_added[-1].end,
-            primer_pool=scheme._last_pp_added[-1].pool + 1,
-            msa_name=msa_index_to_name.get(msa_index),
-        )
 
         while True:
             # Try and add an overlapping primer
-            if scheme.try_ol_primerpairs(primerpairs_in_msa, msa_index):
+            if scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
                 logger.info(
                     "Added <blue>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                     primer_start=scheme._last_pp_added[-1].start,
                     primer_end=scheme._last_pp_added[-1].end,
                     primer_pool=scheme._last_pp_added[-1].pool + 1,
-                    msa_name=msa_index_to_name.get(msa_index),
+                    msa_name=msa.name,
                 )
                 continue
             # Try to backtrack
@@ -219,13 +211,13 @@ def main():
             #    )
             #    continue
             # Try and add a walking primer
-            elif scheme.try_walk_primerpair(primerpairs_in_msa, msa_index):
+            elif scheme.try_walk_primerpair(msa.primerpairs, msa_index):
                 logger.info(
                     "Added <blue>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                     primer_start=scheme._last_pp_added[-1].start,
                     primer_end=scheme._last_pp_added[-1].end,
                     primer_pool=scheme._last_pp_added[-1].pool + 1,
-                    msa_name=msa_index_to_name.get(msa_index),
+                    msa_name=msa.name,
                 )
             else:
                 break
@@ -271,11 +263,8 @@ def main():
             for msa_index, msa_path in enumerate(ARG_MSA)
         }
 
-        create_plots(
-            str(OUTPUT_DIR / f"{cfg['output_prefix']}.primer.bed"),
-            OUTPUT_DIR,
-            chrom_to_msapath,
-        )
+        for msa in msa_list:
+            generate_plot(msa, scheme._pools, OUTPUT_DIR)
 
 
 if __name__ == "__main__":
