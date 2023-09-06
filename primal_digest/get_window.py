@@ -92,6 +92,14 @@ def get_pp_window(pp, fp_end_min: int, fp_end_max: int, rp_start_min: int):
     This will perform a semi-binary search on the list of primerpairs.
     The primerpair.fprimer.end position will be used as the search value
     """
+    # If you want to add a PP to Pool 1
+
+    #                            fp_end_min
+    #                            |       fp_end_max
+    # Pool 1    XXX------------XXX       |
+    # Pool 2              XXX------------XXX
+    #                                      |
+    #                                      rp_start_min
     included_pp = []
     n_pp = len(pp)
     high = n_pp - 1
