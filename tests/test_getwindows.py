@@ -33,23 +33,40 @@ class Test_GetRWindowFAST2(unittest.TestCase):
 
 class Test_GetPpWindow(unittest.TestCase):
     def test_get_pp_window_ol(self):
-        fkmers = [FKmer(end, "A") for end in range(20, 30)]
-        rkmers = [RKmer(start, "A") for start in range(90, 100)]
+        fkmers = [FKmer(end, "A") for end in range(20, 110)]
+        rkmers = [RKmer(start, "A") for start in range(10, 100)]
 
-        primerpairs = []
+        cfg = {"amplicon_size_min": 10, "amplicon_size_max": 70}
+        msa_index = 0
+
+        ## Generate all the primerpairs
+        non_checked_pp = []
         for fkmer in fkmers:
-            for rkmer in rkmers:
-                primerpairs.append(PrimerPair(fkmer, rkmer, 0))
-        primerpairs.sort(key=lambda pp: (pp.fprimer.end, pp.rprimer.start))
+            fkmer_start = min(fkmer.starts())
+            # Get all rkmers that would make a valid amplicon
+            pos_rkmer = get_r_window_FAST2(
+                kmers=rkmers,
+                start=fkmer_start + cfg["amplicon_size_min"],
+                end=fkmer_start + cfg["amplicon_size_max"],
+            )
+            for rkmer in pos_rkmer:
+                non_checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
+        non_checked_pp.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
+
+        fp_end_min = 22
+        fp_end_max = 28
+        rp_start_min = 95
 
         # Get all kmers that start between 40 and 50
         expected_pos_ol_pp = [
             pp
-            for pp in primerpairs
-            if pp.fprimer.end >= 22 and pp.fprimer.end <= 28 and pp.rprimer.start >= 95
+            for pp in non_checked_pp
+            if pp.fprimer.end >= fp_end_min
+            and pp.fprimer.end <= fp_end_max
+            and pp.rprimer.start >= rp_start_min
         ]
 
-        result_pp = get_pp_window(primerpairs, 22, 28, 95)
+        result_pp = get_pp_window(non_checked_pp, fp_end_min, fp_end_max, rp_start_min)
         self.assertEqual(expected_pos_ol_pp, result_pp)
 
 
