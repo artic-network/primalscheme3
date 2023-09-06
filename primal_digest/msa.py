@@ -5,7 +5,10 @@ from Bio import SeqIO
 # Module imports
 from primal_digest.classes import FKmer, RKmer, PrimerPair
 from primal_digest.seq_functions import remove_end_insertion
-from primal_digest.digestion import digest, generate_valid_primerpairs
+from primal_digest.digestion import (
+    digest,
+    generate_valid_primerpairs,
+)
 
 
 class MSA:
@@ -28,9 +31,17 @@ class MSA:
         self.array = remove_end_insertion(self.array)
 
     def digest(self, cfg):
-        self.fkmers, self.rkmers = digest(self.array, cfg)
+        self.fkmers, self.rkmers = digest(
+            msa_array=self.array,
+            cfg=cfg,
+            disable_progress_bar=cfg["disable_progress_bar"],
+        )
 
     def generate_primerpairs(self, cfg):
         self.primerpairs = generate_valid_primerpairs(
-            self.fkmers, self.rkmers, cfg, self
+            self.fkmers,
+            self.rkmers,
+            cfg,
+            self.msa_index,
+            disable_progress_bar=cfg["disable_progress_bar"],
         )
