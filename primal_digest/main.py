@@ -2,24 +2,20 @@
 from primal_digest.thermo import *
 from primal_digest.cli import cli
 from primal_digest.config import config_dict
-from primal_digest.classes import FKmer, RKmer, Scheme
-from primal_digest.digestion import digest, generate_valid_primerpairs
+from primal_digest.classes import Scheme
 from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
-from primal_digest.seq_functions import remove_end_insertion
 from primal_digest.mismatches import MatchDB
 from primal_digest import __version__
-from primal_digest.create_report2 import generate_plot
+from primal_digest.create_reports import generate_plot
 from primal_digest.msa import MSA
 
-import numpy as np
-from Bio import SeqIO
-import json
 
 # Added
 import hashlib
 import sys
 import pathlib
 from loguru import logger
+import json
 
 logger = logger.opt(colors=True)
 
@@ -65,6 +61,7 @@ def main():
 
     # Add plots to the cfg
     cfg["plot"] = args.plot
+    cfg["disable_progress_bar"] = False
 
     # Add the bedfile path if given
     if args.bedfile:
@@ -258,11 +255,6 @@ def main():
 
     # Create the fancy plots
     if cfg["plot"]:
-        chrom_to_msapath = {
-            cfg["msa_index_to_ref_name"].get(msa_index, "NA"): str(msa_path)
-            for msa_index, msa_path in enumerate(ARG_MSA)
-        }
-
         for msa in msa_list:
             generate_plot(msa, scheme._pools, OUTPUT_DIR)
 
