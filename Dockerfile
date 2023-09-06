@@ -6,7 +6,7 @@ ENV POETRY_VENV=/opt/poetry-venv
 
 # Install python
 RUN apt-get update -y && apt-get install curl -y
-RUN apt-get install -y python3.11 && apt-get install python3-pip -y && apt-get install python3.11-venv -y
+RUN apt-get install -y python3.11 && apt-get install python3-pip - y && apt-get install python3.11-venv -y
 
 RUN apt-get install autoconf -y
 # Tell Poetry where to place its cache and virtual environment
@@ -36,5 +36,5 @@ COPY README.md ./
 # Install all deps
 RUN poetry install
 RUN poetry build
-RUN $POETRY_VENV/bin/pip install dist/primal_digest-1.0.2-py3-none-any.whl
+RUN $POETRY_VENV/bin/pip install dist/primal_digest-1.0.3-py3-none-any.whl
 
