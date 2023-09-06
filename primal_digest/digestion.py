@@ -18,6 +18,7 @@ from primaldimer_py import do_pools_interact_py
 
 
 # Externals
+from tqdm import tqdm
 import numpy as np
 from multiprocessing import Pool
 import itertools
@@ -25,19 +26,24 @@ import networkx as nx
 from collections import Counter
 
 
-def mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
+def _mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
     """
     True means interaction
     """
     pp = data[0]
     cfg = data[1]
+    # If they do interact return None
     return do_pools_interact_py(
         list(pp.fprimer.seqs), list(pp.rprimer.seqs), cfg["dimerscore"]
     )
 
 
 def generate_valid_primerpairs(
-    fkmers: list[FKmer], rkmers: list[RKmer], cfg: dict, msa_index: int
+    fkmers: list[FKmer],
+    rkmers: list[RKmer],
+    cfg: dict,
+    msa_index: int,
+    disable_progress_bar: bool = False,
 ) -> list[PrimerPair]:
     """
     Generates all valid primers pairs, and then runs interaction checker and returns passing PP
@@ -56,13 +62,17 @@ def generate_valid_primerpairs(
             non_checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
 
     ## Interaction check all the primerpairs
+    iter_free_primer_pairs = []
     with Pool(cfg["n_cores"]) as p:
-        mp_pp_bool = p.map(mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp))
-
-    ## Valid primerpairs
-    iter_free_primer_pairs: list[PrimerPair] = [
-        pp for (bool, pp) in zip(mp_pp_bool, non_checked_pp) if not bool
-    ]
+        mp_pp_bool = tqdm(
+            p.imap_unordered(_mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp)),
+            total=len(non_checked_pp),
+            desc="Generating PrimerPairs",
+            disable=disable_progress_bar,
+        )
+        for bool, pp in zip(mp_pp_bool, non_checked_pp):
+            if not bool:
+                iter_free_primer_pairs.append(pp)
 
     iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
     return iter_free_primer_pairs
@@ -413,7 +423,10 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
 
 
 def digest(
-    msa_array, cfg, indexes: tuple[list[int], list[int]] | bool = False
+    msa_array,
+    cfg,
+    indexes: tuple[list[int], list[int]] | bool = False,
+    disable_progress_bar: bool = False,
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
     Digest the given MSA array and return the FKmers and RKmers.
@@ -421,6 +434,7 @@ def digest(
     :param msa_array: The input MSA array.
     :param cfg: A dictionary containing configuration parameters.
     :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or False to use all indexes.
+    :param disable_progress_bar: True to disable to the progress bar.
     :return: A tuple containing lists of sorted FKmers and RKmers.
     """
     # Get the indexes to digest
@@ -431,22 +445,38 @@ def digest(
         indexes[1] if indexes else range(msa_array.shape[1] - cfg["primer_size_min"])
     )
 
+    # Create the MP Pool
     with Pool(cfg["n_cores"]) as p:
-        fprimer_mp = p.map(
-            mp_f_digest,
-            [(msa_array, cfg, end_col, cfg["minbasefreq"]) for end_col in findexes],
+        # Generate the FKmers via MP
+        fprimer_mp = tqdm(
+            p.imap_unordered(
+                mp_f_digest,
+                ((msa_array, cfg, end_col, cfg["minbasefreq"]) for end_col in findexes),
+            ),
+            total=len(findexes),
+            desc="Generating FKmers",
+            disable=disable_progress_bar,
         )
-    pass_fprimer_mp = [x for x in fprimer_mp if x is not None and x.seqs]
-    pass_fprimer_mp.sort(key=lambda fkmer: fkmer.end)
+        fprimer_mp = list(fprimer_mp)
+        pass_fprimer_mp = [x for x in fprimer_mp if x is not None and x.seqs]
+        pass_fprimer_mp.sort(key=lambda fkmer: fkmer.end)
 
-    # RPrimers digestion via MP
-    with Pool(cfg["n_cores"]) as p:
-        rprimer_mp = p.map(
-            mp_r_digest,
-            [(msa_array, cfg, start_col, cfg["minbasefreq"]) for start_col in rindexes],
+        # Generate the FKmers via MP
+        rprimer_mp = tqdm(
+            p.imap_unordered(
+                mp_r_digest,
+                (
+                    (msa_array, cfg, start_col, cfg["minbasefreq"])
+                    for start_col in rindexes
+                ),
+            ),
+            total=len(rindexes),
+            desc="Generating RKmers",
+            disable=disable_progress_bar,
         )
-    pass_rprimer_mp = [x for x in rprimer_mp if x is not None and x.seqs]
-    # mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
-    pass_rprimer_mp.sort(key=lambda rkmer: rkmer.start)
+        rprimer_mp = list(rprimer_mp)
+        pass_rprimer_mp = [x for x in rprimer_mp if x is not None and x.seqs]
+        # mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
+        pass_rprimer_mp.sort(key=lambda rkmer: rkmer.start)
 
     return (pass_fprimer_mp, pass_rprimer_mp)
