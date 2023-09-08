@@ -426,7 +426,6 @@ def digest(
     msa_array,
     cfg,
     indexes: tuple[list[int], list[int]] | bool = False,
-    disable_progress_bar: bool = False,
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
     Digest the given MSA array and return the FKmers and RKmers.
@@ -448,33 +447,18 @@ def digest(
     # Create the MP Pool
     with Pool(cfg["n_cores"]) as p:
         # Generate the FKmers via MP
-        fprimer_mp = tqdm(
-            p.imap_unordered(
-                mp_f_digest,
-                ((msa_array, cfg, end_col, cfg["minbasefreq"]) for end_col in findexes),
-            ),
-            total=len(findexes),
-            desc="Generating FKmers",
-            disable=disable_progress_bar,
+        fprimer_mp = p.map(
+            mp_f_digest,
+            ((msa_array, cfg, end_col, cfg["minbasefreq"]) for end_col in findexes),
         )
-        fprimer_mp = list(fprimer_mp)
         pass_fprimer_mp = [x for x in fprimer_mp if x is not None and x.seqs]
         pass_fprimer_mp.sort(key=lambda fkmer: fkmer.end)
 
         # Generate the FKmers via MP
-        rprimer_mp = tqdm(
-            p.imap_unordered(
-                mp_r_digest,
-                (
-                    (msa_array, cfg, start_col, cfg["minbasefreq"])
-                    for start_col in rindexes
-                ),
-            ),
-            total=len(rindexes),
-            desc="Generating RKmers",
-            disable=disable_progress_bar,
+        rprimer_mp = p.map(
+            mp_r_digest,
+            ((msa_array, cfg, start_col, cfg["minbasefreq"]) for start_col in rindexes),
         )
-        rprimer_mp = list(rprimer_mp)
         pass_rprimer_mp = [x for x in rprimer_mp if x is not None and x.seqs]
         # mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
         pass_rprimer_mp.sort(key=lambda rkmer: rkmer.start)
