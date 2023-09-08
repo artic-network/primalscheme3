@@ -27,14 +27,13 @@ class MSA:
 
         # Read in the MSA
         records = SeqIO.parse(self.path, "fasta")
-        self.array = np.array([record.seq.upper() for record in records], dtype=str)
+        self.array = np.array([record.seq.upper() for record in records], dtype="U1")
         self.array = remove_end_insertion(self.array)
 
     def digest(self, cfg):
         self.fkmers, self.rkmers = digest(
             msa_array=self.array,
             cfg=cfg,
-            disable_progress_bar=cfg["disable_progress_bar"],
         )
 
     def generate_primerpairs(self, cfg):
@@ -43,5 +42,4 @@ class MSA:
             self.rkmers,
             cfg,
             self.msa_index,
-            disable_progress_bar=cfg["disable_progress_bar"],
         )
