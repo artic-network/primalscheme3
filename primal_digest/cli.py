@@ -5,7 +5,7 @@ import sys
 import pathlib
 
 # Module imports
-from primal_digest import __version__
+from primal_digest.__init__ import __version__
 
 
 def check_valid_freq(value):
