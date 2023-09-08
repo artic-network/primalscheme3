@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "primal-panel"
+version = "0.1.0"
+description = ""
+authors = ["ChrisKent <chrisgkent@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+primal_digest = {path = "./primal-digest"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+primal-panel = 'primal_panel.minimal_scheme:main'

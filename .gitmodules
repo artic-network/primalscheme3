@@ -1,0 +1,3 @@
+[submodule "primal-digest"]
+	path = primal-digest
+	url = git@github.com:ChrisgKent/primal-digest.git
