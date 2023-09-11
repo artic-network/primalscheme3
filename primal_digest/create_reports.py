@@ -11,6 +11,7 @@ import pathlib
 # Module imports
 from primal_digest.msa import MSA
 from primal_digest.classes import PrimerPair
+from primal_digest.seq_functions import entropy_score_array
 
 
 def calc_base_consensus(align_array) -> list[float]:
@@ -202,14 +203,14 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
         secondary_y=True,
     )
 
-    # Add the third plot
-    varience = calc_variance(msa.array)
+    # Add the entropy plot
+    entropy = entropy_score_array(msa.array)
     fig.add_trace(
         go.Scatter(
-            x=[x[0] for x in varience],
-            y=[x[1] for x in varience],
+            x=[x for x in range(len(entropy))],
+            y=[x for x in entropy],
             opacity=1,
-            name="Sequence variance",
+            name="Sequence Entropy",
             mode="lines",
         ),
         row=3,
@@ -294,11 +295,10 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
     )
     # Update the third plot
     fig.update_yaxes(
-        title="Base Variance",
+        title="Entropy",
         tickmode="array",
         row=3,
         col=1,
-        secondary_y=False,
     )
     # Update the fourth plot
     fig.update_yaxes(
