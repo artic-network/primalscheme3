@@ -32,7 +32,7 @@ def main():
     cfg = config_dict
 
     # Add version to config
-    cfg["version"] = __version__
+    cfg["primal_digest_version"] = __version__
     # Primer Digestion settings
     cfg["primer_gc_min"] = args.primer_gc_min
     cfg["primer_gc_max"] = args.primer_gc_max
