@@ -64,13 +64,6 @@ def cli():
         default="output",
     )
     parser.add_argument(
-        "--refnames",
-        help="The name of the referance used in the outputed bed file",
-        type=str,
-        default=["MSA"],
-        nargs="+",
-    )
-    parser.add_argument(
         "--force",
         help="Over ride the output directory",
         action="store_true",
@@ -158,14 +151,6 @@ def cli():
         sys.exit(
             f"ERROR: {int(args.ampliconsizemin)} is outside of the range for --amplicon-size-min [100<=x<={int(args.ampliconsizemax)}]"
         )
-
-    ## Check the number of msa and the number of msa names match
-    if len(args.refnames) != len(args.msa) and args.refnames != ["msa"]:
-        alt_names = [f"msa_{x}" for x in range(0, len(args.msa))]
-        print(
-            f"ISSUE: The number of args in --msa ({len(args.msa)}) != the number of args in --refnames ({len(args.refnames)}).\tUsing refnames of {alt_names}"
-        )
-        args.refnames = alt_names
 
     # Check gc min is less than GC max
     if args.primer_gc_max <= args.primer_gc_min:

@@ -39,7 +39,6 @@ def main():
     cfg["primer_tm_min"] = args.primer_tm_min
     cfg["primer_tm_max"] = args.primer_tm_max
     cfg["dimerscore"] = args.dimerscore
-    cfg["refname"] = args.refnames
     cfg["n_cores"] = args.cores
     cfg["output_prefix"] = args.prefix
     cfg["output_dir"] = str(OUTPUT_DIR)
@@ -51,9 +50,7 @@ def main():
     cfg["npools"] = args.npools
     cfg["reducekmers"] = args.reducekmers
     cfg["minbasefreq"] = args.minbasefreq
-    cfg["msa_index_to_ref_name"] = {
-        index: msa_name for index, msa_name in enumerate(cfg["refname"])
-    }
+
     # Add the mismatch params to the cfg
     cfg["mismatch_fuzzy"] = True
     cfg["mismatch_kmersize"] = 20
@@ -136,10 +133,10 @@ def main():
             )
 
     # Read in the MSAs
-    msa_list: list[MSA] = []
+    msa_dict: dict[int:MSA] = {}
     for msa_index, msa_path in enumerate(ARG_MSA):
         # Read in the MSA
-        msa = MSA(name=msa_path.name, path=msa_path, msa_index=msa_index)
+        msa = MSA(name=msa_path.stem, path=msa_path, msa_index=msa_index)
 
         logger.info(
             "Read in MSA: <blue>{msa_path}</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
@@ -166,14 +163,14 @@ def main():
         )
 
         # Add the msa to the scheme
-        msa_list.append(msa)
+        msa_dict[msa_index] = msa
 
     # Start the Scheme generation
-    for msa in msa_list:
+    for msa_index, msa in msa_dict.items():
         # Add the first primer, and if no primers can be added move to next msa
-        if scheme.add_first_primer_pair(msa.primerpairs, msa.msa_index):
+        if scheme.add_first_primer_pair(msa.primerpairs, msa_index):
             logger.info(
-                "Added <blue>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                "Added <green>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                 primer_start=scheme._last_pp_added[-1].start,
                 primer_end=scheme._last_pp_added[-1].end,
                 primer_pool=scheme._last_pp_added[-1].pool + 1,
@@ -190,7 +187,7 @@ def main():
             # Try and add an overlapping primer
             if scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
                 logger.info(
-                    "Added <blue>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                    "Added <green>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                     primer_start=scheme._last_pp_added[-1].start,
                     primer_end=scheme._last_pp_added[-1].end,
                     primer_pool=scheme._last_pp_added[-1].pool + 1,
@@ -210,7 +207,7 @@ def main():
             # Try and add a walking primer
             elif scheme.try_walk_primerpair(msa.primerpairs, msa_index):
                 logger.info(
-                    "Added <blue>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                    "Added <yellow>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                     primer_start=scheme._last_pp_added[-1].start,
                     primer_end=scheme._last_pp_added[-1].end,
                     primer_pool=scheme._last_pp_added[-1].pool + 1,
@@ -225,9 +222,18 @@ def main():
     with open(OUTPUT_DIR / f"{cfg['output_prefix']}.primer.bed", "w") as outfile:
         primer_bed_str = []
         for pp in scheme.all_primers():
+            # If there is an corrasponding msa
+            ## Primers parsed in via bed do not have an msa_index
+            if chrom_name := msa_dict.get(pp.msa_index):
+                chrom_name = chrom_name.name
+            else:
+                # This Chrom name is not used in the bedfile
+                # As BedPrimers have there own name/prefix
+                chrom_name = "NA"
+
             st = pp.__str__(
-                cfg["msa_index_to_ref_name"].get(pp.msa_index, "NA"),
-                cfg["msa_index_to_ref_name"].get(pp.msa_index, "NA"),
+                chrom_name,
+                chrom_name.replace("_", "-"),
             )
             primer_bed_str.append(st.strip())
         outfile.write("\n".join(primer_bed_str))
@@ -236,8 +242,12 @@ def main():
     with open(OUTPUT_DIR / f"{cfg['output_prefix']}.amplicon.bed", "w") as outfile:
         amp_bed_str = []
         for pp in scheme.all_primers():
+            if pp_name := msa_dict.get(pp.msa_index):
+                pp_name = pp_name.name
+            else:
+                pp_name = pp.ref
             amp_bed_str.append(
-                f"{cfg['msa_index_to_ref_name'].get(pp.msa_index, 'NA')}\t{pp.start}\t{pp.end}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
+                f"{pp_name}\t{pp.start}\t{pp.end}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
             )
         outfile.write("\n".join(amp_bed_str))
 
@@ -255,7 +265,7 @@ def main():
 
     # Create the fancy plots
     if cfg["plot"]:
-        for msa in msa_list:
+        for msa in msa_dict.values():
             generate_plot(msa, scheme._pools, OUTPUT_DIR)
 
 
