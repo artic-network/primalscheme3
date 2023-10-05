@@ -4,6 +4,8 @@ ENV POETRY_VERSION=1.6.1
 ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VENV=/opt/poetry-venv
 
+ENV PRIMAL_DIGEST_VERSION = 1.1.0
+
 # Install python
 RUN apt-get update -y && apt-get install curl -y
 RUN apt-get install -y python3.11 && apt-get install python3-pip -y && apt-get install python3.11-venv -y
@@ -36,5 +38,5 @@ COPY README.md ./
 # Install all deps
 RUN poetry install
 RUN poetry build
-RUN $POETRY_VENV/bin/pip install dist/primal_digest-1.0.6-py3-none-any.whl
+RUN $POETRY_VENV/bin/pip install dist/primal_digest-${PRIMAL_DIGEST_VERSION}-py3-none-any.whl
 
