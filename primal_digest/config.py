@@ -1,9 +1,5 @@
 config_dict = {
-    "msa_checksums": [],
-    "msa_paths": [],
-    "refname": "msa",
     "n_cores": 1,
-    "output_prefix": "output",
     "amplicon_size_min": 360,
     "amplicon_size_max": 400,
     "min_overlap": 10,
