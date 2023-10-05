@@ -38,23 +38,11 @@ def cli():
         default=1,
     )
     parser.add_argument(
-        "--ampliconsizemax",
-        help="The max size of an amplicon [100<=x<=2000]",
+        "--ampliconsize",
+        help="The size of an amplicon. Use single value for ± 10%, or two values to set min, max [100<=x<=2000]",
         type=int,
-        default=1000,
-    )
-    parser.add_argument(
-        "--ampliconsizemin",
-        help="The min size of an amplicon [100<=x<=2000] Default = 0 (0.9 * ampliconsizemax)",
-        type=int,
-        default=900,
-    )
-    parser.add_argument(
-        "-p",
-        "--prefix",
-        help="The prefix used in the bedfile name",
-        type=str,
-        default="output",
+        default=400,
+        nargs="+",
     )
     parser.add_argument(
         "-o",
@@ -119,6 +107,12 @@ def cli():
         default=True,
         help="Should HTML plots be generated",
     )
+    parser.add_argument(
+        "--mapping",
+        help="How should the primers in the bedfile be mapped",
+        choices=["consensus", "first"],
+        default="consensus",
+    )
 
     args = parser.parse_args()
 
@@ -130,27 +124,26 @@ def cli():
     if int(args.cores) <= 0:
         sys.exit(f"ERROR: {int(args.cores)} is not a valid core count")
 
-    if 100 <= int(args.ampliconsizemax) <= 2000:
-        pass
-    else:
-        sys.exit(
-            f"ERROR: {int(args.ampliconsizemax)} is outside of the range for --amplicon-size-max [100<=x<=2000]"
-        )
-
     if args.minoverlap < 0:
         sys.exit(
             f"ERROR: {int(args.minoverlap)} is outside of the range for --minoverlap [0<=x]"
         )
 
-    if args.ampliconsizemin == 0:
-        args.ampliconsizemin = 0.9 * args.ampliconsizemax
-
-    if 100 <= int(args.ampliconsizemin) <= int(args.ampliconsizemax):
-        pass
+    # Validate amplicon size
+    if len(args.ampliconsize) == 1:
+        args.ampliconsizemin = int(args.ampliconsize[0] * 0.9)
+        args.ampliconsizemax = int(args.ampliconsize[0] * 1.1)
+    elif len(args.ampliconsize) == 2:
+        args.ampliconsizemin = int(args.ampliconsize[0])
+        args.ampliconsizemax = int(args.ampliconsize[1])
     else:
         sys.exit(
-            f"ERROR: {int(args.ampliconsizemin)} is outside of the range for --amplicon-size-min [100<=x<={int(args.ampliconsizemax)}]"
+            f"ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
         )
+
+    # Check amplicon size
+    if args.ampliconsizemin >= args.ampliconsizemax:
+        sys.exit(f"ERROR: --ampliconsize min cannot be greater than max [100<=x<=2000]")
 
     # Check gc min is less than GC max
     if args.primer_gc_max <= args.primer_gc_min:
@@ -158,5 +151,8 @@ def cli():
     # Check Tms
     if args.primer_tm_max <= args.primer_tm_min:
         sys.exit(f"ERROR: --primer_tm_max cannot be smaller than --primer_tm_min")
+    # Check npools
+    if args.npools < 1:
+        sys.exit(f"ERROR: --npools cannot be less than 1")
 
     return args
