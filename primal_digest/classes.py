@@ -12,7 +12,7 @@ from primal_digest.seq_functions import (
 from primal_digest.mismatches import MatchDB, detect_new_products
 from primal_digest.get_window import get_pp_window
 
-REGEX_PATTERN_PRIMERNAME = re.compile("\d+(_RIGHT|_LEFT|_R|_L)")
+REGEX_PATTERN_PRIMERNAME = re.compile("\\d+(_RIGHT|_LEFT|_R|_L)")
 
 
 def re_primer_name(string) -> tuple[str, str] | None:
@@ -29,6 +29,9 @@ class FKmer:
     end: int
     seqs: set[str]
     _starts: set[int]
+
+    # Add slots for some performance gains
+    __slots__ = ["end", "seqs", "_starts"]
 
     def __init__(self, end, seqs) -> None:
         self.end = end
@@ -81,11 +84,26 @@ class FKmer:
         else:
             return False
 
+    def remap(self, mapping_array):
+        """
+        Remaps the fkmer to a new indexing system
+        Returns None if the fkmer is not valid
+        """
+        if mapping_array[self.end] is not None:
+            self.end = mapping_array[self.end]
+            self._starts = {self.end - len(x) for x in self.seqs}
+            return self
+        else:
+            return None
+
 
 class RKmer:
     start: int
     seqs: set[str]
     _ends: set[int]
+
+    # Add slots for some performance gains
+    __slots__ = ["start", "seqs", "_ends"]
 
     def __init__(self, start, seqs) -> None:
         self.start = start
@@ -141,6 +159,18 @@ class RKmer:
         else:
             return False
 
+    def remap(self, mapping_array):
+        """
+        Remaps the rkmer to a new indexing system
+        Returns None if the rkmer is not valid
+        """
+        if mapping_array[self.start] is not None:
+            self.start = mapping_array[self.start]
+            self._ends = {len(x) + self.start for x in self.seqs}
+            return self
+        else:
+            return None
+
 
 class PrimerPair:
     fprimer: FKmer
@@ -148,6 +178,8 @@ class PrimerPair:
     amplicon_number: int
     pool: int
     msa_index: int
+
+    __slots__ = ["fprimer", "rprimer", "amplicon_number", "pool", "msa_index"]
 
     def __init__(
         self,
