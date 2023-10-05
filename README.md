@@ -20,15 +20,18 @@ poetry run primal-digest -m msa.fasta -o /path/to/output_dir
 
 -   `-m/--msa`: The path to the MSA file(s). If multiple files are to be processed, then pass the paths separated by spaces.
 -   `-c/--cores`: The number of cores to use in Kmer digestion and thermo checking. Default is `1`.
--   `--ampliconsizemax`: The maximum size of an amplicon. Default is `1000`.
--   `--ampliconsizemin`: The minimum size of an amplicon. Default is `900`.
--   `-p/--prefix`: The prefix used in the bedfile name. Default is `output`.
+-   `--ampliconsize`: The  size of an amplicon. Either provide one value and amplicons will be within ±10%. Provide two values to set min/max manualy.
 -   `-o/--output`: The output directory of the primer.bed file. Default is `output`.
--   `--refnames`: The name of the reference used in the outputted bed file. If processing multiple MSA files, then pass the reference names separated by spaces. Default is `MSA`.
 -   `--force`: Override the output directory. If set, then any existing output directory will be overwritten.
 -   `--minoverlap`: The minimum amount of overlap between primers. Default is `20`.
 -   `--npools`: Number of pools to use. Default is `2`.
 -   `--bedfile`: Add primers to an existing bedfile. Note: The number of pools in bedfile \<= --npools. Primal-digest makes no attempt to validate primers or primer-primer interactions in the bedfile.
+-   `--mapping`: What should the primers be mapped to. Choice [`consensus`, `first`]. Default is `consensus`.
+    - `consensus`: Uses the MSA consensus as the primer indexing system. 
+    - `first`: Uses the first genome in the MSA as the primer indexing system. 
+
+
+
 
 ## Advanced Arguments
 
@@ -46,10 +49,16 @@ poetry run primal-digest -m msa.fasta -o /path/to/output_dir
 ## Example
 
 ```         
-poetry run primal-digest -m msa1.fasta msa2.fasta -o /path/to/output_dir --refnames MSA1 MSA2 --force
+poetry run primal-digest -m msa1.fasta msa2.fasta -o /path/to/output_dir --force
 ```
 
-This command will generate primer schemes for `msa1.fasta` and `msa2.fasta` files and store them in `/path/to/output_dir`. The `--force` option will overwrite any existing output directory.
+This command will generate a primer scheme for `msa1.fasta` and `msa2.fasta` files and store them in `/path/to/output_dir`. The `--force` option will overwrite any existing output directory.
+
+```         
+poetry run primal-digest -m msa1.fasta -o /path/to/output_dir --force --ampliconsize 400
+```
+
+This command will generate a primer scheme for `msa1.fasta`. `--ampliconsize 400` means amplicons will be sized between 360 and 440bp. Using `--ampliconsize 600 800` would create amplicons between 600 and 800bp
 
 ------------------------------------------------------------------------
 
