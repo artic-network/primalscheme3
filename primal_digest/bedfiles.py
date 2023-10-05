@@ -1,5 +1,4 @@
 import pathlib
-from primal_digest.classes import BedPrimer
 from itertools import groupby
 import sys
 from statistics import median
