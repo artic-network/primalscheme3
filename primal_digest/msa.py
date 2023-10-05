@@ -22,7 +22,7 @@ class MSA:
 
     # Calculated on init
     _uuid: str
-    _chrom_name: str  # only used in the primer.bed file
+    _chrom_name: str  # only used in the primer.bed file and html report
     _mapping_array: np.ndarray | None
 
     # Calculated on evaluation
