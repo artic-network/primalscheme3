@@ -3,8 +3,71 @@ from primal_digest.classes import BedPrimer
 from itertools import groupby
 import sys
 from statistics import median
+import re
 
+# Module imports
 from primal_digest.thermo import calc_tm
+from primal_digest.seq_functions import expand_ambs
+
+REGEX_PATTERN_PRIMERNAME = re.compile("\\d+(_RIGHT|_LEFT|_R|_L)")
+
+
+def re_primer_name(string) -> tuple[str, str] | None:
+    """
+    Will return (amplicon_number, R/L) or None
+    """
+    match = REGEX_PATTERN_PRIMERNAME.search(string)
+    if match:
+        return match.group().split("_")
+    return None
+
+
+class BedPrimer:
+    ref: str
+    _start: int
+    _end: int
+    primername: str
+    pool: int
+    direction: str
+    sequence: str
+    # Calc values
+    amplicon_number: int
+
+    def __init__(self, bedline: list[str]) -> None:
+        self.ref = bedline[0]
+        self._start = int(bedline[1])
+        self._end = int(bedline[2])
+        self.primername = bedline[3]
+        self.pool = int(bedline[4]) - 1
+        self.direction = bedline[5]
+        self.sequence = bedline[6]
+
+        # Calc some metrics
+        result = re_primer_name(self.primername)
+        if result is None:
+            self.amplicon_number = 0
+        else:
+            self.amplicon_number = int(result[0])
+
+    def all_seqs(self) -> set[str]:
+        "Expands ambs bases"
+        return expand_ambs([self.sequence])
+
+    @property
+    def msa_index(self) -> str:
+        return self.ref
+
+    @property
+    def start(self) -> int:
+        return self._start
+
+    @property
+    def end(self) -> int:
+        return self._end
+
+    def __str__(self, *kwargs) -> str:
+        # I use *kwargs so that it can have the same behavor as PrimerPairs
+        return f"{self.ref}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
 
 
 def read_bedfile(path: pathlib.Path) -> list[BedPrimer]:
