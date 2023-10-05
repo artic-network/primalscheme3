@@ -311,12 +311,16 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
     )
 
     # fig.update_layout(paper_bgcolor="#000000")
-    fig.update_layout(height=900, title_text=msa.name, showlegend=False)
+    fig.update_layout(height=900, title_text=msa._chrom_name, showlegend=False)
     # plot_bgcolor="rgba(246, 237, 202, 0.5)",
 
-    plot(fig, filename=str(outdir.absolute() / (msa.name + ".html")), auto_open=False)
+    plot(
+        fig,
+        filename=str(outdir.absolute() / (msa._chrom_name + ".html")),
+        auto_open=False,
+    )
     fig.write_image(
-        str(outdir.absolute() / (msa.name + ".png")),
+        str(outdir.absolute() / (msa._chrom_name + ".png")),
         format="png",
         height=900,
         width=1600,
