@@ -8,6 +8,7 @@ from primal_digest.mismatches import MatchDB
 from primal_digest import __version__
 from primal_digest.create_reports import generate_plot
 from primal_digest.msa import MSA
+from primal_digest.mapping import generate_consensus
 
 
 # Added
@@ -16,6 +17,7 @@ import sys
 import pathlib
 from loguru import logger
 import json
+from Bio import SeqIO, SeqRecord, Seq
 
 logger = logger.opt(colors=True)
 
@@ -40,9 +42,7 @@ def main():
     cfg["primer_tm_max"] = args.primer_tm_max
     cfg["dimerscore"] = args.dimerscore
     cfg["n_cores"] = args.cores
-    cfg["output_prefix"] = args.prefix
     cfg["output_dir"] = str(OUTPUT_DIR)
-    cfg["msa_paths"] = [str(x) for x in ARG_MSA]
     cfg["amplicon_size_max"] = args.ampliconsizemax
     cfg["amplicon_size_min"] = args.ampliconsizemin
     cfg["min_overlap"] = args.minoverlap
@@ -59,6 +59,9 @@ def main():
     # Add plots to the cfg
     cfg["plot"] = args.plot
     cfg["disable_progress_bar"] = False
+
+    # Add the mapping to the cfg
+    cfg["mapping"] = args.mapping
 
     # Add the bedfile path if given
     if args.bedfile:
@@ -132,11 +135,33 @@ def main():
                 conf_tm_max=cfg["primer_tm_max"],
             )
 
+    # Create a dict full of msa data
+    msa_data = {}
+
     # Read in the MSAs
     msa_dict: dict[int:MSA] = {}
     for msa_index, msa_path in enumerate(ARG_MSA):
+        msa_data[msa_index] = {}
+
+        # Create MSA checksum
+        with open(msa_path, "rb") as f:
+            msa_data[msa_index]["msa_checksum"] = hashlib.file_digest(
+                f, "md5"
+            ).hexdigest()
+
         # Read in the MSA
-        msa = MSA(name=msa_path.stem, path=msa_path, msa_index=msa_index)
+        msa = MSA(
+            name=msa_path.stem,
+            path=msa_path,
+            msa_index=msa_index,
+            mapping=cfg["mapping"],
+        )
+
+        # Add some msa data to the dict
+        msa_data[msa_index]["msa_name"] = msa.name
+        msa_data[msa_index]["msa_path"] = str(msa_path.absolute())
+        msa_data[msa_index]["msa_chromname"] = msa._chrom_name
+        msa_data[msa_index]["msa_uuid"] = msa._uuid
 
         logger.info(
             "Read in MSA: <blue>{msa_path}</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
@@ -164,6 +189,9 @@ def main():
 
         # Add the msa to the scheme
         msa_dict[msa_index] = msa
+
+    # Add MSA data into cfg
+    cfg["msa_data"] = msa_data
 
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():
@@ -195,15 +223,15 @@ def main():
                 )
                 continue
             # Try to backtrack
-            # elif scheme.try_backtrack(primerpairs_in_msa, msa_index):
-            #    logger.info(
-            #        "Added <blue>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-            #        primer_start=scheme._last_pp_added[-1].start,
-            #        primer_end=scheme._last_pp_added[-1].end,
-            #        primer_pool=scheme._last_pp_added[-1].pool + 1,
-            #        msa_name=msa_index_to_name.get(msa_index),
-            #    )
-            #    continue
+            # elif scheme.try_backtrack(msa.primerpairs, msa_index):
+            #     logger.info(
+            #         "Added <yellow>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+            #         primer_start=scheme._last_pp_added[-1].start,
+            #         primer_end=scheme._last_pp_added[-1].end,
+            #         primer_pool=scheme._last_pp_added[-1].pool + 1,
+            #         msa_name=msa.name,
+            #     )
+            #     continue
             # Try and add a walking primer
             elif scheme.try_walk_primerpair(msa.primerpairs, msa_index):
                 logger.info(
@@ -219,27 +247,29 @@ def main():
     logger.info("Writting output files")
 
     # Write primer bed file
-    with open(OUTPUT_DIR / f"{cfg['output_prefix']}.primer.bed", "w") as outfile:
+    with open(OUTPUT_DIR / "primer.bed", "w") as outfile:
         primer_bed_str = []
         for pp in scheme.all_primers():
             # If there is an corrasponding msa
             ## Primers parsed in via bed do not have an msa_index
-            if chrom_name := msa_dict.get(pp.msa_index):
-                chrom_name = chrom_name.name
+            if msa := msa_dict.get(pp.msa_index):
+                chrom_name = msa._chrom_name
+                primer_prefix = msa._uuid
             else:
                 # This Chrom name is not used in the bedfile
                 # As BedPrimers have there own name/prefix
-                chrom_name = "NA"
+                chrom_name = "scheme"
+                primer_prefix = "scheme"
 
             st = pp.__str__(
                 chrom_name,
-                chrom_name.replace("_", "-"),
+                primer_prefix,
             )
             primer_bed_str.append(st.strip())
         outfile.write("\n".join(primer_bed_str))
 
     # Write amplicon bed file
-    with open(OUTPUT_DIR / f"{cfg['output_prefix']}.amplicon.bed", "w") as outfile:
+    with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
         amp_bed_str = []
         for pp in scheme.all_primers():
             if pp_name := msa_dict.get(pp.msa_index):
@@ -251,22 +281,50 @@ def main():
             )
         outfile.write("\n".join(amp_bed_str))
 
-    # Generate the bedfile hash, and add it into the config
-    bed_md5 = hashlib.md5("\n".join(primer_bed_str).encode())
-    cfg["md5_bed"] = bed_md5.hexdigest()
-
-    # Generate the amplicon hash, and add it into the config
-    bed_md5 = hashlib.md5("\n".join(amp_bed_str).encode())
-    cfg["md5_amp"] = bed_md5.hexdigest()
-
-    # Write the config dict to file
-    with open(OUTPUT_DIR / f"config.json", "w") as outfile:
-        outfile.write(json.dumps(cfg, sort_keys=True))
-
     # Create the fancy plots
     if cfg["plot"]:
         for msa in msa_dict.values():
             generate_plot(msa, scheme._pools, OUTPUT_DIR)
+
+    # Write all the consensus sequences to a single file
+    with open(OUTPUT_DIR / "referance.fasta", "w") as referance_outfile:
+        referance_records = []
+        for msa in msa_dict.values():
+            referance_records.append(
+                SeqRecord.SeqRecord(
+                    seq=Seq.Seq(generate_consensus(msa.array)),
+                    id=msa._chrom_name,
+                )
+            )
+        SeqIO.write(referance_records, referance_outfile, "fasta")
+
+    # Create all hashes
+    ## Generate the bedfile hash, and add it into the config
+    primer_md5 = hashlib.md5("\n".join(primer_bed_str).encode()).hexdigest()
+    cfg["primer_checksum"] = primer_md5
+
+    ## Generate the amplicon hash, and add it into the config
+    amp_md5 = hashlib.md5("\n".join(amp_bed_str).encode()).hexdigest()
+    cfg["amplicon_checksum"] = amp_md5
+
+    ## Read in the referance file and generate the hash
+    with open(OUTPUT_DIR / "referance.fasta", "r") as referance_outfile:
+        ref_md5 = hashlib.md5(referance_outfile.read().encode()).hexdigest()
+    cfg["referance_checksum"] = ref_md5
+
+    ## Write the info.json file
+    info_dict = {
+        "algorithm_version": f"primaldigest:{__version__}",
+        "scheme_version": "v0.0.0",
+        "ampliconsize": cfg["amplicon_size_max"],
+        "primer_checksum": cfg["primer_checksum"],
+        "referance_checksum": cfg["referance_checksum"],
+        "amplicon_checksum": cfg["amplicon_checksum"],
+    }
+
+    # Write the config dict to file
+    with open(OUTPUT_DIR / f"config.json", "w") as outfile:
+        outfile.write(json.dumps(cfg, sort_keys=True))
 
 
 if __name__ == "__main__":
