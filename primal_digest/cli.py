@@ -14,7 +14,7 @@ def check_valid_freq(value):
         return fvalue
     else:
         raise argparse.ArgumentTypeError(
-            "--minbasefreq must be 0 <= value <= 1. value: %s" % value
+            f"--minbasefreq must be 0 <= value <= 1. value: {value}"
         )
 
 
@@ -39,7 +39,7 @@ def cli():
     )
     parser.add_argument(
         "--ampliconsize",
-        help="The size of an amplicon. Use single value for ± 10%, or two values to set min, max [100<=x<=2000]",
+        help="The size of an amplicon. Use single value for ± 10 percent, or two values to set min, max [100<=x<=2000]",
         type=int,
         default=400,
         nargs="+",
