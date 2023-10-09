@@ -1,10 +1,10 @@
-FROM ubuntu:rolling 
+FROM ubuntu:rolling
 
 ENV POETRY_VERSION=1.6.1
 ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VENV=/opt/poetry-venv
 
-ENV PRIMAL_DIGEST_VERSION = 1.1.0
+ENV PRIMAL_DIGEST_VERSION=1.1.1
 
 # Install python
 RUN apt-get update -y && apt-get install curl -y
@@ -22,18 +22,14 @@ RUN python3 -m venv $POETRY_VENV \
 # Add `poetry` to PATH
 ENV PATH="${PATH}:${POETRY_VENV}/bin"
 
-# Instal Rust
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
 # Copy only requirements to cache them in docker layer
 WORKDIR /primal_digest
 COPY poetry.lock pyproject.toml ./
 
 # Creating folders, and files for a project:
 COPY ./primal_digest ./primal_digest
-COPY ./primaldimer_py ./primaldimer_py
 COPY README.md ./
+
 
 # Install all deps
 RUN poetry install
