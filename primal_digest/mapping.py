@@ -64,3 +64,17 @@ def generate_consensus(msa: np.ndarray) -> str:
         else:
             consensus.append(col_counter.most_common(1)[0][0])
     return "".join(consensus)
+
+
+def generate_referance(msa: np.ndarray) -> str:
+    """
+    Generates a reference string from the first row of a multiple sequence alignment (MSA) array.
+
+    Args:
+    - msa (np.ndarray): A numpy array representing a multiple sequence alignment.
+
+    Returns:
+    - str: A string representing the reference sequence, obtained by joining the characters in the first row of the MSA and removing any gaps represented by hyphens ("-").
+    """
+
+    return "".join(msa[0]).replace("-", "")
