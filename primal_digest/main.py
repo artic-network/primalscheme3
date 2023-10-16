@@ -8,7 +8,7 @@ from primal_digest.mismatches import MatchDB
 from primal_digest import __version__
 from primal_digest.create_reports import generate_plot
 from primal_digest.msa import MSA
-from primal_digest.mapping import generate_consensus
+from primal_digest.mapping import generate_consensus, generate_referance
 
 
 # Added
@@ -289,13 +289,22 @@ def main():
     # Write all the consensus sequences to a single file
     with open(OUTPUT_DIR / "referance.fasta", "w") as referance_outfile:
         referance_records = []
-        for msa in msa_dict.values():
-            referance_records.append(
-                SeqRecord.SeqRecord(
-                    seq=Seq.Seq(generate_consensus(msa.array)),
-                    id=msa._chrom_name,
+        if cfg["mapping"] == "first":
+            for msa in msa_dict.values():
+                referance_records.append(
+                    SeqRecord.SeqRecord(
+                        seq=Seq.Seq(generate_referance(msa.array)),
+                        id=msa._chrom_name,
+                    )
                 )
-            )
+        elif cfg["mapping"] == "consensus":
+            for msa in msa_dict.values():
+                referance_records.append(
+                    SeqRecord.SeqRecord(
+                        seq=Seq.Seq(generate_consensus(msa.array)),
+                        id=msa._chrom_name,
+                    )
+                )
         SeqIO.write(referance_records, referance_outfile, "fasta")
 
     # Create all hashes
