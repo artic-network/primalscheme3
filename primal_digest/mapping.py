@@ -7,7 +7,7 @@ from primal_digest.seq_functions import extend_ambiguous_base
 
 def trucnate_msa(msa: np.ndarray, mapping_index: int = 0) -> np.ndarray:
     """
-    Removes all the bases outside the referance genome
+    Removes all the bases outside the reference genome
     """
     return msa[:, msa[mapping_index] != ""]
 
@@ -21,7 +21,7 @@ def create_mapping(
         truncated_msa: np.ndarray
 
     mapping_array: Each position in the list corrasponds to the same index in the MSA, The value in the list is the position in the reference genome
-    truncated_msa: The MSA with all the bases outside the referance genome removed
+    truncated_msa: The MSA with all the bases outside the reference genome removed
     """
     # As NP is modifited in place, returning is not nessisary but is done for clarity
     # Truncate the msa
@@ -29,13 +29,13 @@ def create_mapping(
     # Create the empty mapping array
     mapping_list = [None] * truncated_msa.shape[1]
     mapping_array = np.array(mapping_list)
-    # Select the referance genome
-    referance_genome = truncated_msa[mapping_index]
+    # Select the reference genome
+    reference_genome = truncated_msa[mapping_index]
     # Iterate over the msa genome
     current_ref_index = 0
     for col_index in range(truncated_msa.shape[1]):
         # If the base is not a gap, assign the mapping
-        if referance_genome[col_index] != "-":
+        if reference_genome[col_index] != "-":
             mapping_array[col_index] = current_ref_index
             # increase refence index
             current_ref_index += 1
@@ -66,7 +66,7 @@ def generate_consensus(msa: np.ndarray) -> str:
     return "".join(consensus)
 
 
-def generate_referance(msa: np.ndarray) -> str:
+def generate_reference(msa: np.ndarray) -> str:
     """
     Generates a reference string from the first row of a multiple sequence alignment (MSA) array.
 

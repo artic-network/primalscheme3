@@ -20,18 +20,15 @@ poetry run primal-digest -m msa.fasta -o /path/to/output_dir
 
 -   `-m/--msa`: The path to the MSA file(s). If multiple files are to be processed, then pass the paths separated by spaces.
 -   `-c/--cores`: The number of cores to use in Kmer digestion and thermo checking. Default is `1`.
--   `--ampliconsize`: The  size of an amplicon. Either provide one value and amplicons will be within ±10%. Provide two values to set min/max manualy.
+-   `--ampliconsize`: The size of an amplicon. Either provide one value and amplicons will be within ±10%. Provide two values to set min/max manualy.
 -   `-o/--output`: The output directory of the primer.bed file. Default is `output`.
 -   `--force`: Override the output directory. If set, then any existing output directory will be overwritten.
 -   `--minoverlap`: The minimum amount of overlap between primers. Default is `20`.
 -   `--npools`: Number of pools to use. Default is `2`.
 -   `--bedfile`: Add primers to an existing bedfile. Note: The number of pools in bedfile \<= --npools. Primal-digest makes no attempt to validate primers or primer-primer interactions in the bedfile.
 -   `--mapping`: What should the primers be mapped to. Choice [`consensus`, `first`]. Default is `consensus`.
-    - `consensus`: Uses the MSA consensus as the primer indexing system. 
-    - `first`: Uses the first genome in the MSA as the primer indexing system. 
-
-
-
+    -   `consensus`: Uses the MSA consensus as the primer indexing system.
+    -   `first`: Uses the first genome in the MSA as the primer indexing system.
 
 ## Advanced Arguments
 
@@ -42,9 +39,6 @@ poetry run primal-digest -m msa.fasta -o /path/to/output_dir
 -   `--dimerscore`: The threshold for dimer interaction. Default is `-26.0`.
 -   `--reducekmers`: Should number of sequences in each Kmer be reduced. Default is `False`.
 -   `--minbasefreq`: The frequency at a SNP/INDEL needs to be at to be included. Default is `0` or all.
-
-
-
 
 ## Example
 
@@ -62,6 +56,6 @@ This command will generate a primer scheme for `msa1.fasta`. `--ampliconsize 400
 
 ------------------------------------------------------------------------
 
-This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/) 
+This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/)
 
 ![](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)

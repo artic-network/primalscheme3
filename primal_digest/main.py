@@ -287,7 +287,7 @@ def main():
             generate_plot(msa, scheme._pools, OUTPUT_DIR)
 
     # Write all the consensus sequences to a single file
-    with open(OUTPUT_DIR / "referance.fasta", "w") as referance_outfile:
+    with open(OUTPUT_DIR / "reference.fasta", "w") as referance_outfile:
         referance_records = []
         if cfg["mapping"] == "first":
             for msa in msa_dict.values():

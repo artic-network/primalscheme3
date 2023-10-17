@@ -28,14 +28,14 @@ class FKmer:
     def starts(self) -> set[int]:
         return self._starts
 
-    def __str__(self, referance, amplicon_prefix, pool) -> str:
+    def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
         counter = 0
         seqs = list(self.seqs)
         seqs.sort()
         for seq in seqs:
             string_list.append(
-                f"{referance}\t{self.end-len(seq)}\t{self.end}\t{amplicon_prefix}_LEFT_{counter}\t{pool}\t+\t{seq}\n"
+                f"{reference}\t{self.end-len(seq)}\t{self.end}\t{amplicon_prefix}_LEFT_{counter}\t{pool}\t+\t{seq}\n"
             )
             counter += 1
         return "".join(string_list)
@@ -100,14 +100,14 @@ class RKmer:
     def ends(self) -> set[int]:
         return self._ends
 
-    def __str__(self, referance, amplicon_prefix, pool) -> str:
+    def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
         counter = 0
         seqs = list(self.seqs)
         seqs.sort()
         for seq in seqs:
             string_list.append(
-                f"{referance}\t{self.start}\t{self.start+len(seq)}\t{amplicon_prefix}_RIGHT_{counter}\t{pool}\t-\t{seq}\n"
+                f"{reference}\t{self.start}\t{self.start+len(seq)}\t{amplicon_prefix}_RIGHT_{counter}\t{pool}\t-\t{seq}\n"
             )
             counter += 1
         return "".join(string_list)
@@ -228,11 +228,11 @@ class PrimerPair:
 
     def __str__(self, ref_name, amplicon_prefix):
         return self.fprimer.__str__(
-            referance=f"{ref_name}",
+            reference=f"{ref_name}",
             amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
             pool=self.pool + 1,
         ) + self.rprimer.__str__(
-            referance=f"{ref_name}",
+            reference=f"{ref_name}",
             amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
             pool=self.pool + 1,
         )

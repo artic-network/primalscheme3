@@ -557,7 +557,7 @@ class TestDigest(unittest.TestCase):
         cfg["dimerscore"] = -26
 
         results = digest(msa_array=msa_array, cfg=cfg, indexes=([], [25]))
-        expected_rkmer = RKmer(25, {'TGATTATACCTTTTGCACCATTGGACATTA'})
+        expected_rkmer = RKmer(25, {"TGATTATACCTTTTGCACCATTGGACATTA"})
 
         rkmer = results[1][0]
         print(rkmer.start)
