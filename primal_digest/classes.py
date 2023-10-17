@@ -631,6 +631,94 @@ class Scheme:
         # If non of the primers work, return false
         return False
 
+    def try_circular(self, msa):
+        """
+        This will try and add a primerpair that can span from the end of the msa back to the start as if the genome was circular
+        """
+        from multiprocessing import Pool
+        from primal_digest.digestion import _mp_pp_inter_free
+
+        first_pp: PrimerPair = self._last_pp_added[0]
+        last_pp: PrimerPair = self._last_pp_added[-1]
+        last_pool = last_pp.pool
+
+        # Find all possible fkmers and rkmer that could span the end of the msa
+        pos_fkmers = [
+            fkmer
+            for fkmer in msa.fkmers
+            if fkmer.end < last_pp.rprimer.start
+            and fkmer.end > last_pp.rprimer.start - 200
+        ]
+        pos_rkmers = [
+            rkmer
+            for rkmer in msa.rkmers
+            if rkmer.start > first_pp.fprimer.end
+            and rkmer.start < first_pp.fprimer.end + 200
+        ]
+
+        # Create all the primerpairs
+        non_checked_pp = []
+        for fkmer in pos_fkmers:
+            for rkmer in pos_rkmers:
+                non_checked_pp.append(PrimerPair(fkmer, rkmer, msa.msa_index))
+
+        ## Interaction check all the primerpairs
+        iter_free_primer_pairs = []
+        with Pool(self.cfg["n_cores"]) as p:
+            mp_pp_bool = p.imap_unordered(
+                _mp_pp_inter_free, ((pp, self.cfg) for pp in non_checked_pp)
+            )
+            for bool, pp in zip(mp_pp_bool, non_checked_pp):
+                if not bool:
+                    iter_free_primer_pairs.append(pp)
+
+        # Sort the primerpairs by number of primers
+        iter_free_primer_pairs.sort(key=lambda pp: len(pp.all_seqs()))
+
+        pos_pools_indexes = [
+            (last_pool + i) % self.n_pools for i in range(self.n_pools)
+        ]
+
+        # Create a hashmap of all sequences in each pool for quick look up
+        index_to_seqs: dict[int : list[str]] = {
+            index: [
+                y
+                for sublist in (x.all_seqs() for x in self._pools[index])
+                for y in sublist
+            ]
+            for index in pos_pools_indexes
+        }
+
+        for c_pp in iter_free_primer_pairs:
+            for pool_index in pos_pools_indexes:
+                # Guard for clash between the last primer in the same pool
+                if self._pools[pool_index][-1].msa_index == msa.msa_index and max(
+                    self._pools[pool_index][-1].rprimer.ends()
+                ) >= min(c_pp.fprimer.starts()):
+                    continue
+
+                # Guard for clash between the first primer in the same pool
+                if self._pools[pool_index][0].msa_index == msa.msa_index and min(
+                    self._pools[pool_index][0].fprimer.starts()
+                ) <= max(c_pp.rprimer.ends()):
+                    continue
+
+                # Guard for Primer-Primer Interactions
+                if do_pools_interact_py(
+                    c_pp.all_seqs(),
+                    index_to_seqs.get(pool_index),
+                    self.cfg["dimerscore"],
+                ):
+                    continue
+
+                # Skip the miss priming product check, as we are using special indexes
+                # If the primer passes all the checks, add it to the pool
+                self.add_primer_pair_to_pool(c_pp, pool_index, msa.msa_index)
+                return True
+
+        # No Primers could be added
+        return False
+
     def all_primers(self) -> list[PrimerPair]:
         all_pp = [pp for pool in (x for x in self._pools) for pp in pool]
         all_pp.sort(key=lambda pp: (str(pp.msa_index), pp.amplicon_number))

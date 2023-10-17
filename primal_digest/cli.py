@@ -113,6 +113,12 @@ def cli():
         choices=["consensus", "first"],
         default="consensus",
     )
+    parser.add_argument(
+        "--circular",
+        help="Should a circular amplicon be added (vv experimental)",
+        type=bool,
+        default=False,
+    )
 
     args = parser.parse_args()
 

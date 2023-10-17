@@ -8,7 +8,7 @@ from primal_digest.mismatches import MatchDB
 from primal_digest import __version__
 from primal_digest.create_reports import generate_plot
 from primal_digest.msa import MSA
-from primal_digest.mapping import generate_consensus, generate_referance
+from primal_digest.mapping import generate_consensus, generate_reference
 
 
 # Added
@@ -62,6 +62,9 @@ def main():
 
     # Add the mapping to the cfg
     cfg["mapping"] = args.mapping
+
+    # Add circular to the cfg
+    cfg["circular"] = args.circular
 
     # Add the bedfile path if given
     if args.bedfile:
@@ -244,6 +247,15 @@ def main():
             else:
                 break
 
+        if cfg["circular"] and scheme.try_circular(msa):
+            logger.info(
+                "Added <green>circular</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                primer_start=scheme._last_pp_added[-1].start,
+                primer_end=scheme._last_pp_added[-1].end,
+                primer_pool=scheme._last_pp_added[-1].pool + 1,
+                msa_name=msa.name,
+            )
+
     logger.info("Writting output files")
 
     # Write primer bed file
@@ -287,25 +299,25 @@ def main():
             generate_plot(msa, scheme._pools, OUTPUT_DIR)
 
     # Write all the consensus sequences to a single file
-    with open(OUTPUT_DIR / "reference.fasta", "w") as referance_outfile:
-        referance_records = []
+    with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
+        reference_records = []
         if cfg["mapping"] == "first":
             for msa in msa_dict.values():
-                referance_records.append(
+                reference_records.append(
                     SeqRecord.SeqRecord(
-                        seq=Seq.Seq(generate_referance(msa.array)),
+                        seq=Seq.Seq(generate_reference(msa.array)),
                         id=msa._chrom_name,
                     )
                 )
         elif cfg["mapping"] == "consensus":
             for msa in msa_dict.values():
-                referance_records.append(
+                reference_records.append(
                     SeqRecord.SeqRecord(
                         seq=Seq.Seq(generate_consensus(msa.array)),
                         id=msa._chrom_name,
                     )
                 )
-        SeqIO.write(referance_records, referance_outfile, "fasta")
+        SeqIO.write(reference_records, reference_outfile, "fasta")
 
     # Create all hashes
     ## Generate the bedfile hash, and add it into the config
@@ -316,10 +328,10 @@ def main():
     amp_md5 = hashlib.md5("\n".join(amp_bed_str).encode()).hexdigest()
     cfg["amplicon_checksum"] = amp_md5
 
-    ## Read in the referance file and generate the hash
-    with open(OUTPUT_DIR / "referance.fasta", "r") as referance_outfile:
-        ref_md5 = hashlib.md5(referance_outfile.read().encode()).hexdigest()
-    cfg["referance_checksum"] = ref_md5
+    ## Read in the reference file and generate the hash
+    with open(OUTPUT_DIR / "reference.fasta", "r") as reference_outfile:
+        ref_md5 = hashlib.md5(reference_outfile.read().encode()).hexdigest()
+    cfg["reference_checksum"] = ref_md5
 
     ## Write the info.json file
     info_dict = {
@@ -327,7 +339,7 @@ def main():
         "scheme_version": "v0.0.0",
         "ampliconsize": cfg["amplicon_size_max"],
         "primer_checksum": cfg["primer_checksum"],
-        "referance_checksum": cfg["referance_checksum"],
+        "reference_checksum": cfg["reference_checksum"],
         "amplicon_checksum": cfg["amplicon_checksum"],
     }
 
