@@ -322,26 +322,16 @@ def main():
     # Create all hashes
     ## Generate the bedfile hash, and add it into the config
     primer_md5 = hashlib.md5("\n".join(primer_bed_str).encode()).hexdigest()
-    cfg["primer_checksum"] = primer_md5
+    cfg["primer.bed.md5"] = primer_md5
 
     ## Generate the amplicon hash, and add it into the config
     amp_md5 = hashlib.md5("\n".join(amp_bed_str).encode()).hexdigest()
-    cfg["amplicon_checksum"] = amp_md5
+    cfg["amplicon.bed.md5"] = amp_md5
 
     ## Read in the reference file and generate the hash
     with open(OUTPUT_DIR / "reference.fasta", "r") as reference_outfile:
         ref_md5 = hashlib.md5(reference_outfile.read().encode()).hexdigest()
-    cfg["reference_checksum"] = ref_md5
-
-    ## Write the info.json file
-    info_dict = {
-        "algorithm_version": f"primaldigest:{__version__}",
-        "scheme_version": "v0.0.0",
-        "ampliconsize": cfg["amplicon_size_max"],
-        "primer_checksum": cfg["primer_checksum"],
-        "reference_checksum": cfg["reference_checksum"],
-        "amplicon_checksum": cfg["amplicon_checksum"],
-    }
+    cfg["reference.fasta.md5"] = ref_md5
 
     # Write the config dict to file
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
