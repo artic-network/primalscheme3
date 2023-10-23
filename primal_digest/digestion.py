@@ -16,7 +16,6 @@ from primal_digest.errors import (
 # Submodules
 from primaldimer_py import do_pools_interact_py
 
-
 # Externals
 from tqdm import tqdm
 import numpy as np
@@ -24,6 +23,7 @@ from multiprocessing import Pool
 import itertools
 import networkx as nx
 from collections import Counter
+from typing import Callable, Set, Union
 
 
 def _mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
@@ -45,8 +45,17 @@ def generate_valid_primerpairs(
     msa_index: int,
     disable_progress_bar: bool = False,
 ) -> list[PrimerPair]:
-    """
-    Generates all valid primers pairs, and then runs interaction checker and returns passing PP
+    """Generates valid primer pairs for a given set of forward and reverse kmers.
+
+    Args:
+        fkmers: A list of forward kmers.
+        rkmers: A list of reverse kmers.
+        cfg: A dictionary containing configuration parameters.
+        msa_index: An integer representing the index of the multiple sequence alignment.
+        disable_progress_bar: A boolean indicating whether to disable the progress bar.
+
+    Returns:
+        A list of valid primer pairs.
     """
     ## Generate all primerpairs without checking
     non_checked_pp = []
@@ -85,7 +94,25 @@ def walk_right(
     row_index: int,
     seq_str: str,
     cfg: dict,
-) -> set[str] | Exception:
+) -> Union[Set[str], Exception]:
+    """
+    Walks to the right of the array and returns a set of valid sequences.
+
+    Args:
+        array: A numpy array of DNA sequences.
+        col_index_right: The current column index to the right.
+        col_index_left: The current column index to the left.
+        row_index: The current row index.
+        seq_str: The current sequence string.
+        cfg: A dictionary of configuration parameters.
+
+    Returns:
+        A set of valid DNA sequences or an exception if an error occurs.
+
+    Raises:
+        WalksOut: If the function walks out of the array size.
+        ContainsInvalidBase: If the sequence contains an invalid base.
+    """
     # Guard for correct tm
     if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
         return {seq_str}
@@ -135,10 +162,24 @@ def walk_left(
     cfg: dict,
 ) -> set[str] | Exception:
     """
-    This will take a string and its indexes and will recurvisly walk left
-    until either tm is reached
-    """
+    Recursively walks left from a given starting position in a 2D numpy array of DNA bases,
+    constructing a set of valid DNA sequences that meet certain criteria.
 
+    Args:
+        array: A 2D numpy array of DNA bases.
+        col_index_right: The rightmost column index of the region of interest.
+        col_index_left: The current leftmost column index of the region of interest.
+        row_index: The current row index of the region of interest.
+        seq_str: The current DNA sequence being constructed.
+        cfg: A dictionary of configuration parameters.
+
+    Returns:
+        A set of valid DNA sequences that meet the criteria specified in the function body.
+
+    Raises:
+        WalksOut: If the function attempts to walk out of the array.
+        ContainsInvalidBase: If the constructed sequence contains an invalid DNA base.
+    """
     # Guard for correct tm
     if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
         return {seq_str}
@@ -180,13 +221,13 @@ def walk_left(
 
 
 def wrap_walk(
-    walkfunction,
-    array,
-    col_index_right,
-    col_index_left,
-    row_index,
-    seq_str,
-    cfg,
+    walkfunction: Callable,
+    array: np.ndarray,
+    col_index_right: int,
+    col_index_left: int,
+    row_index: int,
+    seq_str: str,
+    cfg: dict,
 ) -> list[str | Exception]:
     return_list = []
     try:
@@ -211,8 +252,8 @@ def wrap_walk(
 def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
-    start_col = data[2]
-    min_freq = data[3]
+    start_col: int = data[2]
+    min_freq: float = data[3]
 
     # Check for gap frequency on first base
     first_base_counter = Counter(align_array[:, start_col])
@@ -288,11 +329,11 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
         return None
 
 
-def mp_f_digest(data: tuple[np.ndarray, dict, int, int]) -> FKmer | None:
+def mp_f_digest(data: tuple[np.ndarray, dict, int, float]) -> FKmer | None:
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
-    end_col = data[2]
-    min_freq = data[3]
+    end_col: int = data[2]
+    min_freq: float = data[3]
 
     # Check for gap frequency on first base
     first_base_counter = Counter(align_array[:, end_col])
@@ -369,6 +410,20 @@ def hamming_dist(s1, s2) -> int:
 
 
 def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set[str]:
+    """
+    Reduces a set of DNA sequences by clustering them based on their 3' end, and then minimizing the edit distance between
+    all tails within the same 3' cluster. The resulting set of sequences will have at most `max_edit_dist` differences
+    between any two sequences, and will all have a common 3' end of length `end_3p`.
+
+    Args:
+        seqs: A set of DNA sequences to be reduced.
+        max_edit_dist: The maximum edit distance allowed between any two sequences in the same 3' cluster. Defaults to 1.
+        end_3p: The length of the 3' end to use for clustering. Defaults to 6.
+
+    Returns:
+        A set of reduced DNA sequences, where each sequence has a common 3' end of length `end_3p`, and at most
+        `max_edit_dist` differences between any two sequences.
+    """
     ## Cluster sequences via the 3p end
     p3_end_dict: dict[str : set[str]] = {}
     for sequence in seqs:
@@ -423,8 +478,8 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
 
 
 def digest(
-    msa_array,
-    cfg,
+    msa_array: np.ndarray,
+    cfg: dict,
     indexes: tuple[list[int], list[int]] | bool = False,
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
