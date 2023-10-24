@@ -492,6 +492,7 @@ def create(args):
                     SeqRecord.SeqRecord(
                         seq=Seq.Seq(generate_reference(msa.array)),
                         id=msa._chrom_name,
+                        description="",
                     )
                 )
         elif cfg["mapping"] == "consensus":
@@ -500,6 +501,7 @@ def create(args):
                     SeqRecord.SeqRecord(
                         seq=Seq.Seq(generate_consensus(msa.array)),
                         id=msa._chrom_name,
+                        description="",
                     )
                 )
         SeqIO.write(reference_records, reference_outfile, "fasta")
