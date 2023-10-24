@@ -1,6 +1,7 @@
 from primaldimer_py import do_pools_interact_py
 
 import abc
+from enum import Enum
 
 # Module imports
 from primal_digest.primer_pair_score import ol_pp_score, walk_pp_score, bt_ol_pp_score
@@ -252,6 +253,23 @@ class PrimerRecord(abc.ABC):
         pass
 
 
+class SchemeReturn(Enum):
+    # Added return values
+    ADDED_OL_PRIMERPAIR = 1
+    ADDED_WALK_PRIMERPAIR = 2
+    ADDED_FIRST_PRIMERPAIR = 3
+    # Failed return values
+    NO_OL_PRIMERPAIR = 4
+    NO_WALK_PRIMERPAIR = 5
+    NO_FIRST_PRIMERPAIR = 6
+    # Misc return values
+    ADDED_BACKTRACKED = 7
+    NO_BACKTRACK = 8
+
+    ADDED_CIRULAR = 9
+    NO_CIRCULAR = 10
+
+
 class Scheme:
     _pools: list[list[PrimerRecord]]
     _current_pool: int
@@ -325,7 +343,9 @@ class Scheme:
         self._current_pool = self.next_pool()
         self._last_pp_added.append(primerpair)
 
-    def add_first_primer_pair(self, primerpairs: list[PrimerPair], msa_index) -> bool:
+    def add_first_primer_pair(
+        self, primerpairs: list[PrimerPair], msa_index
+    ) -> SchemeReturn:
         "Adds primerpair to the current pool, and updates the current pool"
         # If there are no primerpairs, return false
         if not primerpairs:
@@ -335,7 +355,7 @@ class Scheme:
         for pool_index in range(self.n_pools):
             if not self._pools[pool_index]:
                 self.add_primer_pair_to_pool(primerpairs[0], pool_index, msa_index)
-                return True
+                return SchemeReturn.ADDED_FIRST_PRIMERPAIR
 
         # Create a hashmap of what seqs are in each pool for quicklook up
         pool_seqs_map: dict[int : list[str]] = {
@@ -350,11 +370,13 @@ class Scheme:
         # Adds the first valid primerpair
         for primerpair in primerpairs:
             for pool_index in range(self.n_pools):
-                if not do_pools_interact_py(
+                if do_pools_interact_py(
                     list(primerpair.all_seqs()),
                     pool_seqs_map[pool_index],
                     self.cfg["dimerscore"],
-                ) and not detect_new_products(
+                ):
+                    continue
+                if detect_new_products(
                     primerpair.find_matches(
                         self._matchDB,
                         remove_expected=False,
@@ -364,11 +386,13 @@ class Scheme:
                     self._matches[pool_index],
                     self.cfg["mismatch_product_size"],
                 ):
-                    self.add_primer_pair_to_pool(primerpair, pool_index, msa_index)
-                    return True
+                    continue
+
+                self.add_primer_pair_to_pool(primerpair, pool_index, msa_index)
+                return SchemeReturn.ADDED_FIRST_PRIMERPAIR
 
         # If not primerpair can be added return false
-        return False
+        return SchemeReturn.NO_FIRST_PRIMERPAIR
 
     def get_seqs_in_pool(self) -> list[str]:
         return [
@@ -400,7 +424,7 @@ class Scheme:
             rp_start_min=max(last_primer_pair.rprimer.ends()) + self.cfg["min_overlap"],
         )
 
-    def try_ol_primerpairs(self, all_pp_list, msa_index) -> bool:
+    def try_ol_primerpairs(self, all_pp_list, msa_index) -> SchemeReturn:
         """
         This will try and add this primerpair into any valid pool.
         Will return true if the primerpair has been added
@@ -444,7 +468,7 @@ class Scheme:
                 # If the pool is empty
                 if not self._pools[pool_index]:
                     self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
-                    return True
+                    return SchemeReturn.ADDED_OL_PRIMERPAIR
 
                 # Guard for clash between the last primer in the same pool
                 if self._pools[pool_index][-1].msa_index == msa_index and max(
@@ -474,13 +498,13 @@ class Scheme:
 
                 # If the primer passes all the checks, add it to the pool
                 self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
-                return True
+                return SchemeReturn.ADDED_OL_PRIMERPAIR
 
         # If non of the primers work, return false
-        return False
+        return SchemeReturn.NO_OL_PRIMERPAIR
 
     # backtracking
-    def try_backtrack(self, all_pp_list, msa_index) -> bool:
+    def try_backtrack(self, all_pp_list, msa_index) -> SchemeReturn:
         """If there are no other valid ol primerpairs, replace the last primerpair added and try again"""
 
         # Remove the last primerpair added
@@ -524,7 +548,7 @@ class Scheme:
                 # If the pool is empty
                 if not self._pools[pool_index]:
                     self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
-                    return True
+                    return SchemeReturn.ADDED_BACKTRACKED
 
                 # If the last primer is from the same msa and does clash, skip it
                 if self._pools[pool_index][-1].msa_index == msa_index and max(
@@ -548,11 +572,11 @@ class Scheme:
                     self.cfg["mismatch_product_size"],
                 ):
                     self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
-                    return True
+                    return SchemeReturn.ADDED_BACKTRACKED
 
         # If non of the primers work, add the last pp back in and return false
         self.add_primer_pair_to_pool(last_pp, last_pp.pool, msa_index)
-        return False
+        return SchemeReturn.NO_BACKTRACK
 
     def try_walk_primerpair(self, all_pp_list, msa_index) -> bool:
         """
@@ -598,7 +622,7 @@ class Scheme:
                 # If the pool is empty add the first primer
                 if not self._pools[pool_index]:
                     self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
-                    return True
+                    return SchemeReturn.ADDED_WALK_PRIMERPAIR
 
                 # Guard for clash between the last primer in the same pool
                 if self._pools[pool_index][-1].msa_index == msa_index and max(
@@ -627,9 +651,9 @@ class Scheme:
                     continue
                 # If the primer passes all the checks, add it to the pool
                 self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
-                return True
+                return SchemeReturn.ADDED_WALK_PRIMERPAIR
         # If non of the primers work, return false
-        return False
+        return SchemeReturn.NO_WALK_PRIMERPAIR
 
     def try_circular(self, msa):
         """
@@ -714,10 +738,10 @@ class Scheme:
                 # Skip the miss priming product check, as we are using special indexes
                 # If the primer passes all the checks, add it to the pool
                 self.add_primer_pair_to_pool(c_pp, pool_index, msa.msa_index)
-                return True
+                return SchemeReturn.ADDED_CIRULAR
 
         # No Primers could be added
-        return False
+        return SchemeReturn.NO_CIRCULAR
 
     def all_primers(self) -> list[PrimerPair]:
         all_pp = [pp for pool in (x for x in self._pools) for pp in pool]
