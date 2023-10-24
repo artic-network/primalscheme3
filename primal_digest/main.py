@@ -1,14 +1,22 @@
+# Interaction checker
+from primaldimer_py import do_pools_interact_py
+
 # Module imports
 from primal_digest.thermo import *
-from primal_digest.cli import cli
 from primal_digest.config import config_dict
-from primal_digest.classes import Scheme
-from primal_digest.bedfiles import parse_bedfile, calc_median_bed_tm
+from primal_digest.classes import Scheme, SchemeReturn
+from primal_digest.bedfiles import (
+    parse_bedfile,
+    calc_median_bed_tm,
+    BedPrimerPair,
+    read_in_bedfile,
+)
 from primal_digest.mismatches import MatchDB
 from primal_digest import __version__
 from primal_digest.create_reports import generate_plot
 from primal_digest.msa import MSA
 from primal_digest.mapping import generate_consensus, generate_reference
+from primal_digest.create_report_data import generate_data
 
 
 # Added
@@ -18,6 +26,7 @@ import pathlib
 from loguru import logger
 import json
 from Bio import SeqIO, SeqRecord, Seq
+import shutil
 
 logger = logger.opt(colors=True)
 
@@ -26,15 +35,168 @@ This is a test of a new dynamic digestion algo
 """
 
 
-def main():
-    args = cli()
+def replace(args):
+    """
+    List all replacements primers
+    """
+    # Read in the config file
+    with open(args.config, "r") as file:
+        cfg: dict = json.load(file)
+
+    # If more than two pools are given throw error
+    if cfg["npools"] > 2:
+        raise ValueError("ERROR: repair is only surported with two pools")
+
+    # Create a mapping of chromname/referance to msa_index
+    msa_chrom_to_index: dict[int:str] = {
+        msa_data["msa_chromname"]: msa_index
+        for msa_index, msa_data in cfg["msa_data"].items()
+    }
+
+    # Read in the bedfile
+    bedprimerpairs: list[BedPrimerPair] = read_in_bedfile(args.primerbed)
+    # Map each primer to an MSA index
+    for primerpair in bedprimerpairs:
+        primerpair.msa_index = msa_chrom_to_index[primerpair.chromname]
+
+    bedprimerpairs.sort(key=lambda x: (x.chromname, x.amplicon_number))
+
+    # Extract the stem from the primername
+    try:
+        prefix, ampliconnumber = args.primername.split("_")[:2]
+        primerstem = f"{ampliconnumber}_{prefix}"
+    except ValueError:
+        raise ValueError(f"ERROR: {args.primername} cannot be parsed using _ as delim")
+
+    # Find primernumber from bedfile
+    wanted_pp = None
+    for pp in bedprimerpairs:
+        if pp.match_primer_stem(primerstem):
+            wanted_pp = pp
+    if wanted_pp is None:
+        raise ValueError(f"ERROR: {args.primername} not found in bedfile")
+    else:
+        print(wanted_pp.__str__())
+
+    # Read in the MSAs from config["msa_data"]
+    # Only digest the wanted msa TODO
+    msa_data = cfg["msa_data"][wanted_pp.msa_index]
+    msa = MSA(
+        name=msa_data["msa_name"],
+        path=msa_data["msa_path"],
+        msa_index=wanted_pp.msa_index,
+        mapping=cfg["mapping"],
+    )
+    # Check the hashes match
+    with open(msa.path, "rb") as f:
+        msa_checksum = hashlib.file_digest(f, "md5").hexdigest()
+    if msa_checksum != msa_data["msa_checksum"]:
+        raise ValueError(f"ERROR: MSA checksums do not match.")
+
+    # Digest the MSA into FKmers and RKmers
+    msa.digest(cfg)
+
+    # Generate all primerpairs then interaction check
+    msa.generate_primerpairs(cfg)
+
+    # Find the primers on either side of the wanted primer
+    if wanted_pp.amplicon_number == 0:
+        left_pp = None
+        cov_start = wanted_pp.rprimer.start
+    else:
+        left_pp = [
+            x
+            for x in bedprimerpairs
+            if x.amplicon_number == wanted_pp.amplicon_number - 1
+        ][0]
+        cov_start = left_pp.rprimer.start
+
+    if wanted_pp.amplicon_number == max([x.amplicon_number for x in msa.primerpairs]):
+        right_pp = None
+        cov_end = wanted_pp.fprimer.end
+    else:
+        right_pp = [
+            x
+            for x in bedprimerpairs
+            if x.amplicon_number == wanted_pp.amplicon_number + 1
+        ][0]
+        cov_end = right_pp.fprimer.end
+
+    # Find primerpairs that span the gap
+    spanning_primerpairs = [
+        x
+        for x in msa.primerpairs
+        if x.fprimer.end < cov_start - cfg["min_overlap"]
+        and x.rprimer.start > cov_end + cfg["min_overlap"]
+    ]
+
+    if not spanning_primerpairs:
+        raise ValueError(f"ERROR: No spanning primers found")
+
+    print(len(spanning_primerpairs))
+
+    # Sort for number of primer pairs
+    spanning_primerpairs.sort(key=lambda x: len(x.all_seqs()))
+
+    # Find all primerpairs that in the same pool as the wanted primer
+    same_pool_primerpairs = [x for x in bedprimerpairs if x.pool == wanted_pp.pool]
+    seqs_in_same_pool = [
+        seq for seq in (x.all_seqs() for x in same_pool_primerpairs) for seq in seq
+    ]
+
+    # Find all primerpairs that in the same pool and same msa as the wanted primer
+    spanning_pool_primerpairs = [
+        x
+        for x in msa.primerpairs
+        if x.pool == wanted_pp.pool and x.msa_index == wanted_pp.msa_index
+    ]
+
+    for pos_primerpair in spanning_primerpairs:
+        # Make sure the new primerpair doesnt contain the primers we want to replace
+        if (
+            pos_primerpair.fprimer == wanted_pp.fprimer
+            or pos_primerpair.rprimer == wanted_pp.rprimer
+        ):
+            continue
+
+        # Check for all clashes
+        clash = False
+        # If they overlap
+        for current_pp in spanning_pool_primerpairs:
+            # If clash with any skip
+            if range(
+                max(pos_primerpair.start, current_pp.start),
+                min(pos_primerpair.end, current_pp.end) + 1,
+            ):
+                clash = True
+                break
+        if clash:
+            continue
+
+        # If they dont overlap
+        # Check for interactions
+        if do_pools_interact_py(
+            list(pos_primerpair.all_seqs()), seqs_in_same_pool, cfg["dimerscore"]
+        ):
+            continue
+
+        # primer passes!
+        print(
+            f"fprimer: {pos_primerpair.fprimer.end}\trprimer: {pos_primerpair.rprimer.start}"
+        )
+        print(pos_primerpair.__str__(msa._chrom_name, msa._uuid))
+
+    ## TODO check for clashes between the last primer in the same pool and the first primer in the spanning primer
+
+
+def create(args):
     ARG_MSA = args.msa
     OUTPUT_DIR = pathlib.Path(args.output).absolute()
 
     cfg = config_dict
 
     # Add version to config
-    cfg["primal_digest_version"] = __version__
+    cfg["primaldigest_version"] = f"primaldigest:{__version__}"
     # Primer Digestion settings
     cfg["primer_gc_min"] = args.primer_gc_min
     cfg["primer_gc_max"] = args.primer_gc_max
@@ -65,6 +227,9 @@ def main():
 
     # Add circular to the cfg
     cfg["circular"] = args.circular
+
+    # Add the backtrack to the cfg
+    cfg["backtrack"] = args.backtrack
 
     # Add the bedfile path if given
     if args.bedfile:
@@ -146,23 +311,27 @@ def main():
     for msa_index, msa_path in enumerate(ARG_MSA):
         msa_data[msa_index] = {}
 
+        # copy the msa into the output / work dir
+        local_msa_path = OUTPUT_DIR / "work" / msa_path.name
+        shutil.copy(msa_path, local_msa_path)
+
         # Create MSA checksum
-        with open(msa_path, "rb") as f:
+        with open(local_msa_path, "rb") as f:
             msa_data[msa_index]["msa_checksum"] = hashlib.file_digest(
                 f, "md5"
             ).hexdigest()
 
         # Read in the MSA
         msa = MSA(
-            name=msa_path.stem,
-            path=msa_path,
+            name=local_msa_path.stem,
+            path=local_msa_path,
             msa_index=msa_index,
             mapping=cfg["mapping"],
         )
 
         # Add some msa data to the dict
         msa_data[msa_index]["msa_name"] = msa.name
-        msa_data[msa_index]["msa_path"] = str(msa_path.absolute())
+        msa_data[msa_index]["msa_path"] = str(local_msa_path.absolute())
         msa_data[msa_index]["msa_chromname"] = msa._chrom_name
         msa_data[msa_index]["msa_uuid"] = msa._uuid
 
@@ -199,7 +368,10 @@ def main():
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():
         # Add the first primer, and if no primers can be added move to next msa
-        if scheme.add_first_primer_pair(msa.primerpairs, msa_index):
+        if (
+            scheme.add_first_primer_pair(msa.primerpairs, msa_index)
+            == SchemeReturn.ADDED_FIRST_PRIMERPAIR
+        ):
             logger.info(
                 "Added <green>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                 primer_start=scheme._last_pp_added[-1].start,
@@ -216,7 +388,10 @@ def main():
 
         while True:
             # Try and add an overlapping primer
-            if scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
+            if (
+                scheme.try_ol_primerpairs(msa.primerpairs, msa_index)
+                == SchemeReturn.ADDED_OL_PRIMERPAIR
+            ):
                 logger.info(
                     "Added <green>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                     primer_start=scheme._last_pp_added[-1].start,
@@ -226,17 +401,23 @@ def main():
                 )
                 continue
             # Try to backtrack
-            # elif scheme.try_backtrack(msa.primerpairs, msa_index):
-            #     logger.info(
-            #         "Added <yellow>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-            #         primer_start=scheme._last_pp_added[-1].start,
-            #         primer_end=scheme._last_pp_added[-1].end,
-            #         primer_pool=scheme._last_pp_added[-1].pool + 1,
-            #         msa_name=msa.name,
-            #     )
-            #     continue
+            elif cfg["backtrack"] and (
+                scheme.try_backtrack(msa.primerpairs, msa_index)
+                == SchemeReturn.BACKTRACKED
+            ):
+                logger.info(
+                    "Added <yellow>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                    primer_start=scheme._last_pp_added[-1].start,
+                    primer_end=scheme._last_pp_added[-1].end,
+                    primer_pool=scheme._last_pp_added[-1].pool + 1,
+                    msa_name=msa.name,
+                )
+                continue
             # Try and add a walking primer
-            elif scheme.try_walk_primerpair(msa.primerpairs, msa_index):
+            elif (
+                scheme.try_walk_primerpair(msa.primerpairs, msa_index)
+                == SchemeReturn.ADDED_WALK_PRIMERPAIR
+            ):
                 logger.info(
                     "Added <yellow>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                     primer_start=scheme._last_pp_added[-1].start,
@@ -247,7 +428,7 @@ def main():
             else:
                 break
 
-        if cfg["circular"] and scheme.try_circular(msa):
+        if cfg["circular"] and scheme.try_circular(msa) == SchemeReturn.ADDED_CIRULAR:
             logger.info(
                 "Added <green>circular</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                 primer_start=scheme._last_pp_added[-1].start,
@@ -269,7 +450,7 @@ def main():
                 primer_prefix = msa._uuid
             else:
                 # This Chrom name is not used in the bedfile
-                # As BedPrimers have there own name/prefix
+                # As BedLines have there own name/prefix
                 chrom_name = "scheme"
                 primer_prefix = "scheme"
 
@@ -297,6 +478,10 @@ def main():
     if cfg["plot"]:
         for msa in msa_dict.values():
             generate_plot(msa, scheme._pools, OUTPUT_DIR)
+
+    # Writing plot data
+    for msa in msa_dict.values():
+        generate_data(msa, OUTPUT_DIR / "work")
 
     # Write all the consensus sequences to a single file
     with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
@@ -336,7 +521,3 @@ def main():
     # Write the config dict to file
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
         outfile.write(json.dumps(cfg, sort_keys=True))
-
-
-if __name__ == "__main__":
-    main()
