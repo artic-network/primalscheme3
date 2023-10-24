@@ -8,7 +8,7 @@ from math import log2
 from primal_digest.config import ALL_DNA, ALL_BASES, AMB_BASES, AMBIGUOUS_DNA_COMPLEMENT
 
 
-def reverse_complement(kmer_seq: str):
+def reverse_complement(kmer_seq: str) -> str:
     rev_seq = kmer_seq[::-1]
     return "".join(AMBIGUOUS_DNA_COMPLEMENT[base.upper()] for base in rev_seq)
 

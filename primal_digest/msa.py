@@ -53,10 +53,11 @@ class MSA:
         # Asign a UUID
         self._uuid = str(uuid4())[:8]
 
-    def digest(self, cfg):
+    def digest(self, cfg, indexes: bool = False):
         self.fkmers, self.rkmers = digest(
             msa_array=self.array,
             cfg=cfg,
+            indexes=indexes,
         )
         # remap the fkmer and rkmers if needed
         if self._mapping_array is not None:

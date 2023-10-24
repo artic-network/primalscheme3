@@ -29,17 +29,35 @@ def calc_base_consensus(align_array) -> list[float]:
     return results
 
 
-def calc_occupancy(align_array) -> list[float]:
+def calc_occupancy(align_array) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
     for index, column in enumerate(align_array.T):
         gaps = np.count_nonzero(column == "-")
         gaps += np.count_nonzero(column == "")
         results.append((index, 1 - (gaps / len(column))))
-    return results
+    # Reduce the size of data by merging consecutive points
+    # When drawn as a line, it will look the same
+    reduced_results = []
+    for iindex, (index, oc) in enumerate(results):
+        # Add first point
+        if iindex == 0:
+            reduced_results.append((index, oc))
+            continue
+        # Add the last point
+        if iindex == len(results) - 1:
+            reduced_results.append((index, oc))
+            continue
+
+        # If the previous point is the same, and the next point is the same
+        if results[iindex - 1][1] == oc and results[iindex + 1][1] == oc:
+            continue
+        else:
+            reduced_results.append((index, oc))
+    return reduced_results
 
 
-def calc_gc(align_array, kmer_size=30) -> list[float]:
+def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
     for col_index in range(0, align_array.shape[1] - kmer_size, 15):
@@ -48,7 +66,7 @@ def calc_gc(align_array, kmer_size=30) -> list[float]:
         nc = np.count_nonzero(slice == "C")
 
         n_invalid = np.count_nonzero(slice == "-")
-        gc_prop = (ng + nc) / ((len(slice) * kmer_size) - n_invalid)
+        gc_prop = round((ng + nc) / ((len(slice) * kmer_size) - n_invalid), 2)
 
         results.append((col_index, gc_prop))
     return results
@@ -70,11 +88,30 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
     length = msa.array.shape[1]
 
     # Filter out non MSA-Primerpairs, into a flat list
-    included_primers: list[PrimerPair] = []
+    msa_primers: list[PrimerPair] = []
     for pool in scheme_pools:
         for primerpair in pool:
             if primerpair.msa_index == msa.msa_index:
-                included_primers.append(primerpair)
+                msa_primers.append(primerpair)
+
+    # Filter primers that are circular
+    circular_pp = []
+    included_primers = []
+    for pp in msa_primers:
+        if pp.start > pp.end:
+            circular_pp.append(pp)
+        else:
+            included_primers.append(pp)
+
+    # Remap the included primers to the MSA if they have been mapped to an genome
+    if msa._mapping_array is not None:
+        mapping_list = list(msa._mapping_array)
+        for fkmer in msa.fkmers:
+            fkmer.end = mapping_list.index(fkmer.end)
+            fkmer._starts = {fkmer.end - len(x) for x in fkmer.seqs}
+        for rkmer in msa.rkmers:
+            rkmer.start = mapping_list.index(rkmer.start)
+            rkmer._ends = {rkmer.start + len(x) for x in rkmer.seqs}
 
     # Generate the uncovered_regions
     # Add regions of no coverage
@@ -83,6 +120,10 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
         uncovered_indexes -= set(
             range(primerpair.fprimer.end, primerpair.rprimer.start)
         )
+    for cpp in circular_pp:
+        uncovered_indexes -= set(range(cpp.fprimer.end, length))
+        uncovered_indexes -= set(range(0, cpp.rprimer.start))
+
     # Plot the uncovered regions
     uncovered_indexes_list = sorted(uncovered_indexes)
     # Generate continous regions
@@ -162,6 +203,53 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
             row=1,
             col=1,
         )
+    # Plot the circular primers
+    for pp in circular_pp:
+        # Add the left side line
+        fig.add_shape(
+            type="line",
+            y0=pp.pool + 1,
+            y1=pp.pool + 1,
+            x1=pp.rprimer.start,
+            x0=0,
+            line=dict(color="LightSeaGreen", width=5),
+            row=1,
+            col=1,
+        )
+        # Add the right side line
+        fig.add_shape(
+            type="line",
+            y0=pp.pool + 1,
+            y1=pp.pool + 1,
+            x0=pp.fprimer.end,
+            x1=length,
+            line=dict(color="LightSeaGreen", width=5),
+            row=1,
+            col=1,
+        )
+        fig.add_shape(
+            type="rect",
+            y0=pp.pool + 1 - 0.05,
+            y1=pp.pool + 1 + 0.05,
+            x0=min(pp.fprimer.starts()),
+            x1=pp.fprimer.end,
+            fillcolor="LightSalmon",
+            line=dict(color="LightSalmon", width=2),
+            row=1,
+            col=1,
+        )
+        fig.add_shape(
+            type="rect",
+            y0=pp.pool + 1 - 0.05,
+            y1=pp.pool + 1 + 0.05,
+            x0=pp.rprimer.start,
+            x1=max(pp.rprimer.ends()),
+            fillcolor="LightSalmon",
+            line=dict(color="LightSalmon", width=2),
+            row=1,
+            col=1,
+        )
+
     # Add the uncovered regions
     for region in uncovered_regions:
         fig.add_vrect(
