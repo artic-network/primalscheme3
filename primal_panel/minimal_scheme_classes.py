@@ -110,9 +110,11 @@ class PanelMSA:
         self.fkmers = []
         self.rkmers = []
         self.primerpairs = []
+        self._untested_primerpairs = []
 
         # Initialise failed primerpairs
         self._failed_primerpairs = set()
+        # Initialise valid primerpairs
 
         # Initialise empty arrays
         self.snp_count_array = None
@@ -162,6 +164,7 @@ class PanelMSA:
             cfg,
             self.msa_index,
         )
+        self._untested_primerpairs = self.primerpairs
 
     def get_pp_entropy(self, pp: PrimerPair) -> float:
         """
@@ -177,7 +180,7 @@ class PanelMSA:
 
 
 class Panel:
-    msas: list[MSA]
+    msas: list[PanelMSA]
     cfg: dict
     _pool: list[PrimerPair]
     _matchDB: MatchDB
@@ -241,7 +244,7 @@ class Panel:
             y for sublist in (x.all_seqs() for x in self._pool) for y in sublist
         ]
 
-        for pos_primerpair in current_msa.primerpairs:
+        for pos_primerpair in current_msa._untested_primerpairs:
             # Guard if there is overlap
             if does_overlap(
                 (pos_primerpair.start, pos_primerpair.end, pos_primerpair.msa_index),
@@ -277,9 +280,12 @@ class Panel:
             added = True
             break
 
-        # Remove the failed primerpairs
-        for failed_primerpair in failed_primerpairs:
-            current_msa.primerpairs.remove(failed_primerpair)
+        # Remove failed primerpairs from the current msa._valid_primerpairs
+        current_msa._untested_primerpairs = [
+            x for x in current_msa._untested_primerpairs if x not in failed_primerpairs
+        ]
+        # Add the failed primerpairs to the current msa._failed_primerpairs
+        current_msa._failed_primerpairs.update(failed_primerpairs)
 
         # Return if a primerpair was added
         if added:
@@ -306,7 +312,7 @@ class Panel:
             msa = self.msas[self._current_msa_index]
 
         # Check each primerpair in this msa
-        for pos_primerpair in msa.primerpairs:
+        for pos_primerpair in msa._untested_primerpairs:
             # Guard if there is overlap
             if does_overlap(
                 (
@@ -346,9 +352,12 @@ class Panel:
             added = True
             break
 
-        # Remove the failed primerpairs
-        for failed_primerpair in failed_primerpairs:
-            msa.primerpairs.remove(failed_primerpair)
+        # Remove failed primerpairs from the current msa._valid_primerpairs
+        msa._untested_primerpairs = [
+            x for x in msa._untested_primerpairs if x not in failed_primerpairs
+        ]
+        # Remove the failed primerpair
+        msa._failed_primerpairs.update(failed_primerpairs)
 
         # Guard for a primerpair was added, return that that primerpair was added
         if added:
