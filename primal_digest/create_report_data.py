@@ -70,6 +70,3 @@ def generate_data(msa: MSA, outdir: pathlib.Path):
         json.dump(data["genome_occupancy"], f, sort_keys=True, indent=4)
     with open(outdir / f"{msa.name}_thermo_pass.json", "w") as f:
         json.dump(data["thermo_pass"], f, sort_keys=True, indent=4)
-
-    with open(outdir / f"{msa.name}.json", "w") as f:
-        json.dump(data, f, sort_keys=True, indent=4)

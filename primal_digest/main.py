@@ -324,14 +324,25 @@ def create(args):
         # Read in the MSA
         msa = MSA(
             name=local_msa_path.stem,
-            path=local_msa_path,
+            path=msa_path,
             msa_index=msa_index,
             mapping=cfg["mapping"],
         )
 
+        if "/" in msa._chrom_name:
+            new_chromname = msa._chrom_name.split("/")[0]
+            logger.warning(
+                "<red>WARNING</>: Having a '/' in the chromname {msachromname} will cause issues with figure generation bedfile output. Parsing chromname <yellow>{msachromname}</> -> <green>{new_chromname}</>",
+                msachromname=msa._chrom_name,
+                new_chromname=new_chromname,
+            )
+            msa._chrom_name = new_chromname
+
         # Add some msa data to the dict
         msa_data[msa_index]["msa_name"] = msa.name
-        msa_data[msa_index]["msa_path"] = str(local_msa_path.absolute())
+        msa_data[msa_index]["msa_path"] = str(
+            "work/" + msa_path.name
+        )  # Write localpath
         msa_data[msa_index]["msa_chromname"] = msa._chrom_name
         msa_data[msa_index]["msa_uuid"] = msa._uuid
 
@@ -388,10 +399,8 @@ def create(args):
 
         while True:
             # Try and add an overlapping primer
-            if (
-                scheme.try_ol_primerpairs(msa.primerpairs, msa_index)
-                == SchemeReturn.ADDED_OL_PRIMERPAIR
-            ):
+            ol_result = scheme.try_ol_primerpairs(msa.primerpairs, msa_index)
+            if ol_result == SchemeReturn.ADDED_OL_PRIMERPAIR:
                 logger.info(
                     "Added <green>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                     primer_start=scheme._last_pp_added[-1].start,
@@ -400,21 +409,31 @@ def create(args):
                     msa_name=msa.name,
                 )
                 continue
+            elif ol_result == SchemeReturn.NO_OL_PRIMERPAIR:
+                pass  # Do nothing move on to next step
+
             # Try to backtrack
-            elif cfg["backtrack"] and (
-                scheme.try_backtrack(msa.primerpairs, msa_index)
-                == SchemeReturn.BACKTRACKED
-            ):
-                logger.info(
-                    "Added <yellow>backtracking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                    primer_start=scheme._last_pp_added[-1].start,
-                    primer_end=scheme._last_pp_added[-1].end,
-                    primer_pool=scheme._last_pp_added[-1].pool + 1,
-                    msa_name=msa.name,
-                )
-                continue
+            if cfg["backtrack"]:
+                backtrack_result = scheme.try_backtrack(msa.primerpairs, msa_index)
+                # If successful log and continue
+                if backtrack_result == SchemeReturn.ADDED_BACKTRACKED:
+                    logger.info(
+                        "Backtracking allowed <green>overlapping</> amplicon to be added for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                        primer_start=scheme._last_pp_added[-1].start,
+                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_pool=scheme._last_pp_added[-1].pool + 1,
+                        msa_name=msa.name,
+                    )
+                    continue
+                # If cannot backtrack and backtrack is enabled, log then move on
+                elif backtrack_result == SchemeReturn.NO_BACKTRACK:
+                    logger.info(
+                        "Could not backtrack for <blue>{msa_name}</>",
+                        msa_name=msa.name,
+                    )
+
             # Try and add a walking primer
-            elif (
+            if (
                 scheme.try_walk_primerpair(msa.primerpairs, msa_index)
                 == SchemeReturn.ADDED_WALK_PRIMERPAIR
             ):
@@ -465,12 +484,15 @@ def create(args):
     with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
         amp_bed_str = []
         for pp in scheme.all_primers():
-            if pp_name := msa_dict.get(pp.msa_index):
-                pp_name = pp_name.name
+            if msa := msa_dict.get(pp.msa_index):
+                chrom_name = msa._chrom_name
+                primer_prefix = msa._uuid
             else:
-                pp_name = pp.ref
+                chrom_name = "scheme"
+                primer_prefix = "scheme"
+
             amp_bed_str.append(
-                f"{pp_name}\t{pp.start}\t{pp.end}\tAMP_{pp.amplicon_number}\t{pp.pool + 1}"
+                f"{chrom_name}\t{pp.start}\t{pp.end}\t{primer_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
             )
         outfile.write("\n".join(amp_bed_str))
 

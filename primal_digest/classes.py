@@ -10,6 +10,23 @@ from primal_digest.mismatches import MatchDB, detect_new_products
 from primal_digest.get_window import get_pp_window
 
 
+class SchemeReturn(Enum):
+    # Added return values
+    ADDED_OL_PRIMERPAIR = 1
+    ADDED_WALK_PRIMERPAIR = 2
+    ADDED_FIRST_PRIMERPAIR = 3
+    # Failed return values
+    NO_OL_PRIMERPAIR = 4
+    NO_WALK_PRIMERPAIR = 5
+    NO_FIRST_PRIMERPAIR = 6
+    # Misc return values
+    ADDED_BACKTRACKED = 7
+    NO_BACKTRACK = 8
+
+    ADDED_CIRULAR = 9
+    NO_CIRCULAR = 10
+
+
 class FKmer:
     end: int
     seqs: set[str]
@@ -253,23 +270,6 @@ class PrimerRecord(abc.ABC):
         pass
 
 
-class SchemeReturn(Enum):
-    # Added return values
-    ADDED_OL_PRIMERPAIR = 1
-    ADDED_WALK_PRIMERPAIR = 2
-    ADDED_FIRST_PRIMERPAIR = 3
-    # Failed return values
-    NO_OL_PRIMERPAIR = 4
-    NO_WALK_PRIMERPAIR = 5
-    NO_FIRST_PRIMERPAIR = 6
-    # Misc return values
-    ADDED_BACKTRACKED = 7
-    NO_BACKTRACK = 8
-
-    ADDED_CIRULAR = 9
-    NO_CIRCULAR = 10
-
-
 class Scheme:
     _pools: list[list[PrimerRecord]]
     _current_pool: int
@@ -301,7 +301,7 @@ class Scheme:
         last_pp = self._last_pp_added.pop()
 
         # Remove the primerpair from the pool
-        self._pools[last_pp.pool].remove(last_pp)
+        self._pools[last_pp.pool].pop()
         # Remove the primerpair's matches from the pool's matches
         self._matches[last_pp.pool].difference_update(
             last_pp.find_matches(
@@ -311,6 +311,9 @@ class Scheme:
                 kmersize=self.cfg["mismatch_kmersize"],
             )
         )
+        # Move the current pool to the last primerpair's pool
+        self._current_pool = last_pp.pool
+
         return last_pp
 
     def add_primer_pair_to_pool(self, primerpair: PrimerPair, pool, msa_index):
@@ -394,13 +397,6 @@ class Scheme:
         # If not primerpair can be added return false
         return SchemeReturn.NO_FIRST_PRIMERPAIR
 
-    def get_seqs_in_pool(self) -> list[str]:
-        return [
-            y
-            for sublist in (x.all_seqs() for x in self._pools[self._current_pool])
-            for y in sublist
-        ]
-
     def get_leading_coverage_edge(self) -> tuple[int, int]:
         """This will return the furthest primer-trimmed region with coverage"""
         # This will crash if no primer has been added, but should not be called until one is
@@ -411,7 +407,7 @@ class Scheme:
         # This will crash if no primer has been added, but should not be called until one is
         return max(self._last_pp_added[-1].rprimer.ends())
 
-    def find_ol_primerpairs(self, all_pp_list) -> list[PrimerPair]:
+    def find_ol_primerpairs(self, all_pp_list, minoverlap) -> list[PrimerPair]:
         """
         Finds all primerpairs that could overlap with the last primerpair added.
         However, it does not check for clash between new PP and the last PP in the same pool
@@ -420,8 +416,8 @@ class Scheme:
         return get_pp_window(
             all_pp_list,
             fp_end_min=last_primer_pair.fprimer.end,
-            fp_end_max=last_primer_pair.rprimer.start - self.cfg["min_overlap"],
-            rp_start_min=max(last_primer_pair.rprimer.ends()) + self.cfg["min_overlap"],
+            fp_end_max=last_primer_pair.rprimer.start - minoverlap,
+            rp_start_min=max(last_primer_pair.rprimer.ends()) + minoverlap,
         )
 
     def try_ol_primerpairs(self, all_pp_list, msa_index) -> SchemeReturn:
@@ -448,7 +444,7 @@ class Scheme:
         }
 
         # Find pp that could ol, depending on which pool
-        pos_ol_pp = self.find_ol_primerpairs(all_pp_list)
+        pos_ol_pp = self.find_ol_primerpairs(all_pp_list, self.cfg["min_overlap"])
 
         # Sort the primerpairs depending on overlap score
         pos_ol_pp.sort(
@@ -512,25 +508,23 @@ class Scheme:
 
         # Find all primerpairs that could replace the last primerpair
         pos_ol_pp = [
-            pp for pp in self.find_ol_primerpairs(all_pp_list) if pp != last_pp
+            pp
+            for pp in self.find_ol_primerpairs(all_pp_list, 1)
+            if pp != last_pp  # Change minoverlap to 1 to help the solver
         ]
         # Sort the primerpair on score
         pos_ol_pp.sort(
             key=lambda pp: bt_ol_pp_score(
                 pp.rprimer.start,
                 len(pp.all_seqs()),
-                self.get_leading_coverage_edge() - self.cfg["min_overlap"],
+                self.get_leading_coverage_edge() - 1,
                 self.cfg,
             ),
             reverse=True,
         )
 
         # Find what other pools to look in
-        pos_pools_indexes = [
-            (last_pp.pool + i) % self.n_pools
-            for i in range(self.n_pools)
-            if (last_pp.pool + i) % self.n_pools != last_pp.pool
-        ]
+        pos_pools_indexes = [last_pp.pool]
         # Create a hashmap of all sequences in each pool for quick look up
         index_to_seqs: dict[int : list[str]] = {
             index: [
@@ -541,7 +535,7 @@ class Scheme:
             for index in pos_pools_indexes
         }
 
-        # For each primerpair
+        # For each replacement primerpair
         for ol_pp in pos_ol_pp:
             # For each pool
             for pool_index in pos_pools_indexes:
@@ -556,12 +550,16 @@ class Scheme:
                 ) >= min(ol_pp.fprimer.starts()):
                     continue
 
-                # If the primer passes all the checks, make sure there are no interacts between new pp and pp in pool
-                if not do_pools_interact_py(
+                # Guard for interactions
+                if do_pools_interact_py(
                     ol_pp.all_seqs(),
                     index_to_seqs.get(pool_index),
                     self.cfg["dimerscore"],
-                ) and not detect_new_products(
+                ):
+                    continue
+
+                # Guard for misprimal
+                if detect_new_products(
                     ol_pp.find_matches(
                         self._matchDB,
                         remove_expected=False,
@@ -571,8 +569,21 @@ class Scheme:
                     self._matches[pool_index],
                     self.cfg["mismatch_product_size"],
                 ):
-                    self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
+                    continue
+                # If all checks pass add the primerpair to the pool this is a valid alternative
+                # See if the valid alternative had a valid overlap
+
+                # Add the primer to the pool
+                self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
+                # Try and add an overlap
+                ol_result = self.try_ol_primerpairs(all_pp_list, msa_index=msa_index)
+                if ol_result == SchemeReturn.ADDED_OL_PRIMERPAIR:
+                    # Fixed the problem
                     return SchemeReturn.ADDED_BACKTRACKED
+                else:
+                    # No overlap was found. Remove the primerpair and the try the next one
+                    self.remove_last_primer_pair()
+                    continue
 
         # If non of the primers work, add the last pp back in and return false
         self.add_primer_pair_to_pool(last_pp, last_pp.pool, msa_index)

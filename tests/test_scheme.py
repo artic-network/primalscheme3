@@ -107,6 +107,7 @@ class TestScheme(unittest.TestCase):
         Test the method find_ol_primerpairs to produce the correct primerpairs
         """
         self.cfg["npools"] = 2
+        self.cfg["minoverlap"] = 10
         scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
         primerpair = PrimerPair(FKmer(100, "AA"), RKmer(200, "TT"), None)
 
@@ -119,7 +120,9 @@ class TestScheme(unittest.TestCase):
             for x in range(50, 300, 10)
         ]
         # See which primers could ol
-        pos_ol_primerpair = scheme.find_ol_primerpairs(all_ol_primerpair)
+        pos_ol_primerpair = scheme.find_ol_primerpairs(
+            all_ol_primerpair, self.cfg["min_overlap"]
+        )
 
         # Make sure all primers have an overlap
         self.assertTrue(
@@ -130,6 +133,29 @@ class TestScheme(unittest.TestCase):
                 )
             )
         )
+
+    def test_remove_last_primer_pair(self):
+        self.cfg["npools"] = 2
+        self.cfg["minoverlap"] = 10
+        scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
+        primerpair = PrimerPair(FKmer(100, "AA"), RKmer(200, "TT"), None)
+
+        # Add a primerpair to pool 0
+        scheme.add_primer_pair_to_pool(primerpair, scheme._current_pool, 0)
+
+        # Remove the last primerpair
+        last_pp = scheme.remove_last_primer_pair()
+
+        # Check that the lsat primerpair has been returned
+        self.assertEqual(last_pp, primerpair)
+        # Check the primer has been removed from the _last_pp_added
+        self.assertEqual(len(scheme._last_pp_added), 0)
+        # Check the primer has been removed from the pool
+        self.assertEqual(len(scheme._pools[0]), 0)
+        # Check the current pool has been reset
+        self.assertEqual(scheme._current_pool, 0)
+        # Print last_pp has the expected pool
+        self.assertEqual(last_pp.pool, 0)
 
 
 if __name__ == "__main__":
