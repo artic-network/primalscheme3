@@ -1,6 +1,7 @@
 # Module imports
 from primal_panel.cli import cli
 from primal_panel.minimal_scheme_classes import PanelMSA, Panel, PanelReturn
+from primal_panel.__init__ import __version__
 
 # Submodule imports
 from primal_digest.config import config_dict
@@ -84,6 +85,9 @@ def main():
 
     # Set the max amount of amplicons
     cfg["maxamplicons"] = args.maxamplicons
+
+    # Add the version
+    cfg["algorithmversion"] = f"primalpanel:{__version__}"
 
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir() and not args.force:
