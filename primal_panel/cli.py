@@ -23,12 +23,27 @@ def cli():
         "--msa",
         help="Paths to the MSA files",
         type=pathlib.Path,
-        default=[
-            "/Users/kentcg/Downloads/GCF_000005845.2_ASM584v2_genomic.fna",
-            "/Users/kentcg/quick_lab_fork/SARS-CoV-2/400/v5.0.0_400/MN908947.3.fasta",
-            "/Users/kentcg/Downloads/138954_final.fasta",
-        ],  # required=True,
+        required=True,
         nargs="+",
+    )
+    parser.add_argument(
+        "--regionbedfile",
+        help="Path to the bedfile containing the wanted regions",
+        type=pathlib.Path,
+        default=None,
+    )
+    parser.add_argument(
+        "--inputbedfile",
+        help="Path to a primer.bedfile containing the precalculated primers",
+        type=pathlib.Path,
+        default=None,
+    )
+    parser.add_argument(
+        "--mode",
+        help="Select what mode for selecting regions in --regionbedfile. \n'region-only': only create primers for the regions \n'region-all': select regions first then keep adding amplicons \n'all': add amplicons based on entropy",
+        choices=["region-only", "region-all", "all"],
+        type=str,
+        default="region-only",
     )
     parser.add_argument(
         "-c",
@@ -67,16 +82,16 @@ def cli():
         "--output",
         help="The output directory of the primer.bed file",
         type=str,
-        default="/Users/kentcg/primal-nf/data/dengue_virus_type_2--11060/11060_scheme",
+        default="output",
     )
     parser.add_argument(
         "--force",
-        help="Over ride the output directory",
+        help="Override the output directory",
         action="store_true",
     )
     parser.add_argument(
         "--minoverlap",
-        help="min amount of overlap between primers",
+        help="Min amount of coverage overlap between amplicons",
         type=int,
         default=20,
     )
@@ -110,13 +125,6 @@ def cli():
         help="Enable dev options",
         action="store_true",
     )
-    parser.add_argument(
-        "-b",
-        "--bedfile",
-        help="A bedfile containing regions of intrest. Please ensure the region tab is the same as the filename of the msa it corrasponds to",
-        type=pathlib.Path,
-        default=False,
-    )
     parser.add_argument("--npools", help="Number of pools to use", default=2, type=int)
     parser.add_argument(
         "--dimerscore", help="Threshold for dimer interaction", default=-26, type=float
@@ -133,8 +141,21 @@ def cli():
         type=check_valid_freq,
         default=0.0,
     )
+    parser.add_argument(
+        "--mapping",
+        choices=["first", "consensus"],
+        default="first",
+        type=str,
+    )
+    parser.add_argument(
+        "--maxamplicons",
+        help="Max number of amplicons to create",
+        default=100,
+        type=lambda x: int(x) if int(x) > 0 else sys.exit("ERROR: Must be > 0"),
+    )
 
     args = parser.parse_args()
+
     # Parse number of pools
     if args.npools < 1:
         sys.exit(f"ERROR: Needs at least one pool, {args.npools} requested")
@@ -171,5 +192,13 @@ def cli():
     # Check Tms
     if args.primer_tm_max <= args.primer_tm_min:
         sys.exit(f"ERROR: --primer_tm_max cannot be smaller than --primer_tm_min")
+
+    # Deal with conflict in params
+    if args.regionbedfile is not None and args.mode == "all":
+        sys.exit(
+            f"ERROR: Cannot use --regionbedfile and --mode {args.mode} at the same time, please select a region-* mode or not use --regionbedfile"
+        )
+    if args.regionbedfile is None and args.mode in ["region-only", "region-all"]:
+        sys.exit(f"ERROR: Cannot use --mode '{args.mode}' without --regionbedfile")
 
     return args
