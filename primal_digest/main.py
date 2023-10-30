@@ -196,7 +196,7 @@ def create(args):
     cfg = config_dict
 
     # Add version to config
-    cfg["primaldigest_version"] = f"primaldigest:{__version__}"
+    cfg["algorithmversion"] = f"primaldigest:{__version__}"
     # Primer Digestion settings
     cfg["primer_gc_min"] = args.primer_gc_min
     cfg["primer_gc_max"] = args.primer_gc_max
