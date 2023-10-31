@@ -380,4 +380,8 @@ dev = ["black (>=19.3b0)", "pytest (>=4.6.2)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
+<<<<<<< HEAD
 content-hash = "ba4bb09cd705c4c2329122bd700838df750c92e7bf28d401edeb6b9880277e20"
+=======
+content-hash = "69c18fd2b46c62893651d871c5ee4bd0ee289d892b353d2ce999a975c8691118"
+>>>>>>> primal-panel/main

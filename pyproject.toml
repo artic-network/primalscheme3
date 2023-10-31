@@ -4,7 +4,6 @@ version = "1.2.2"
 description = ""
 authors = ["ChrisKent <chrisgkent@gmail.com>"]
 readme = "README.md"
-packages = [{include = "primal_digest"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -25,4 +24,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-primal-digest = 'primal_digest.cli:cli'
+primerscheme3 = 'primal_panel.minimal_scheme:main'
