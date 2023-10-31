@@ -1,6 +1,6 @@
 # Module imports
 from primal_panel.cli import cli
-from primal_panel.minimal_scheme_classes import PanelMSA, Panel, PanelReturn
+from primal_panel.minimal_scheme_classes import PanelMSA, Panel, PanelReturn, Region
 from primal_panel.__init__ import __version__
 
 # Submodule imports
@@ -8,6 +8,7 @@ from primal_digest.config import config_dict
 from primal_digest.mismatches import MatchDB
 from primal_digest.create_reports import generate_plot
 from primal_digest.mapping import generate_consensus, generate_reference
+from primal_digest.bedfiles import BedPrimerPair, read_in_bedfile
 
 # General import
 import pathlib
@@ -18,6 +19,7 @@ from math import sqrt
 from Bio import SeqIO, SeqRecord, Seq
 import shutil
 import hashlib
+
 
 logger = logger.opt(colors=True)
 
@@ -58,7 +60,6 @@ def main():
     cfg["n_cores"] = args.cores
     cfg["output_prefix"] = args.prefix
     cfg["output_dir"] = str(OUTPUT_DIR)
-    cfg["msa_paths"] = [str(x) for x in ARG_MSA]
     cfg["amplicon_size_max"] = args.ampliconsizemax
     cfg["amplicon_size_min"] = args.ampliconsizemin
     cfg["min_overlap"] = args.minoverlap
@@ -77,8 +78,10 @@ def main():
     cfg["disable_progress_bar"] = False
 
     # Add the bedfile to the cfg
-    cfg["regionbedfile"] = args.regionbedfile
-    cfg["inputbedfile"] = args.inputbedfile
+    cfg["regionbedfile"] = (
+        str(args.regionbedfile) if args.regionbedfile is not None else None
+    )
+    cfg["inputbedfile"] = str(args.inputbedfile)
 
     # Set the mapping
     cfg["mapping"] = args.mapping
@@ -121,7 +124,9 @@ def main():
 
     # Read in the regionbedfile if given
     if cfg["regionbedfile"] is not None:
-        msa_name_to_regions = {msa_path.stem: set() for msa_path in ARG_MSA}
+        msa_name_to_regions: dict[str : list[Region]] = {
+            msa_path.stem: [] for msa_path in ARG_MSA
+        }
         bed_lines = read_region_bedfile(args.regionbedfile)
 
         # Map each bedfile line to an MSA regions
@@ -131,8 +136,8 @@ def main():
         for bedline in bed_lines:
             # If the region can be mapped to an MSA using file name
             if bedline[0] in msa_name_to_regions.keys():
-                msa_name_to_regions.get(bedline[0]).add(
-                    (int(bedline[1]), int(bedline[2]))
+                msa_name_to_regions.get(bedline[0]).append(
+                    Region(bedline[0], int(bedline[1]), int(bedline[2]))
                 )
                 mapped_region_count += 1
             else:
@@ -152,24 +157,26 @@ def main():
         )
 
         # Turn the regions into a range of indexes
-        for msa_name, indexes in msa_name_to_regions.items():
+        for msa_name, regions in msa_name_to_regions.items():
             findexes = {
                 fi
                 for fi in (
-                    range(x[0] - cfg["amplicon_size_max"], x[0] - 1) for x in indexes
+                    range(r.start - cfg["amplicon_size_max"], r.start - 1)
+                    for r in regions
                 )
                 for fi in fi
             }
             rindexes = {
                 ri
                 for ri in (
-                    range(x[1] + 1, x[0] + cfg["amplicon_size_max"]) for x in indexes
+                    range(r.stop + 1, r.stop + cfg["amplicon_size_max"])
+                    for r in regions
                 )
                 for ri in ri
             }
             msa_name_to_indexes[msa_name] = (findexes, rindexes)
     else:
-        msa_name_to_regions = {msa_path.stem: False for msa_path in ARG_MSA}
+        msa_name_to_regions = {msa_path.stem: [] for msa_path in ARG_MSA}
 
     ## Read in the MSAs
     msa_dict: dict[int:PanelMSA] = {}
@@ -192,8 +199,16 @@ def main():
             path=local_msa_path,
             msa_index=msa_index,
             mapping=cfg["mapping"],
-            indexes=msa_name_to_regions.get(msa_path.name),
+            regions=msa_name_to_regions.get(msa_path.stem, []),
         )
+        if "/" in msa._chrom_name:
+            new_chromname = msa._chrom_name.split("/")[0]
+            logger.warning(
+                "<red>WARNING</>: Having a '/' in the chromname {msachromname} will cause issues with figure generation bedfile output. Parsing chromname <yellow>{msachromname}</> -> <green>{new_chromname}</>",
+                msachromname=msa._chrom_name,
+                new_chromname=new_chromname,
+            )
+            msa._chrom_name = new_chromname
 
         # Add some msa data to the dict
         msa_data[msa_index]["msa_name"] = msa.name
@@ -215,6 +230,7 @@ def main():
         elif args.mode == "region-only":
             # Digest only the wanted regions
             msa.digest(cfg, indexes=msa_name_to_indexes.get(msa_path.stem))
+            msa.remove_kmers_that_clash_with_regions()  # Remove kmers that clash with regions
         else:
             sys.exit(f"ERROR: {args.mode} is not a valid mode")
 
@@ -231,17 +247,17 @@ def main():
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
             msa_path=msa_path.stem,
-            num_pp=len(msa.primerpairs),
+            num_pp=len(msa._primerpairs),
         )
 
         if args.mode == "all":
-            msa.primerpairs.sort(
+            msa._untested_primerpairs.sort(
                 key=lambda x: msa.get_pp_entropy(x) ** 2 / sqrt(len(x.all_seqs())),
                 reverse=True,
             )
         if args.mode == "region-only":
             # Sort the primerpairs by the number of SNPs in the amplicon
-            msa.primerpairs.sort(
+            msa._untested_primerpairs.sort(
                 key=lambda pp: msa.get_pp_snp_score(pp),
                 reverse=True,
             )
@@ -262,6 +278,13 @@ def main():
 
     # Create the panel object
     panel: Panel = Panel([x for x in msa_dict.values()], cfg, mismatch_db)
+
+    # Read in the inputbedfile if given
+    if args.inputbedfile is not None:
+        for bedprimerpair in read_in_bedfile(args.inputbedfile):
+            # Add the primerpair into the panel, with a fake msaindex
+            panel._add_primerpair(bedprimerpair, -1)
+
     counter = 0
     while counter < cfg["maxamplicons"]:
         match panel.try_add_primerpair():
@@ -336,6 +359,45 @@ def main():
             amplicon_count=amplicon_count,
         )
 
+    # If region bedfile given, check that all regions have been covered
+    if cfg["regionbedfile"] is not None:
+        for msa in panel.msas:
+            regions_covered = []
+            regions_not_covered = []
+            # Find all primerpairs in this msa
+            primer_pairs = [x for x in panel._pool if x.msa_index == msa.msa_index]
+            covered_positions = {
+                x
+                for x in (
+                    range(pp.fprimer.end, pp.rprimer.start) for pp in primer_pairs
+                )
+                for x in x
+            }
+            # See which regions are completely covered by the covered_positions
+            for region in msa.regions:
+                all_regions = {x for x in range(region.start, region.stop)}
+
+                if all_regions.issubset(covered_positions):
+                    regions_covered.append(region)
+                else:
+                    regions_not_covered.append(region)
+
+            logger.info(
+                "<blue>{msa_name}</>: <green>{covered}</> covered regions, <red>{not_covered}</> not covered regions",
+                msa_name=msa.name,
+                covered=len(regions_covered),
+                not_covered=len(regions_not_covered),
+            )
+
+            # Write which regions are not covered to logger
+            for region in regions_not_covered:
+                logger.info(
+                    "<blue>{msa_name}</>: <red>{regionstart}:{regionstop}</> not covered",
+                    msa_name=msa.name,
+                    regionstart=region.start,
+                    regionstop=region.stop,
+                )
+
     logger.info(
         "Writing outputs...",
     )
@@ -348,16 +410,18 @@ def main():
             if msa := msa_dict.get(pp.msa_index):
                 chrom_name = msa._chrom_name
                 primer_prefix = msa._uuid
+
+                st = pp.__str__(
+                    chrom_name,
+                    primer_prefix,
+                )
             else:
                 # This Chrom name is not used in the bedfile
                 # As BedLines have there own name/prefix
                 chrom_name = "scheme"
                 primer_prefix = "scheme"
+                st = pp.__str__()
 
-            st = pp.__str__(
-                chrom_name,
-                primer_prefix,
-            )
             primer_bed_str.append(st.strip())
         outfile.write("\n".join(primer_bed_str))
 
