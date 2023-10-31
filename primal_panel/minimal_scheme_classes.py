@@ -76,12 +76,34 @@ def does_overlap(
     return False
 
 
+class Region:
+    chromname: str
+    start: int
+    stop: int
+
+    def __init__(self, chromanem: str, start: int, stop: int):
+        self.chromname = chromanem
+        self.start = start
+        self.stop = stop
+
+    def positions(self):
+        return range(self.start, self.stop)
+
+    def __hash__(self) -> int:
+        return hash(f"{self.chromname}:{self.start}:{self.stop}")
+
+    def __eq__(self, __value: object) -> bool:
+        if not isinstance(__value, Region):
+            return False
+        return hash(self) == hash(__value)
+
+
 class PanelMSA:
     # Given attributes
     name: str
     path: str
     msa_index: int
-    regions: list
+    regions: list[Region]
 
     # Calculated on init
     _uuid: str
@@ -99,17 +121,17 @@ class PanelMSA:
     rkmers: list[RKmer]
     primerpairs: list[PrimerPair]
 
-    def __init__(self, name, path, msa_index, mapping, indexes) -> None:
+    def __init__(self, name, path, msa_index, mapping, regions) -> None:
         self.name = name
         self._chrom_name = path.stem
         self.path = path
         self.msa_index = msa_index
-        self.indexes = indexes
+        self.regions = regions
 
         # Initialise empty kmer lists
         self.fkmers = []
         self.rkmers = []
-        self.primerpairs = []
+        self._primerpairs = []
         self._untested_primerpairs = []
 
         # Initialise failed primerpairs
@@ -141,9 +163,9 @@ class PanelMSA:
 
         # Create the SNP count array if required
         self._snp_count_array = np.zeros(self.array.shape[1], dtype=int)
-        if indexes is not None:
-            for index in list(indexes):
-                self._snp_count_array[index[0] : index[1]] = 1
+        if regions is not None:
+            for region in regions:
+                self._snp_count_array[region.start : region.stop] = 1
 
         # Asign a UUID
         self._uuid = str(uuid4())[:8]
@@ -156,15 +178,38 @@ class PanelMSA:
             indexes=indexes,
         )
 
+    def remove_kmers_that_clash_with_regions(self):
+        """
+        Removes f/rkmers who clash with the regions
+        """
+        # Remove primer that overlap with regions
+        regions = [(x.start, x.stop, self.msa_index) for x in self.regions]
+        self.fkmers = [
+            fkmer
+            for fkmer in self.fkmers
+            if not does_overlap(
+                (min(fkmer.starts()), fkmer.end, self.msa_index),
+                regions,
+            )
+        ]
+        self.rkmers = [
+            rkmer
+            for rkmer in self.rkmers
+            if not does_overlap(
+                (rkmer.start, max(rkmer.ends()), self.msa_index),
+                regions,
+            )
+        ]
+
     def generate_primerpairs(self, cfg):
         ## Write a doc string
-        self.primerpairs = generate_valid_primerpairs(
+        self._primerpairs = generate_valid_primerpairs(
             self.fkmers,
             self.rkmers,
             cfg,
             self.msa_index,
         )
-        self._untested_primerpairs = self.primerpairs
+        self._untested_primerpairs = self._primerpairs
 
     def get_pp_entropy(self, pp: PrimerPair) -> float:
         """
