@@ -2,7 +2,7 @@ import numpy as np
 from collections import Counter
 
 # Module imports
-from primal_digest.seq_functions import extend_ambiguous_base
+from primalscheme3.core.seq_functions import extend_ambiguous_base
 
 
 def trucnate_msa(msa: np.ndarray, mapping_index: int = 0) -> np.ndarray:

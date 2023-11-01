@@ -5,9 +5,9 @@ from statistics import median
 import re
 
 # Module imports
-from primal_digest.thermo import calc_tm
-from primal_digest.seq_functions import expand_ambs
-from primal_digest.classes import PrimerPair, FKmer, RKmer
+from primalscheme3.core.thermo import calc_tm
+from primalscheme3.core.seq_functions import expand_ambs
+from primalscheme3.core.classes import PrimerPair, FKmer, RKmer
 
 REGEX_PATTERN_PRIMERNAME = re.compile("\\d+(_RIGHT|_LEFT|_R|_L)")
 

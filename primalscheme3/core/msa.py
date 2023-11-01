@@ -4,13 +4,13 @@ from uuid import uuid4
 
 
 # Module imports
-from primal_digest.classes import FKmer, RKmer, PrimerPair
-from primal_digest.seq_functions import remove_end_insertion
-from primal_digest.digestion import (
+from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
+from primalscheme3.core.seq_functions import remove_end_insertion
+from primalscheme3.core.digestion import (
     digest,
     generate_valid_primerpairs,
 )
-from primal_digest.mapping import create_mapping
+from primalscheme3.core.mapping import create_mapping
 
 
 class MSA:

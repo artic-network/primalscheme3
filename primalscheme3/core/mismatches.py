@@ -1,12 +1,10 @@
-import random
-import numpy as np
 from Bio import SeqIO
 from typing import Iterable
 
 import dbm.ndbm
 
 # Module imports
-from primal_digest.seq_functions import reverse_complement, expand_ambs
+from primalscheme3.core.seq_functions import reverse_complement, expand_ambs
 
 MUTATIONS = {
     "A": "CGT",

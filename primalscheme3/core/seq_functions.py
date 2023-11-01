@@ -5,7 +5,12 @@ from collections import Counter
 from math import log2
 
 # Module Imports
-from primal_digest.config import ALL_DNA, ALL_BASES, AMB_BASES, AMBIGUOUS_DNA_COMPLEMENT
+from primalscheme3.core.config import (
+    ALL_DNA,
+    ALL_BASES,
+    AMB_BASES,
+    AMBIGUOUS_DNA_COMPLEMENT,
+)
 
 
 def reverse_complement(kmer_seq: str) -> str:
