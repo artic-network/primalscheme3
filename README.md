@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# Primal-digest
-=======
-# Primal-panel
->>>>>>> primal-panel/main
+# Primalscheme3
 
 This is a command-line interface tool that generates a primer scheme from a Multiple Sequence Alignment (MSA) file, utalising degenerate primers to handle variation in the genomes.
 
@@ -11,18 +7,12 @@ This is a command-line interface tool that generates a primer scheme from a Mult
 Currently the best way to use is to use poetry to handle dependencies.
 
 ```         
-<<<<<<< HEAD
 git clone https://github.com/ChrisgKent/primal-digest
 cd primal-digest
-=======
-git clone https://github.com/ChrisgKent/primal-panel
-cd Primal-panel
->>>>>>> primal-panel/main
 git submodule add git@github.com:ChrisgKent/primaldimer_py.git
 git submodule update --init --recursive
 poetry install
 
-<<<<<<< HEAD
 poetry run primal-digest -m msa.fasta -o /path/to/output_dir
 ```
 
@@ -31,37 +21,14 @@ poetry run primal-digest -m msa.fasta -o /path/to/output_dir
 -   `-m/--msa`: The path to the MSA file(s). If multiple files are to be processed, then pass the paths separated by spaces.
 -   `-c/--cores`: The number of cores to use in Kmer digestion and thermo checking. Default is `1`.
 -   `--ampliconsize`: The size of an amplicon. Either provide one value and amplicons will be within ±10%. Provide two values to set min/max manualy.
-=======
-poetry run Primal-panel -m msa.fasta -o /path/to/output_dir
-```
-
-## Inputs
-
--   `-m/--msa`: The path to the MSA file(s). If multiple files are to be processed, then pass the paths separated by spaces.
--   `--regionbedfile`: Regions of the MSA that primers should cover.
--   `--primerbedfile`: Add primers to an existing bedfile. Note: The number of pools in bedfile \<= --npools. Primal-panel makes no attempt to validate primers or primer-primer interactions in the bedfile.
-
-## Basic Arguments
-
-
--   `-c/--cores`: The number of cores to use in Kmer digestion and thermo checking. Default is `1`.
--   `--ampliconsizemax`: The maximum size of an amplicon. Default is `1000`.
--   `--ampliconsizemin`: The minimum size of an amplicon. Default is `900`.
->>>>>>> primal-panel/main
 -   `-o/--output`: The output directory of the primer.bed file. Default is `output`.
 -   `--force`: Override the output directory. If set, then any existing output directory will be overwritten.
 -   `--minoverlap`: The minimum amount of overlap between primers. Default is `20`.
 -   `--npools`: Number of pools to use. Default is `2`.
-<<<<<<< HEAD
 -   `--bedfile`: Add primers to an existing bedfile. Note: The number of pools in bedfile \<= --npools. Primal-digest makes no attempt to validate primers or primer-primer interactions in the bedfile.
 -   `--mapping`: What should the primers be mapped to. Choice [`consensus`, `first`]. Default is `consensus`.
     -   `consensus`: Uses the MSA consensus as the primer indexing system.
     -   `first`: Uses the first genome in the MSA as the primer indexing system.
-=======
--   `--minbasefreq`: Primers have have be above this propotion in the input genomes to be included. [`0=<x< 1`]
-- `--mapping`: What the primer.bed file uses as a reference. [`first`, `consensus`]
-- `--mode`: How amplicons should be selected. [`all`, `region-only`]. `All` picks primers via entropy, `region-only` picks primers for regions spesified in `--regionbedfile`
->>>>>>> primal-panel/main
 
 ## Advanced Arguments
 
@@ -71,16 +38,11 @@ poetry run Primal-panel -m msa.fasta -o /path/to/output_dir
 -   `--primer_tm_max`: The maximum melting temperature (Tm) of a primer. Default is `62.5`.
 -   `--dimerscore`: The threshold for dimer interaction. Default is `-26.0`.
 -   `--reducekmers`: Should number of sequences in each Kmer be reduced. Default is `False`.
-<<<<<<< HEAD
 -   `--minbasefreq`: The frequency at a SNP/INDEL needs to be at to be included. Default is `0` or all.
-=======
-
->>>>>>> primal-panel/main
 
 ## Example
 
 ```         
-<<<<<<< HEAD
 poetry run primal-digest -m msa1.fasta msa2.fasta -o /path/to/output_dir --force
 ```
 
@@ -95,15 +57,5 @@ This command will generate a primer scheme for `msa1.fasta`. `--ampliconsize 400
 ------------------------------------------------------------------------
 
 This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/)
-=======
-poetry run primal-panel -m msa1.fasta msa2.fasta -o /path/to/output_dir --mapping first --minbasefreq 0 --mode all -c 10 --force
-```
-
-This command will generate primer schemes for `msa1.fasta` and `msa2.fasta` files and store them in `/path/to/output_dir`. The `--force` option will overwrite any existing output directory.
-
-------------------------------------------------------------------------
-
-This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/) 
->>>>>>> primal-panel/main
 
 ![](https://i.creativecommons.org/l/by-sa/4.0/88x31.png)

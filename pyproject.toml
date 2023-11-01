@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "primal-digest"
+name = "primalscheme3"
 version = "1.2.2"
 description = ""
 authors = ["ChrisKent <chrisgkent@gmail.com>"]

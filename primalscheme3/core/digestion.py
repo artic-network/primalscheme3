@@ -1,8 +1,8 @@
 # Modules
-from primal_digest.thermo import calc_tm
+from primalscheme3.core.thermo import calc_tm, thermo_check_kmers, forms_hairpin
+from primalscheme3.core.seq_functions import expand_ambs, get_most_common_base
+
 from primal_digest.classes import RKmer, FKmer, PrimerPair
-from primal_digest.thermo import calc_tm, thermo_check_kmers, forms_hairpin
-from primal_digest.seq_functions import expand_ambs, get_most_common_base
 from primal_digest.get_window import get_r_window_FAST2
 from primal_digest.errors import (
     WalksOut,
