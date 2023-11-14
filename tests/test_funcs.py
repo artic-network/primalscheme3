@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-from primal_digest.seq_functions import (
+from primalscheme3.core.seq_functions import (
     expand_ambs,
     remove_end_insertion,
     get_most_common_base,

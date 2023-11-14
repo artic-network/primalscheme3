@@ -1,8 +1,8 @@
 import unittest
 import pathlib
 
-from primal_digest.classes import Scheme, MatchDB, PrimerPair, FKmer, RKmer
-import primal_digest.config as config
+from primalscheme3.core.classes import MatchDB, PrimerPair, FKmer, RKmer, Scheme
+import primalscheme3.core.config as config
 
 
 class TestScheme(unittest.TestCase):

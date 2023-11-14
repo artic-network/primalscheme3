@@ -1,5 +1,5 @@
 import unittest
-from primal_digest.digestion import (
+from primalscheme3.core.digestion import (
     reduce_kmers,
     hamming_dist,
     walk_left,
@@ -9,11 +9,11 @@ from primal_digest.digestion import (
     mp_f_digest,
     digest,
 )
-from primal_digest.classes import FKmer, RKmer, PrimerPair
-from primal_digest.config import config_dict as cfg
-from primal_digest.thermo import calc_tm
+from primalscheme3.core.classes import FKmer, RKmer
+from primalscheme3.core.config import config_dict as cfg
+from primalscheme3.core.thermo import calc_tm
 
-from primal_digest.errors import *
+from primalscheme3.core.errors import *
 import numpy as np
 
 
@@ -152,7 +152,7 @@ class Test_WalkLeft(unittest.TestCase):
         expected = ["CCAATGGTGCAAAAGGTACAATCATTAAT", "GTCCAATGGTGCAAAAGGTATAATCATTAAT"]
 
         # Ensure both a sorted
-        result = [x for x in result]
+        result = [x for x in result]  # type: ignore
         result.sort()
         expected.sort()
         self.assertEqual(result, expected)
@@ -275,7 +275,7 @@ class Test_WalkRight(unittest.TestCase):
 
         # Ensure both a sorted
         result = [x for x in result]
-        result.sort()
+        result.sort()  # type: ignore
         expected.sort()
         self.assertEqual(result, expected)
 
@@ -397,9 +397,9 @@ class Test_MPRDigest(unittest.TestCase):
         # The Expected Sequence
         expected = {"ACCTTTTGCACCATTGGACATTAATGAT"}
 
-        self.assertEqual(result.seqs, expected)
+        self.assertEqual(result.seqs, expected)  # type: ignore
 
-    def test_mp_r_digest_one_invalid(self):
+    def test_mp_r_digest_one_invalid_0(self):
         """The invalid base and min_freq 0 should return None"""
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
@@ -443,7 +443,7 @@ class Test_MPRDigest(unittest.TestCase):
         # The Expected Sequence
         expected = {"ACCTTTTGCACCATTGGACATTAATGAT"}
 
-        self.assertEqual(result.seqs, expected)
+        self.assertEqual(result.seqs, expected)  # type: ignore
 
 
 class Test_MPFDigest(unittest.TestCase):
@@ -467,7 +467,7 @@ class Test_MPFDigest(unittest.TestCase):
         # The Expected Sequence
         expected = {"GCAAAAGGTATAATCATTAATGTCCAATGGTG"}
 
-        self.assertEqual(result.seqs, expected)
+        self.assertEqual(result.seqs, expected)  # type: ignore
 
     def test_mp_f_digest_one_invalid(self):
         """The invalid base and min_freq 0 should return None"""
@@ -512,7 +512,7 @@ class Test_MPFDigest(unittest.TestCase):
         # The Expected Sequence
         expected = {"GCAAAAGGTATAATCATTAATGTCCAATGGTG"}
 
-        self.assertEqual(result.seqs, expected)
+        self.assertEqual(result.seqs, expected)  # type: ignore
 
 
 class TestDigest(unittest.TestCase):

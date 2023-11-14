@@ -2,7 +2,7 @@ import unittest
 import pathlib
 import hashlib
 
-from primal_digest.bedfiles import read_in_bedfile, BedPrimerPair
+from primalscheme3.core.bedfiles import read_in_bedfile, BedPrimerPair
 
 
 class Test_ReadInBedFile(unittest.TestCase):

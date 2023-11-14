@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-from primal_digest.mapping import trucnate_msa, create_mapping, generate_consensus
+from primalscheme3.core.mapping import trucnate_msa, create_mapping, generate_consensus
 
 
 class Test_TruncateMsa(unittest.TestCase):

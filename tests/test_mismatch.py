@@ -1,5 +1,5 @@
 import unittest
-from primal_digest.mismatches import (
+from primalscheme3.core.mismatches import (
     detect_new_products,
     detect_products,
     MatchDB,
@@ -26,7 +26,7 @@ class Test_DetectNewProducts(unittest.TestCase):
         """
         Empty
         """
-        result = detect_new_products({}, {})
+        result = detect_new_products({}, {})  # type: ignore
         self.assertFalse(result)
 
     def test_detect_new_products_altmsa(self):
@@ -56,7 +56,7 @@ class Test_DetectProducts(unittest.TestCase):
         """
         Empty
         """
-        result = detect_products({})
+        result = detect_products({})  # type: ignore
         self.assertFalse(result)
 
     def test_detect_products_altmsa(self):

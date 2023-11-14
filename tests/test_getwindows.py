@@ -1,10 +1,10 @@
 import unittest
-from primal_digest.get_window import (
+from primalscheme3.core.get_window import (
     get_f_window_FAST2,
     get_r_window_FAST2,
     get_pp_window,
 )
-from primal_digest.classes import FKmer, RKmer, PrimerPair
+from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
 
 
 class Test_GetFWindowFAST2(unittest.TestCase):
