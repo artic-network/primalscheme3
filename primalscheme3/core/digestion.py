@@ -13,7 +13,7 @@ from primalscheme3.core.errors import (
 )
 
 # Submodules
-from primaldimer_py import do_pools_interact_py
+from primaldimer_py import do_pools_interact_py  # type: ignore
 
 # Externals
 from tqdm import tqdm
@@ -93,7 +93,7 @@ def walk_right(
     row_index: int,
     seq_str: str,
     cfg: dict,
-) -> Union[Set[str], Exception]:
+) -> Union[set[str], Exception]:
     """
     Walks to the right of the array and returns a set of valid sequences.
 
@@ -149,7 +149,7 @@ def walk_right(
         )
         passing_str.extend(results)
 
-    return passing_str
+    return passing_str  # type: ignore
 
 
 def walk_left(
@@ -216,7 +216,7 @@ def walk_left(
         )
         passing_str.extend(results)
 
-    return passing_str
+    return passing_str  # type: ignore
 
 
 def wrap_walk(
@@ -424,7 +424,7 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
         `max_edit_dist` differences between any two sequences.
     """
     ## Cluster sequences via the 3p end
-    p3_end_dict: dict[str : set[str]] = {}
+    p3_end_dict: dict[str, set[str]] = {}
     for sequence in seqs:
         p3_end = sequence[-end_3p:]
         p5_tail = sequence[:-end_3p]
@@ -492,10 +492,10 @@ def digest(
     """
     # Get the indexes to digest
     findexes = (
-        indexes[0] if indexes else range(cfg["primer_size_min"], msa_array.shape[1])
+        indexes[0] if indexes else range(cfg["primer_size_min"], msa_array.shape[1])  # type: ignore
     )
     rindexes = (
-        indexes[1] if indexes else range(msa_array.shape[1] - cfg["primer_size_min"])
+        indexes[1] if indexes else range(msa_array.shape[1] - cfg["primer_size_min"])  # type: ignore
     )
 
     # Create the MP Pool

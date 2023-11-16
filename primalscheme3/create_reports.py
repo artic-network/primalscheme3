@@ -9,9 +9,9 @@ from operator import itemgetter
 import pathlib
 
 # Module imports
-from primal_digest.msa import MSA
-from primal_digest.classes import PrimerPair
-from primal_digest.seq_functions import entropy_score_array
+from primalscheme3.core.classes import PrimerPair
+from primalscheme3.core.msa import MSA
+from primalscheme3.core.seq_functions import entropy_score_array
 
 
 def calc_base_consensus(align_array) -> list[float]:
@@ -258,8 +258,8 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
             fillcolor="#F0605D",
             line=dict(width=0),
             opacity=0.5,
-            row=1,
-            col=1,
+            row=1,  # type: ignore
+            col=1,  # type: ignore
         )
 
     # Add the base occupancy

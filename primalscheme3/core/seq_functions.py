@@ -62,7 +62,7 @@ def expand_ambs(seqs: Iterable[str]) -> set[str] | None:
 
         # If there is any amb_bases in the seq
         if bases & AMB_BASES:
-            expanded_seqs = set(map("".join, product(*map(ALL_DNA.get, seq))))
+            expanded_seqs = set(map("".join, product(*map(ALL_DNA.get, seq))))  # type: ignore
             for exp_seq in expanded_seqs:
                 returned_seq.add(exp_seq)
         else:
@@ -90,11 +90,11 @@ def calc_probs(bases: list[str]) -> list[float]:
     return [v / (len(all_bases) - num_invalids) for _, v in counter.items()]
 
 
-def entropy_score_array(msa: np.ndarray) -> list[int]:
+def entropy_score_array(msa: np.ndarray) -> list[float]:
     """
     Creates an list with the entropy at each index
     """
-    score_array = [0] * msa.shape[1]
+    score_array: list[float] = [0] * msa.shape[1]
     # Iterate over colums
     for col in range(msa.shape[1]):
         proportions = calc_probs(list(msa[:, col]))

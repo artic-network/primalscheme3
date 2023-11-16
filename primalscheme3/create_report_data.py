@@ -2,9 +2,9 @@ import json
 import pathlib
 
 # Module imports
-from primal_digest.msa import MSA
-from primal_digest.seq_functions import entropy_score_array
-from primal_digest.create_reports import calc_gc, calc_occupancy
+from primalscheme3.core.msa import MSA
+from primalscheme3.core.seq_functions import entropy_score_array
+from primalscheme3.create_reports import calc_gc, calc_occupancy
 
 # Plot format
 # plot1: scheme coverage plot. Can be parsed from the bedfile

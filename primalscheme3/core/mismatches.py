@@ -58,7 +58,7 @@ class MatchDB:
 
         return parsed_matches
 
-    def find_match(self, sequence) -> set[list]:
+    def find_match(self, sequence) -> list[list]:
         """
         Find all matches for a single sequence.
 
@@ -218,18 +218,20 @@ def generate_single_mismatches(base_seq: str) -> set[str]:
     :return: A set containing base sequences with single-base mismatches
     """
     return_seqs = set([base_seq])
-    base_seq = [x for x in base_seq]
-    for mut_index, base in enumerate(base_seq):
+    base_seq_list = [x for x in base_seq]  # Split the seq into bases
+    for mut_index, base in enumerate(base_seq_list):
         # handle invalid bases
         if alt_bases := MUTATIONS.get(base):
             for alt_base in alt_bases:
                 return_seqs.add(
                     "".join(
-                        base_seq[0:mut_index] + [alt_base] + base_seq[mut_index + 1 :]
+                        base_seq_list[0:mut_index]
+                        + [alt_base]
+                        + base_seq_list[mut_index + 1 :]
                     )
                 )
         else:
-            raise ValueError(f"Invalid base '{base}' in sequence '{base_seq}'")
+            raise ValueError(f"Invalid base '{base}' in sequence '{base_seq_list}'")
     return return_seqs
 
 
@@ -286,10 +288,7 @@ def detect_new_products(
     return False
 
 
-def detect_products(
-    matches: set[tuple[tuple[int, int], str]],
-    product_size=2000,
-) -> bool:
+def detect_products(matches: set[tuple[int, int, str]], product_size=2000) -> bool:
     """
     Detect the presence of potential product formations based on matched sequences.
 

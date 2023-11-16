@@ -14,7 +14,7 @@ class Test_ReadInBedFile(unittest.TestCase):
 
         print(os.getcwd())
 
-        input_path = pathlib.Path("tests/test_primer.bed").absolute()
+        input_path = pathlib.Path("tests/core/test_primer.bed").absolute()
 
         # Read in the bedfile
         bedprimerpairs: list[BedPrimerPair] = read_in_bedfile(input_path)

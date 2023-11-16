@@ -24,4 +24,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-primerscheme3 = 'primal_panel.minimal_scheme:main'
+primalscheme3 = 'primalscheme3.cli:cli'

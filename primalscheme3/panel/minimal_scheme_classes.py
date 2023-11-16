@@ -1,38 +1,20 @@
 from Bio import SeqIO
 import numpy as np
-
-
-# Submodule imports
-from primal_digest.digestion import digest, generate_valid_primerpairs
-from primal_digest.classes import FKmer, RKmer, PrimerPair
-from primal_digest.msa import MSA
-from primal_digest.mismatches import MatchDB, detect_new_products
-from primal_digest.seq_functions import remove_end_insertion, entropy_score_array
-from primal_digest.mapping import create_mapping
-
-
-# Interations checker
-from primaldimer_py import do_pools_interact_py
-
-# Other imports
 import numpy as np
-from abc import ABC, abstractmethod
 from uuid import uuid4
 from enum import Enum
 
 
-class Amplicon(ABC):
-    @abstractmethod
-    def start(self) -> int:
-        pass
+# Core Module imports
+from primalscheme3.core.digestion import digest, generate_valid_primerpairs
+from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
+from primalscheme3.core.msa import MSA
+from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.seq_functions import remove_end_insertion, entropy_score_array
+from primalscheme3.core.mapping import create_mapping
 
-    @abstractmethod
-    def end(self) -> int:
-        pass
-
-    @abstractmethod
-    def all_seqs(self) -> set[str]:
-        pass
+# Interations checker
+from primaldimer_py import do_pools_interact_py  # type: ignore
 
 
 class PanelReturn(Enum):
@@ -98,21 +80,22 @@ class Region:
         return hash(self) == hash(__value)
 
 
-class PanelMSA:
-    # Given attributes
+class PanelMSA(MSA):
+    # Provided
     name: str
     path: str
     msa_index: int
+    array: np.ndarray
     regions: list[Region]
 
     # Calculated on init
+    array: np.ndarray
     _uuid: str
     _chrom_name: str  # only used in the primer.bed file and html report
-    _array: np.ndarray
     _mapping_array: np.ndarray | None
 
     # Score arrays
-    _snp_count_array: np.ndarray | None
+    _snp_count_array: np.ndarray
     _entropy_array: np.ndarray
     _failed_primerpairs: set[PrimerPair]
 
@@ -149,7 +132,7 @@ class PanelMSA:
         self.array = remove_end_insertion(self.array)
 
         # Create the entropy array
-        self._entropy_array = entropy_score_array(self.array)
+        self._entropy_array = np.array(entropy_score_array(self.array))
 
         # Create the mapping array
         if mapping == "consensus":
@@ -235,7 +218,7 @@ class Panel:
     # for keep adding
     _workingmsasbool: list[bool] | None = None
 
-    def __init__(self, msas: list[MSA], cfg: dict, matchdb: MatchDB) -> None:
+    def __init__(self, msas: list[PanelMSA], cfg: dict, matchdb: MatchDB) -> None:
         self.msas = msas
         self.cfg = cfg
         self._matchDB = matchdb
@@ -272,7 +255,7 @@ class Panel:
     def get_covered_regions(self) -> list[tuple[int, int, int]]:
         return [(pp.start, pp.end, pp.msa_index) for pp in self._pool]
 
-    def try_add_primerpair(self) -> bool:
+    def try_add_primerpair(self) -> PanelReturn:
         """
         Try to add a primer pair to the pool.
 

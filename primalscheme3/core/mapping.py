@@ -14,7 +14,7 @@ def trucnate_msa(msa: np.ndarray, mapping_index: int = 0) -> np.ndarray:
 
 def create_mapping(
     msa: np.ndarray, mapping_index: int = 0
-) -> tuple[list[int | None], np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     This returns a tuple of two items:
         mapping_array: list[int | None]

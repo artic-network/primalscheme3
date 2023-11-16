@@ -86,12 +86,17 @@ class Test_MatchDB(unittest.TestCase):
     ## 'GCAGGG---TACACTCGGACTCA' -> 'GCAGGGTACACTCGGACTCA' is found in sequence 3 at (496,+)
 
     ## GGG---TACACTCGGACTCAGGC -> GCCTGAGTCCGAGTGTACCC is found in sequence 3 at (499,-)
+    def setUp(self):
+        self.matchdb_path = "./tests/core/testcase"
+
     def test_matchdb_createdb(self):
         """
         This tests the creation of the matchdb and the find_match function
         """
         kmersize = 20
-        matchdb = MatchDB("testcase", ["tests/test_mismatch.fasta"], kmersize)
+        matchdb = MatchDB(
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+        )
 
         result = matchdb.find_match("CTAGCACACTTAAGACGGAG")
         self.assertEqual(result, [[0, 720, "+"], [0, 780, "+"]])
@@ -101,7 +106,9 @@ class Test_MatchDB(unittest.TestCase):
         This creates a db and then finds the reverse complement of a sequence
         """
         kmersize = 20
-        matchdb = MatchDB("testcase", ["tests/test_mismatch.fasta"], kmersize)
+        matchdb = MatchDB(
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+        )
 
         result = matchdb.find_match("TTGTCGCGTCGATACTGAAC")
         self.assertEqual(result, [[0, 433, "-"]])
@@ -111,7 +118,9 @@ class Test_MatchDB(unittest.TestCase):
         This creates a db and then finds a sequence with a gap
         """
         kmersize = 20
-        matchdb = MatchDB("testcase", ["tests/test_mismatch.fasta"], kmersize)
+        matchdb = MatchDB(
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+        )
 
         result = matchdb.find_match("GCAGGGTACACTCGGACTCA")
         self.assertEqual(result, [[0, 496, "+"]])
@@ -121,7 +130,9 @@ class Test_MatchDB(unittest.TestCase):
         This creates a db and then finds a sequence with a gap in the reverse complement
         """
         kmersize = 20
-        matchdb = MatchDB("testcase", ["tests/test_mismatch.fasta"], kmersize)
+        matchdb = MatchDB(
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+        )
 
         result = matchdb.find_match("GCCTGAGTCCGAGTGTACCC")
         self.assertEqual(result, [[0, 499, "-"]])
