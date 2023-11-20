@@ -17,7 +17,6 @@ def re_primer_name(string) -> list[str] | None:
     match = REGEX_PATTERN_PRIMERNAME.search(string)
     if match:
         return match.group().split("_")
-
     return None
 
 
@@ -63,6 +62,11 @@ class BedPrimerPair(PrimerPair):
 
 
 class BedLine:
+    """
+    Contains a single line from a bedfile
+    self.pool is stored as a 0 based index
+    """
+
     ref: str
     _start: int
     _end: int
@@ -106,35 +110,25 @@ class BedLine:
         return f"{self.ref}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
 
 
-def read_bedfile(path: pathlib.Path) -> list[BedLine]:
-    # Read in the raw primer data
+def read_in_bedlines(path: pathlib.Path) -> list[BedLine]:
+    """
+    Read in bedlines from a file.
+
+    :param path: The path to the bed file.
+    :type path: pathlib.Path
+    :return: A list of BedLine objects.
+    :rtype: list[BedLine]
+    """
     bed_primers = []
     with open(path, "r") as bedfile:
         for line in bedfile.readlines():
-            # If the line is not empty
             if line:
                 line = line.strip().split()
                 bed_primers.append(BedLine(line))
     return bed_primers
 
 
-def parse_bedfile(bedfile_path: pathlib.Path, npools: int) -> list[list[BedLine]]:
-    # Read in the raw primer data
-    bed_primers = read_bedfile(bedfile_path)
-    # Check the number of pools in the given bedfile, is less or equal to npools arg
-    pools_in_bed = {primer.pool for primer in bed_primers}
-    if len(pools_in_bed) > npools:
-        sys.exit(
-            f"ERROR: The number of pools in the bedfile is greater than --npools: {len(pools_in_bed)} > {npools}"
-        )
-    # Asign each BedLine into the correct pool
-    pool = [[] for _ in range(npools)]
-    for pool_index, group in groupby(bed_primers, lambda primer: primer.pool):
-        pool[pool_index].extend(group)
-    return pool
-
-
-def read_in_bedfile(path: pathlib.Path) -> list[BedPrimerPair]:
+def read_in_bedprimerpairs(path: pathlib.Path) -> list[BedPrimerPair]:
     """
     Read in a bedfile and return a list of BedPrimerPairs, MSA index is set to None as it is not known at this point
     """

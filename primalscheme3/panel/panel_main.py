@@ -3,7 +3,7 @@ from primalscheme3.core.config import config_dict
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.create_reports import generate_plot
 from primalscheme3.core.mapping import generate_consensus, generate_reference
-from primalscheme3.core.bedfiles import BedPrimerPair, read_in_bedfile
+from primalscheme3.core.bedfiles import BedPrimerPair, read_in_bedprimerpairs
 from primalscheme3.core.logger import setup_loger
 
 # version import
@@ -281,7 +281,7 @@ def panelcreate(args):
 
     # Read in the inputbedfile if given
     if args.inputbedfile is not None:
-        for bedprimerpair in read_in_bedfile(args.inputbedfile):
+        for bedprimerpair in read_in_bedprimerpairs(args.inputbedfile):
             # Add the primerpair into the panel, with a fake msaindex
             panel._add_primerpair(bedprimerpair, pool=bedprimerpair.pool, msa_index=-1)
 

@@ -6,7 +6,7 @@ from primalscheme3.core.thermo import *
 from primalscheme3.core.config import config_dict
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
-    read_in_bedfile,
+    read_in_bedprimerpairs,
 )
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.mapping import generate_consensus, generate_reference
@@ -58,7 +58,7 @@ def schemereplace(args):
     }
 
     # Read in the bedfile
-    bedprimerpairs: list[BedPrimerPair] = read_in_bedfile(args.primerbed)
+    bedprimerpairs: list[BedPrimerPair] = read_in_bedprimerpairs(args.primerbed)
     # Map each primer to an MSA index
     for primerpair in bedprimerpairs:
         msa_index = msa_chrom_to_index.get(primerpair.chromname)
@@ -301,7 +301,7 @@ def schemecreate(args):
 
     # If the bedfile flag is given add the primers into the scheme
     if args.bedfile:
-        bedprimerpairs = read_in_bedfile(args.bedfile)
+        bedprimerpairs = read_in_bedprimerpairs(args.bedfile)
         # Check the number of pools in the given bedfile, is less or equal to npools arg
         pools_in_bed = {primer.pool for primer in bedprimerpairs}
         if max(pools_in_bed) > cfg["npools"]:

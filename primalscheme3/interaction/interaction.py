@@ -1,9 +1,9 @@
 # Core imports
-from primalscheme3.core.bedfiles import BedLine, read_bedfile
+from primalscheme3.core.bedfiles import BedLine, read_in_bedlines
 from primalscheme3.core.config import ALL_DNA
 
 from primaldimer_py import (
-    calc_at_offset_py,
+    calc_at_offset_py,  # type: ignore
 )  # calc_at_offset_py(seq1: &str, seq2: &str, offset: i32) -> f64
 
 
@@ -102,7 +102,7 @@ def visulise_interactions(args) -> None:
     threshold = args.threshold
 
     # Read in the bedfile
-    bedfile = read_bedfile(bedpath)
+    bedfile = read_in_bedlines(bedpath)
 
     # Split the bedfile into pools
     pools = [[] for _ in {bedline.pool for bedline in bedfile}]
