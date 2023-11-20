@@ -479,23 +479,34 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
 def digest(
     msa_array: np.ndarray,
     cfg: dict,
-    indexes: tuple[list[int], list[int]] | bool = False,
+    indexes: tuple[list[int], list[int]] | None = None,
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
     Digest the given MSA array and return the FKmers and RKmers.
 
     :param msa_array: The input MSA array.
     :param cfg: A dictionary containing configuration parameters.
-    :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or False to use all indexes.
+    :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or None to use all indexes.
     :param disable_progress_bar: True to disable to the progress bar.
     :return: A tuple containing lists of sorted FKmers and RKmers.
     """
+    # Guard for invalid indexes
+    if indexes is not None:
+        if min(indexes[0]) < 0 or max(indexes[1]) >= msa_array.shape[1]:
+            raise IndexError("FIndexes are out of range")
+        if min(indexes[1]) < 0 or max(indexes[1]) >= msa_array.shape[1]:
+            raise IndexError("RIndexes are out of range")
+
     # Get the indexes to digest
     findexes = (
-        indexes[0] if indexes else range(cfg["primer_size_min"], msa_array.shape[1])  # type: ignore
+        indexes[0]
+        if indexes is not None
+        else range(cfg["primer_size_min"], msa_array.shape[1])
     )
     rindexes = (
-        indexes[1] if indexes else range(msa_array.shape[1] - cfg["primer_size_min"])  # type: ignore
+        indexes[1]
+        if indexes is not None
+        else range(msa_array.shape[1] - cfg["primer_size_min"])
     )
 
     # Create the MP Pool

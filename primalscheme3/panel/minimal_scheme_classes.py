@@ -8,10 +8,12 @@ from enum import Enum
 # Core Module imports
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
 from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
+from primalscheme3.core.multiplex import Multiplex
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.seq_functions import remove_end_insertion, entropy_score_array
 from primalscheme3.core.mapping import create_mapping
+from primalscheme3.core.bedfiles import BedPrimerPair
 
 # Interations checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
@@ -207,87 +209,85 @@ class PanelMSA(MSA):
         return np.sum(self._snp_count_array[pp.fprimer.end + 1 : pp.rprimer.start - 1])
 
 
-class Panel:
-    msas: list[PanelMSA]
-    cfg: dict
-    _pool: list[PrimerPair]
+class Panel(Multiplex):
+    # Base class
+    _pools: list[list[PrimerPair | BedPrimerPair]]
+    _current_pool: int
+    _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
-    _matches: set[tuple]
+    cfg: dict
+
+    # New attributes
+    msas: list[PanelMSA]
     _current_msa_index: int
+    _failed_primerpairs: list[set[PrimerPair]]
 
     # for keep adding
     _workingmsasbool: list[bool] | None = None
 
     def __init__(self, msas: list[PanelMSA], cfg: dict, matchdb: MatchDB) -> None:
+        super().__init__(cfg, matchdb)
         self.msas = msas
-        self.cfg = cfg
-        self._matchDB = matchdb
-        self._matches = set()
-        self._pool = []
         self._current_msa_index = 0
+        self._failed_primerpairs = [set() for _ in range(self.n_pools)]
 
     def _next_msa(self) -> int:
+        """
+        Updates the current msa index to the next msa. Returns the new msa index.
+        :return: The new msa index.
+        """
         self._current_msa_index = (self._current_msa_index + 1) % len(self.msas)
         return self._current_msa_index
 
-    def _add_primerpair(self, primerpair: PrimerPair, msa_index: int) -> None:
-        primerpair.pool = 0
-        primerpair.msa_index = msa_index
-        primerpair.amplicon_number = len(
-            [pp for pp in self._pool if pp.msa_index == msa_index]
-        )
-
-        # Adds the primerpair's matches to the pools matches
-        self._matches.update(
-            primerpair.find_matches(
-                self._matchDB,
-                fuzzy=self.cfg["mismatch_fuzzy"],
-                remove_expected=True,
-                kmersize=self.cfg["mismatch_kmersize"],
-            )
-        )
-        # Adds the primerpair to the pool
-        self._pool.append(primerpair)
-
+    def _add_primerpair(
+        self, primerpair: PrimerPair, pool: int, msa_index: int
+    ) -> None:
+        # Add the primerpair to the pool
+        super().add_primer_pair_to_pool(primerpair, pool, msa_index)
         # Update the current MSA
         self._next_msa()
 
-    def get_covered_regions(self) -> list[tuple[int, int, int]]:
-        return [(pp.start, pp.end, pp.msa_index) for pp in self._pool]
+    def get_covered_regions(self, pool: int) -> list[tuple[int, int, int]]:
+        """
+        Returns all regions covered in the pool
+        """
+        return [(pp.start, pp.end, pp.msa_index) for pp in self._pools[pool]]
 
     def try_add_primerpair(self) -> PanelReturn:
         """
-        Try to add a primer pair to the pool.
-
-        :return: True if a primer pair was successfully added to the pool, False otherwise.
+        Try to add a primer pair to the current pool.
+        :return: PanelReturn.
         """
         # Get the current MSA
         current_msa = self.msas[self._current_msa_index]
+        current_pool = self._current_pool
 
-        # Failed PrimerPairs
-        failed_primerpairs = set()
+        # Get the current pool
         added = False
-
-        all_seqs_in_pool = [
-            y for sublist in (x.all_seqs() for x in self._pool) for y in sublist
+        # All seqs in each pool
+        seqs_in_pool = [
+            seq
+            for seq in (pp.all_seqs() for pp in self._pools[current_pool])
+            for seq in seq
         ]
-
+        # For each primerpair in the current msa
         for pos_primerpair in current_msa._untested_primerpairs:
+            # Guard if the primerpair is in the failed primerpairs
+            if pos_primerpair in self._failed_primerpairs[current_pool]:
+                continue
+
             # Guard if there is overlap
-            if does_overlap(
-                (pos_primerpair.start, pos_primerpair.end, pos_primerpair.msa_index),
-                self.get_covered_regions(),
-            ):
-                failed_primerpairs.add(pos_primerpair)
+            if super().does_overlap(pos_primerpair, current_pool):
+                self._failed_primerpairs[current_pool].add(pos_primerpair)
                 continue
 
             # Guard if there is an interaction
             if do_pools_interact_py(
                 pos_primerpair.all_seqs(),
-                all_seqs_in_pool,
+                seqs_in_pool,
                 self.cfg["dimerscore"],
             ):
-                failed_primerpairs.add(pos_primerpair)
+                self._failed_primerpairs[current_pool].add(pos_primerpair)
                 continue
 
             # Guard if there is a match
@@ -298,22 +298,15 @@ class Panel:
                     kmersize=self.cfg["mismatch_kmersize"],
                     fuzzy=self.cfg["mismatch_fuzzy"],
                 ),
-                self._matches,
+                self._matches[current_pool],
             ):
-                failed_primerpairs.add(pos_primerpair)
+                self._failed_primerpairs[current_pool].add(pos_primerpair)
                 continue
 
             # If primerpair passes all checks add it to the pool
-            self._add_primerpair(pos_primerpair, self._current_msa_index)
+            self._add_primerpair(pos_primerpair, current_pool, self._current_msa_index)
             added = True
             break
-
-        # Remove failed primerpairs from the current msa._valid_primerpairs
-        current_msa._untested_primerpairs = [
-            x for x in current_msa._untested_primerpairs if x not in failed_primerpairs
-        ]
-        # Add the failed primerpairs to the current msa._failed_primerpairs
-        current_msa._failed_primerpairs.update(failed_primerpairs)
 
         # Return if a primerpair was added
         if added:
@@ -321,75 +314,65 @@ class Panel:
         else:
             return PanelReturn.NO_PRIMERPAIRS
 
-    def keep_adding(self):
+    def keep_adding(self) -> PanelReturn:
         # Create a list of which msa still have posible primerpairs
         if self._workingmsasbool is None:
             self._workingmsasbool = [True] * len(self.msas)
 
-        all_seqs_in_pool = [
-            y for sublist in (x.all_seqs() for x in self._pool) for y in sublist
-        ]
-
-        added = False
-        failed_primerpairs: set[PrimerPair] = set()
-
+        # All seqs in each pool
+        all_seqs_in_pools: dict[int, list[str]] = {
+            pool: [
+                y
+                for sublist in (x.all_seqs() for x in self._pools[pool])
+                for y in sublist
+            ]
+            for pool in range(self.n_pools)
+        }
+        # Move to next msa if current msa is done
         if not self._workingmsasbool[self._current_msa_index]:
             self._next_msa()
             return PanelReturn.MOVING_TO_NEW_MSA
         else:
             msa = self.msas[self._current_msa_index]
 
-        # Check each primerpair in this msa
+        # For each primerpair
         for pos_primerpair in msa._untested_primerpairs:
-            # Guard if there is overlap
-            if does_overlap(
-                (
-                    pos_primerpair.start,
-                    pos_primerpair.end,
-                    pos_primerpair.msa_index,
-                ),
-                self.get_covered_regions(),
-            ):
-                failed_primerpairs.add(pos_primerpair)
-                continue
+            # For each pool
+            for pool in range(self.n_pools):
+                # Guard if the primerpair is in the failed primerpairs
+                if pos_primerpair in self._failed_primerpairs[pool]:
+                    continue
 
-            # Guard if there is an interaction
-            if do_pools_interact_py(
-                pos_primerpair.all_seqs(),
-                all_seqs_in_pool,
-                self.cfg["dimerscore"],
-            ):
-                failed_primerpairs.add(pos_primerpair)
-                continue
+                # Guard if there is overlap
+                if super().does_overlap(pos_primerpair, pool):
+                    self._failed_primerpairs[pool].add(pos_primerpair)
+                    continue
 
-            # Guard if there is a match
-            if detect_new_products(
-                pos_primerpair.find_matches(
-                    self._matchDB,
-                    remove_expected=False,
-                    kmersize=self.cfg["mismatch_kmersize"],
-                    fuzzy=self.cfg["mismatch_fuzzy"],
-                ),
-                self._matches,
-            ):
-                failed_primerpairs.add(pos_primerpair)
-                continue
+                # Guard if there is an interaction
+                if do_pools_interact_py(
+                    pos_primerpair.all_seqs(),
+                    all_seqs_in_pools[pool],
+                    self.cfg["dimerscore"],
+                ):
+                    self._failed_primerpairs[pool].add(pos_primerpair)
+                    continue
 
-            # If primerpair passes all checks add it to the pool
-            self._add_primerpair(pos_primerpair, self._current_msa_index)
-            added = True
-            break
+                # Guard if there is a match
+                if detect_new_products(
+                    pos_primerpair.find_matches(
+                        self._matchDB,
+                        remove_expected=False,
+                        kmersize=self.cfg["mismatch_kmersize"],
+                        fuzzy=self.cfg["mismatch_fuzzy"],
+                    ),
+                    self._matches[pool],
+                ):
+                    self._failed_primerpairs[pool].add(pos_primerpair)
+                    continue
 
-        # Remove failed primerpairs from the current msa._valid_primerpairs
-        msa._untested_primerpairs = [
-            x for x in msa._untested_primerpairs if x not in failed_primerpairs
-        ]
-        # Remove the failed primerpair
-        msa._failed_primerpairs.update(failed_primerpairs)
-
-        # Guard for a primerpair was added, return that that primerpair was added
-        if added:
-            return PanelReturn.ADDED_PRIMERPAIR
+                # If primerpair passes all checks add it to the pool
+                self._add_primerpair(pos_primerpair, pool, self._current_msa_index)
+                return PanelReturn.ADDED_PRIMERPAIR
 
         # If no primerpairs were added to this msa, mark it as done
         self._workingmsasbool[self._current_msa_index] = False
@@ -404,6 +387,7 @@ class Panel:
         Returns a bedfile of the current pool
         """
         bed = ""
-        for pp in self._pool:
-            bed += pp.to_bed(ref_name, amplicon_prefix)
+        for pool in range(self.n_pools):
+            for pp in self._pools[pool]:
+                bed += pp.to_bed(ref_name, amplicon_prefix)
         return bed

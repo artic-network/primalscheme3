@@ -9,6 +9,7 @@ from primalscheme3.__init__ import __version__
 # Import main functions
 from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
 from primalscheme3.panel.panel_main import panelcreate
+from primalscheme3.interaction.interaction import visulise_interactions
 
 ## Commands are in the format of
 # {pclass}-{mode}
@@ -213,30 +214,7 @@ def cli():
         default=2,
     )
     panel_create_parser.add_argument(
-        "-p",
-        "--prefix",
-        help="The prefix used in the bedfile name",
-        type=str,
-        default="output",
-    )
-    panel_create_parser.add_argument(
-        "--minoverlap",
-        help="Min amount of coverage overlap between amplicons",
-        type=int,
-        default=20,
-    )
-    panel_create_parser.add_argument(
-        "--use_cache",
-        help="Save / Load data from the caches",
-        action="store_true",
-    )
-    panel_create_parser.add_argument(
-        "--dev",
-        help="Enable dev options",
-        action="store_true",
-    )
-    panel_create_parser.add_argument(
-        "--npools", help="Number of pools to use", default=2, type=int
+        "--npools", help="Number of pools to use", default=1, type=int
     )
     panel_create_parser.add_argument(
         "--dimerscore", help="Threshold for dimer interaction", default=-26, type=float
@@ -385,6 +363,20 @@ def cli():
     )
     scheme_replace_parser.set_defaults(func=schemereplace)
 
+    interactions_parser = subparsers.add_parser(
+        "interactions", help="Shows all interactions within a bedfile"
+    )
+    interactions_parser.add_argument(
+        "--bedfile", help="Path to the bedfile", type=check_path_is_file, required=True
+    )
+    interactions_parser.add_argument(
+        "--threshold",
+        help="Only show interactions more severe (Lower score) than this value",
+        type=float,
+        default=-26,
+    )
+    interactions_parser.set_defaults(func=visulise_interactions)
+
     args = global_parser.parse_args()
 
     # Validate some global args
@@ -415,6 +407,8 @@ def cli():
     elif args.func == panelcreate:
         validate_panel_create_args(args)
         panelcreate(args)
+    elif args.func == visulise_interactions:
+        visulise_interactions(args)
 
 
 if __name__ == "__main__":

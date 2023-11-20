@@ -48,7 +48,17 @@ class MSA:
         # Asign a UUID
         self._uuid = str(uuid4())[:8]
 
-    def digest(self, cfg, indexes: bool = False):
+    def digest(
+        self, cfg: dict, indexes: tuple[list[int], list[int]] | None = None
+    ) -> None:
+        """
+        Digest the given MSA array and return the FKmers and RKmers.
+
+        :param cfg: A dictionary containing configuration parameters.
+        :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or False to use all indexes.
+        :return: None (Class is updated inplace)
+        """
+        # Create all the kmers
         self.fkmers, self.rkmers = digest(
             msa_array=self.array,
             cfg=cfg,
@@ -61,7 +71,7 @@ class MSA:
             self.rkmers = [rkmer.remap(self._mapping_array) for rkmer in self.rkmers]  # type: ignore
             self.rkmers = [x for x in self.rkmers if x is not None]
 
-    def generate_primerpairs(self, cfg):
+    def generate_primerpairs(self, cfg) -> None:
         self.primerpairs = generate_valid_primerpairs(
             self.fkmers,
             self.rkmers,

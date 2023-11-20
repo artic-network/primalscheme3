@@ -4,7 +4,7 @@ ENV POETRY_VERSION=1.6.1
 ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VENV=/opt/poetry-venv
 
-ENV PRIMAL_DIGEST_VERSION=1.2.2
+ENV PRIMALSCHEME3_VERSION=1.0.0
 
 # Install python
 RUN apt-get update -y && apt-get install curl -y
@@ -23,16 +23,16 @@ RUN python3 -m venv $POETRY_VENV \
 ENV PATH="${PATH}:${POETRY_VENV}/bin"
 
 # Copy only requirements to cache them in docker layer
-WORKDIR /primal_digest
+WORKDIR /primalscheme3
 COPY poetry.lock pyproject.toml ./
 
 # Creating folders, and files for a project:
-COPY ./primal_digest ./primal_digest
+COPY ./primalscheme3 ./primalscheme3
 COPY README.md ./
 
 
 # Install all deps
 RUN poetry install
 RUN poetry build
-RUN $POETRY_VENV/bin/pip install dist/primal_digest-${PRIMAL_DIGEST_VERSION}-py3-none-any.whl
+RUN $POETRY_VENV/bin/pip install dist/primalscheme3-${PRIMALSCHEME3_VERSION}-py3-none-any.whl
 

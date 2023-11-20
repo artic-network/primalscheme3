@@ -4,6 +4,7 @@ from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.create_reports import generate_plot
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.bedfiles import BedPrimerPair, read_in_bedfile
+from primalscheme3.core.logger import setup_loger
 
 # version import
 from primalscheme3 import __version__
@@ -63,11 +64,9 @@ def panelcreate(args):
     cfg["primer_tm_max"] = args.primer_tm_max
     cfg["dimerscore"] = args.dimerscore
     cfg["n_cores"] = args.cores
-    cfg["output_prefix"] = args.prefix
     cfg["output_dir"] = str(OUTPUT_DIR)
     cfg["amplicon_size_max"] = args.ampliconsizemax
     cfg["amplicon_size_min"] = args.ampliconsizemin
-    cfg["min_overlap"] = args.minoverlap
     cfg["force"] = args.force
     cfg["npools"] = args.npools
     cfg["reducekmers"] = args.reducekmers
@@ -97,6 +96,10 @@ def panelcreate(args):
     # Add the version
     cfg["algorithmversion"] = f"primalpanel:{__version__}"
 
+    # Enforce only one pool
+    if args.npools != 1:
+        sys.exit("ERROR: primalpanel only supports one pool")
+
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir() and not args.force:
         sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
@@ -105,17 +108,8 @@ def panelcreate(args):
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
-    ## Set up the loggers
-    logger.remove()  # Remove default stderr logger
-    # Add the deep log file
-    logger.add(
-        OUTPUT_DIR / "work/file.log",
-        colorize=False,
-        format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
-        enqueue=True,
-    )
-    # Add the nice stdout progress
-    logger.add(sys.stdout, colorize=True, format="{message}", level="INFO")
+    ## Set up the logger
+    logger = setup_loger(OUTPUT_DIR)
 
     # Create the mismatch db
     logger.info(
@@ -124,7 +118,7 @@ def panelcreate(args):
     mismatch_db = MatchDB(OUTPUT_DIR / "work/mismatch", ARG_MSA, cfg["primer_size_min"])
     logger.info(
         "<green>Created:</> {path}",
-        path=f"{OUTPUT_DIR}/work/mismatch.db",
+        path=f"{OUTPUT_DIR.relative_to(OUTPUT_DIR.parent)}/work/mismatch.db",  # Write the path relative to the parent dir
     )
 
     # Read in the regionbedfile if given
@@ -232,7 +226,7 @@ def panelcreate(args):
         # Split the logic for the different modes
         if args.mode in ["all", "region-all"]:
             # Digest all of each MSAs
-            msa.digest(cfg, indexes=False)
+            msa.digest(cfg, indexes=None)
         elif args.mode == "region-only":
             # Digest only the wanted regions
             msa.digest(cfg, indexes=msa_name_to_indexes.get(msa_path.stem))  # type: ignore
@@ -289,21 +283,21 @@ def panelcreate(args):
     if args.inputbedfile is not None:
         for bedprimerpair in read_in_bedfile(args.inputbedfile):
             # Add the primerpair into the panel, with a fake msaindex
-            panel._add_primerpair(bedprimerpair, -1)
+            panel._add_primerpair(bedprimerpair, pool=bedprimerpair.pool, msa_index=-1)
 
     counter = 0
     while counter < cfg["maxamplicons"]:
         match panel.try_add_primerpair():
             case PanelReturn.ADDED_PRIMERPAIR:
                 # Update the amplicon count
-                msa_index_to_amplicon_count[panel._pool[-1].msa_index] += 1
+                msa_index_to_amplicon_count[panel._last_pp_added[-1].msa_index] += 1
                 logger.info(
                     "Added <blue>amplicon</> (<green>{msaampliconnumber}</>) for <blue>{msa_name}</>: {primer_start}\t{primer_end}",
-                    primer_start=panel._pool[-1].start,
-                    primer_end=panel._pool[-1].end,
-                    msa_name=msa_index_to_name.get(panel._pool[-1].msa_index),
+                    primer_start=panel._last_pp_added[-1].start,
+                    primer_end=panel._last_pp_added[-1].end,
+                    msa_name=msa_index_to_name.get(panel._last_pp_added[-1].msa_index),
                     msaampliconnumber=msa_index_to_amplicon_count.get(
-                        panel._pool[-1].msa_index
+                        panel._last_pp_added[-1].msa_index
                     ),
                 )
                 counter += 1
@@ -311,8 +305,6 @@ def panelcreate(args):
             case PanelReturn.NO_PRIMERPAIRS:
                 logger.info(
                     "No more valid <red>amplicons</> for <blue>{msa_name}</>",
-                    primer_start=panel._pool[-1].start,
-                    primer_end=panel._pool[-1].end,
                     msa_name=msa_index_to_name.get(panel._current_msa_index),
                 )
                 break
@@ -322,14 +314,14 @@ def panelcreate(args):
         match panel.keep_adding():
             case PanelReturn.ADDED_PRIMERPAIR:
                 # Update the amplicon count
-                msa_index_to_amplicon_count[panel._pool[-1].msa_index] += 1
+                msa_index_to_amplicon_count[panel._last_pp_added[-1].msa_index] += 1
                 logger.info(
                     "Added <blue>amplicon</> (<green>{msaampliconnumber}</>) for <blue>{msa_name}</>: {primer_start}\t{primer_end}",
-                    primer_start=panel._pool[-1].start,
-                    primer_end=panel._pool[-1].end,
-                    msa_name=msa_index_to_name.get(panel._pool[-1].msa_index),
+                    primer_start=panel._last_pp_added[-1].start,
+                    primer_end=panel._last_pp_added[-1].end,
+                    msa_name=msa_index_to_name.get(panel._last_pp_added[-1].msa_index),
                     msaampliconnumber=msa_index_to_amplicon_count.get(
-                        panel._pool[-1].msa_index
+                        panel._last_pp_added[-1].msa_index
                     ),
                 )
                 counter += 1
@@ -340,8 +332,6 @@ def panelcreate(args):
             case PanelReturn.NO_MORE_PRIMERPAIRS_IN_MSA:
                 logger.info(
                     "No more valid <red>amplicons</> for <blue>{msa_name}</>",
-                    primer_start=panel._pool[-1].start,
-                    primer_end=panel._pool[-1].end,
                     msa_name=msa_index_to_name.get(panel._current_msa_index),
                 )
             case PanelReturn.MOVING_TO_NEW_MSA:
@@ -355,7 +345,7 @@ def panelcreate(args):
     # Log that the panel is finished
     logger.info(
         "Finished creating the panel. <green>{num_amplicons}</> amplicons created",
-        num_amplicons=len(panel._pool),
+        num_amplicons=len(panel._last_pp_added),
     )
     # Print the amplicons count for each msa
     for msa_index, amplicon_count in msa_index_to_amplicon_count.items():
@@ -371,7 +361,9 @@ def panelcreate(args):
             regions_covered = []
             regions_not_covered = []
             # Find all primerpairs in this msa
-            primer_pairs = [x for x in panel._pool if x.msa_index == msa.msa_index]
+            primer_pairs = [
+                x for x in panel._last_pp_added if x.msa_index == msa.msa_index
+            ]
             covered_positions = {
                 x
                 for x in (
@@ -410,7 +402,7 @@ def panelcreate(args):
     # Write primer bed file
     with open(OUTPUT_DIR / f"primer.bed", "w") as outfile:
         primer_bed_str = []
-        for pp in panel._pool:
+        for pp in panel._last_pp_added:
             # If there is an corrasponding msa
             ## Primers parsed in via bed do not have an msa_index
             if msa := msa_dict.get(pp.msa_index):
@@ -434,7 +426,7 @@ def panelcreate(args):
     # Write out the amplcion bed file
     with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
         amp_bed_str = []
-        for pp in panel._pool:
+        for pp in panel._last_pp_added:
             if msa := msa_dict.get(pp.msa_index):
                 chrom_name = msa._chrom_name
                 primer_prefix = msa._uuid
@@ -481,7 +473,7 @@ def panelcreate(args):
     # Create all the plots
     if cfg["plot"]:
         for msa in panel.msas:
-            generate_plot(msa, [panel._pool], OUTPUT_DIR)
+            generate_plot(msa, panel._pools, OUTPUT_DIR)
 
     # Generate all the hashes
     ## Generate the bedfile hash, and add it into the config

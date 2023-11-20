@@ -19,6 +19,9 @@ plotly = "^5.16.1"
 tqdm = "^4.66.1"
 pytest = "^7.4.2"
 
+[tool.poetry.group.dev.dependencies]
+pytest-cov = "^4.1.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

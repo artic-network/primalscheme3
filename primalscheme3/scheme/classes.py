@@ -1,9 +1,9 @@
 from enum import Enum
 from multiprocessing import Pool
-from typing import Sequence
 
 # Module imports
 from primalscheme3.core.classes import PrimerPair
+from primalscheme3.core.multiplex import Multiplex
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.get_window import get_pp_window
 from primalscheme3.core.bedfiles import BedPrimerPair
@@ -37,7 +37,7 @@ class SchemeReturn(Enum):
     NO_CIRCULAR = 10
 
 
-class Scheme:
+class Scheme(Multiplex):
     _pools: list[list[PrimerPair | BedPrimerPair]]
     _current_pool: int
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
@@ -57,60 +57,6 @@ class Scheme:
     @property
     def npools(self) -> int:
         return self.n_pools
-
-    def next_pool(self) -> int:
-        return (self._current_pool + 1) % self.n_pools
-
-    def remove_last_primer_pair(self) -> PrimerPair:
-        """This removes a primerpair from a pool"""
-        # Removes the pp from self._last_pp_added
-        last_pp = self._last_pp_added.pop()
-
-        # Remove the primerpair from the pool
-        self._pools[last_pp.pool].pop()
-        # Remove the primerpair's matches from the pool's matches
-        self._matches[last_pp.pool].difference_update(
-            last_pp.find_matches(
-                self._matchDB,
-                fuzzy=self.cfg["mismatch_fuzzy"],
-                remove_expected=False,
-                kmersize=self.cfg["mismatch_kmersize"],
-            )
-        )
-        # Move the current pool to the last primerpair's pool
-        self._current_pool = last_pp.pool
-
-        return last_pp
-
-    def add_primer_pair_to_pool(self, primerpair: PrimerPair, pool, msa_index):
-        """Main method to add a primerpair to a pool"""
-        # Set the primerpair values
-        primerpair.pool = pool
-        primerpair.msa_index = msa_index
-        primerpair.amplicon_number = len(
-            [
-                pp
-                for sublist in self._pools
-                for pp in sublist
-                if pp.msa_index == msa_index
-            ]
-        )
-
-        # Adds the primerpair's matches to the pools matches
-        self._matches[pool].update(
-            primerpair.find_matches(
-                self._matchDB,
-                fuzzy=self.cfg["mismatch_fuzzy"],
-                remove_expected=True,
-                kmersize=self.cfg["mismatch_kmersize"],
-            )
-        )
-
-        # Adds the primerpair to the pool
-        self._pools[pool].append(primerpair)
-        self._current_pool = pool
-        self._current_pool = self.next_pool()
-        self._last_pp_added.append(primerpair)
 
     def add_first_primer_pair(
         self, primerpairs: list[PrimerPair], msa_index

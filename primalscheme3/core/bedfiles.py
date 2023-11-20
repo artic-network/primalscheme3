@@ -1,11 +1,9 @@
 import pathlib
 from itertools import groupby
 import sys
-from statistics import median
 import re
 
 # Module imports
-from primalscheme3.core.thermo import calc_tm
 from primalscheme3.core.seq_functions import expand_ambs
 from primalscheme3.core.classes import PrimerPair, FKmer, RKmer
 

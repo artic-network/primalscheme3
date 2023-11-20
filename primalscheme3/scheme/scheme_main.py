@@ -11,6 +11,7 @@ from primalscheme3.core.bedfiles import (
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.msa import MSA
+from primalscheme3.core.logger import setup_loger
 
 # Module imports
 from primalscheme3.scheme.classes import Scheme, SchemeReturn, PrimerPair
@@ -24,16 +25,9 @@ from primalscheme3.create_report_data import generate_data
 import hashlib
 import sys
 import pathlib
-from loguru import logger
 import json
 from Bio import SeqIO, SeqRecord, Seq
 import shutil
-
-logger = logger.opt(colors=True)
-
-"""
-This is a test of a new dynamic digestion algo
-"""
 
 
 def schemereplace(args):
@@ -70,6 +64,10 @@ def schemereplace(args):
         msa_index = msa_chrom_to_index.get(primerpair.chromname)
         if msa_index is not None:
             primerpair.msa_index = msa_index
+        elif cfg["bedfile"]:
+            # This case can happen when primers are added to the scheme via --bedfile.
+            # Set the msa index to -1
+            primerpair.msa_index = -1
         else:
             raise ValueError(f"ERROR: {primerpair.chromname} not found in MSA data")
 
@@ -93,8 +91,15 @@ def schemereplace(args):
         print(wanted_pp.__str__())
 
     # Read in the MSAs from config["msa_data"]
-    # Only digest the wanted msa TODO
-    msa_data = cfg["msa_data"][wanted_pp.msa_index]
+    msa_data = cfg["msa_data"].get(wanted_pp.msa_index)
+    if msa_data is None:
+        if wanted_pp.msa_index == -1:
+            raise ValueError(
+                f"ERROR: The Primer {args.primername} was added via --bedfile"
+            )
+        else:
+            raise ValueError(f"ERROR: MSA index {wanted_pp.msa_index} not found")
+
     msa = MSA(
         name=msa_data["msa_name"],
         path=args.msa,
@@ -109,8 +114,25 @@ def schemereplace(args):
     else:
         print(f"MSA checksums match")
 
+    # Find which region needs to be digested
+    # Digest +- amplionsizemax from the wanted primer
+    findexes = [
+        x
+        for x in range(
+            wanted_pp.fprimer.end - cfg["amplicon_size_max"],
+            wanted_pp.fprimer.end + cfg["amplicon_size_max"],
+        )
+    ]
+    rindexes = [
+        x
+        for x in range(
+            wanted_pp.rprimer.start - cfg["amplicon_size_max"],
+            wanted_pp.rprimer.start + cfg["amplicon_size_max"],
+        )
+    ]
+
     # Digest the MSA into FKmers and RKmers
-    msa.digest(cfg)
+    msa.digest(cfg, indexes=(findexes, rindexes))
 
     # Generate all primerpairs then interaction check
     msa.generate_primerpairs(cfg)
@@ -207,7 +229,7 @@ def schemereplace(args):
 
 def schemecreate(args):
     ARG_MSA = args.msa
-    OUTPUT_DIR = pathlib.Path(args.output).absolute()
+    OUTPUT_DIR = pathlib.Path(args.output).absolute()  # Keep absolute path
 
     cfg = config_dict
 
@@ -220,7 +242,7 @@ def schemecreate(args):
     cfg["primer_tm_max"] = args.primer_tm_max
     cfg["dimerscore"] = args.dimerscore
     cfg["n_cores"] = args.cores
-    cfg["output_dir"] = str(OUTPUT_DIR)
+    cfg["output_dir"] = str(OUTPUT_DIR)  # Write localpath
     cfg["amplicon_size_max"] = args.ampliconsizemax
     cfg["amplicon_size_min"] = args.ampliconsizemin
     cfg["min_overlap"] = args.minoverlap
@@ -261,17 +283,8 @@ def schemecreate(args):
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
-    ## Set up the loggers
-    logger.remove()  # Remove default stderr logger
-    # Add the deep log file
-    logger.add(
-        OUTPUT_DIR / "work/file.log",
-        colorize=False,
-        format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
-        enqueue=True,
-    )
-    # Add the nice stdout progress
-    logger.add(sys.stdout, colorize=True, format="{message}", level="INFO")
+    # Set up the logger
+    logger = setup_loger(OUTPUT_DIR)
 
     # Create the mismatch db
     logger.info(
@@ -280,7 +293,7 @@ def schemecreate(args):
     mismatch_db = MatchDB(OUTPUT_DIR / "work/mismatch", ARG_MSA, cfg["primer_size_min"])
     logger.info(
         "<green>Created:</> {path}",
-        path=f"{OUTPUT_DIR}/work/mismatch.db",
+        path=f"{OUTPUT_DIR.relative_to(OUTPUT_DIR.parent)}/work/mismatch.db",
     )
 
     # Create the scheme object early

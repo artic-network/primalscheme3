@@ -4,7 +4,7 @@ from primalscheme3.core.digestion import digest
 from primalscheme3.core.get_window import get_r_window_FAST2
 
 # from score_function import check_extention_seqs, check_kmers, check_seqs
-from primaldimer_py import do_pools_interact_py
+from primaldimer_py import do_pools_interact_py  # type: ignore
 
 import random
 from math import exp, sqrt

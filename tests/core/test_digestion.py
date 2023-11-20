@@ -533,7 +533,7 @@ class TestDigest(unittest.TestCase):
         cfg["minbasefreq"] = 0
         cfg["dimerscore"] = -26
 
-        results = digest(msa_array=msa_array, cfg=cfg, indexes=([60], []))
+        results = digest(msa_array=msa_array, cfg=cfg, indexes=([60], [1]))
         expected_fkmer = FKmer(60, {"GTCCAATGGTGCAAAAGGTATAATCATTAAT"})
 
         fkmer = results[0][0]
@@ -556,7 +556,7 @@ class TestDigest(unittest.TestCase):
         cfg["minbasefreq"] = 0
         cfg["dimerscore"] = -26
 
-        results = digest(msa_array=msa_array, cfg=cfg, indexes=([], [25]))
+        results = digest(msa_array=msa_array, cfg=cfg, indexes=([1], [25]))
         expected_rkmer = RKmer(25, {"TGATTATACCTTTTGCACCATTGGACATTA"})
 
         rkmer = results[1][0]

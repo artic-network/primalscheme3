@@ -232,6 +232,12 @@ class PrimerPair:
     def __hash__(self) -> int:
         return hash(f"{self.start}{self.end}{self.all_seqs()}")
 
+    def __eq__(self, other):
+        if isinstance(other, PrimerPair):
+            return self.__hash__() == other.__hash__()
+        else:
+            return False
+
     def to_bed(self, chromname: str, amplicon_prefix: str) -> str:
         """
         Turns the primerpair into a string for a bed file
