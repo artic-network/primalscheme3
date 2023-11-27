@@ -86,6 +86,12 @@ class BedLine:
         self.direction = bedline[5]
         self.sequence = bedline[6]
 
+        # Check primername is valid
+        if len(self.primername) != 3:
+            raise ValueError(
+                f"Invalid primername: {self.primername} in bedline: {bedline}"
+            )
+
         # Calc values
         self.amplicon_number = int(self.primername.split("_")[1])
 
