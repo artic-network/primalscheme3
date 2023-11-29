@@ -14,6 +14,29 @@ from primalscheme3.core.msa import MSA
 from primalscheme3.core.seq_functions import entropy_score_array
 
 
+def reduce_data(results: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """
+    Reduce the size of data by merging consecutive points
+    """
+    reduced_results = []
+    for iindex, (index, oc) in enumerate(results):
+        # Add first point
+        if iindex == 0:
+            reduced_results.append((index, oc))
+            continue
+        # Add the last point
+        if iindex == len(results) - 1:
+            reduced_results.append((index, oc))
+            continue
+
+        # If the previous point is the same, and the next point is the same
+        if results[iindex - 1][1] == oc and results[iindex + 1][1] == oc:
+            continue
+        else:
+            reduced_results.append((index, oc))
+    return reduced_results
+
+
 def calc_base_consensus(align_array) -> list[float]:
     results = []
     # Calculate the base proportions
@@ -36,25 +59,7 @@ def calc_occupancy(align_array) -> list[tuple[int, float]]:
         gaps = np.count_nonzero(column == "-")
         gaps += np.count_nonzero(column == "")
         results.append((index, 1 - (gaps / len(column))))
-    # Reduce the size of data by merging consecutive points
-    # When drawn as a line, it will look the same
-    reduced_results = []
-    for iindex, (index, oc) in enumerate(results):
-        # Add first point
-        if iindex == 0:
-            reduced_results.append((index, oc))
-            continue
-        # Add the last point
-        if iindex == len(results) - 1:
-            reduced_results.append((index, oc))
-            continue
-
-        # If the previous point is the same, and the next point is the same
-        if results[iindex - 1][1] == oc and results[iindex + 1][1] == oc:
-            continue
-        else:
-            reduced_results.append((index, oc))
-    return reduced_results
+    return reduce_data(results)
 
 
 def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
@@ -69,7 +74,7 @@ def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
         gc_prop = round((ng + nc) / ((len(slice) * kmer_size) - n_invalid), 2)
 
         results.append((col_index, gc_prop))
-    return results
+    return reduce_data(results)
 
 
 def calc_variance(align_array, kmer_size=30) -> list[float]:
