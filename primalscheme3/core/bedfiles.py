@@ -87,7 +87,7 @@ class BedLine:
         self.sequence = bedline[6]
 
         # Check primername is valid
-        if len(self.primername) != 3:
+        if len(self.primername.split("_")) != 4:
             raise ValueError(
                 f"Invalid primername: {self.primername} in bedline: {bedline}"
             )
