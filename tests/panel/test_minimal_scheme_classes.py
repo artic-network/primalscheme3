@@ -1,6 +1,30 @@
 import unittest
+import pathlib
 
-from primalscheme3.panel.minimal_scheme_classes import does_overlap
+from primalscheme3.panel.minimal_scheme_classes import does_overlap, PanelMSA
+
+
+class TestPanelMSA(unittest.TestCase):
+    def test_pointer(self):
+        """
+        Test case to check if the pointer is set correctly.
+        """
+        msa = PanelMSA(
+            "test", pathlib.Path("tests/core/test_mismatch.fasta"), 0, "first", None
+        )
+        # Add fake primerpairs to the MSA
+        msa._primerpairs = [(x, 10, 0) for x in range(10)]  # type: ignore
+
+        # Check if the pointer is set correctly
+        self.assertEqual(msa.primerpairpointer, 0)
+
+        # Assert that all primerpairs are returned
+        self.assertEqual(msa._primerpairs, list(msa.iter_unchecked_primerpairs()))
+
+        # Update the pointer
+        msa.primerpairpointer = 5
+        # Assert the correct primerpairs are returned
+        self.assertEqual(list(msa.iter_unchecked_primerpairs()), msa._primerpairs[5:])
 
 
 class TestDoesOverlap(unittest.TestCase):
