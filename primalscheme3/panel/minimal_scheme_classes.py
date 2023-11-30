@@ -3,6 +3,8 @@ import numpy as np
 import numpy as np
 from uuid import uuid4
 from enum import Enum
+from itertools import islice
+import pathlib
 
 
 # Core Module imports
@@ -85,10 +87,10 @@ class Region:
 class PanelMSA(MSA):
     # Provided
     name: str
-    path: str
+    path: pathlib.Path
     msa_index: int
     array: np.ndarray
-    regions: list[Region]
+    regions: list[Region] | None
 
     # Calculated on init
     array: np.ndarray
@@ -99,14 +101,21 @@ class PanelMSA(MSA):
     # Score arrays
     _snp_count_array: np.ndarray
     _entropy_array: np.ndarray
-    _failed_primerpairs: set[PrimerPair]
 
     # Calculated attributes
     fkmers: list[FKmer]
     rkmers: list[RKmer]
     primerpairs: list[PrimerPair]
+    primerpairpointer: int
 
-    def __init__(self, name, path, msa_index, mapping, regions) -> None:
+    def __init__(
+        self,
+        name: str,
+        path: pathlib.Path,
+        msa_index: int,
+        mapping: str,
+        regions: None | list[Region] = None,
+    ) -> None:
         self.name = name
         self._chrom_name = path.stem
         self.path = path
@@ -117,11 +126,7 @@ class PanelMSA(MSA):
         self.fkmers = []
         self.rkmers = []
         self._primerpairs = []
-        self._untested_primerpairs = []
-
-        # Initialise failed primerpairs
-        self._failed_primerpairs = set()
-        # Initialise valid primerpairs
+        self.primerpairpointer = 0
 
         # Initialise empty arrays
         self.snp_count_array = None
@@ -167,6 +172,9 @@ class PanelMSA(MSA):
         """
         Removes f/rkmers who clash with the regions
         """
+        if self.regions is None:
+            return
+
         # Remove primer that overlap with regions
         regions = [(x.start, x.stop, self.msa_index) for x in self.regions]
         self.fkmers = [
@@ -194,7 +202,12 @@ class PanelMSA(MSA):
             cfg,
             self.msa_index,
         )
-        self._untested_primerpairs = self._primerpairs
+
+    def iter_unchecked_primerpairs(self):
+        """
+        Returns all primerpairs that have not been checked yet
+        """
+        return islice(self._primerpairs, self.primerpairpointer, None)
 
     def get_pp_entropy(self, pp: PrimerPair) -> float:
         """
@@ -220,7 +233,6 @@ class Panel(Multiplex):
     # New attributes
     msas: list[PanelMSA]
     _current_msa_index: int
-    _failed_primerpairs: list[set[PrimerPair]]
 
     # for keep adding
     _workingmsasbool: list[bool] | None = None
@@ -271,7 +283,9 @@ class Panel(Multiplex):
             for seq in seq
         ]
         # For each primerpair in the current msa
-        for pos_primerpair in current_msa._untested_primerpairs:
+        for new_pointer, pos_primerpair in enumerate(
+            current_msa.iter_unchecked_primerpairs(), current_msa.primerpairpointer
+        ):
             # Guard if the primerpair is in the failed primerpairs
             if pos_primerpair in self._failed_primerpairs[current_pool]:
                 continue
@@ -306,6 +320,8 @@ class Panel(Multiplex):
             # If primerpair passes all checks add it to the pool
             self._add_primerpair(pos_primerpair, current_pool, self._current_msa_index)
             added = True
+            # Update the pointer
+            current_msa.primerpairpointer = new_pointer
             break
 
         # Return if a primerpair was added
@@ -336,16 +352,13 @@ class Panel(Multiplex):
             msa = self.msas[self._current_msa_index]
 
         # For each primerpair
-        for pos_primerpair in msa._untested_primerpairs:
+        for new_pointer, pos_primerpair in enumerate(
+            msa.iter_unchecked_primerpairs(), msa.primerpairpointer
+        ):
             # For each pool
             for pool in range(self.n_pools):
-                # Guard if the primerpair is in the failed primerpairs
-                if pos_primerpair in self._failed_primerpairs[pool]:
-                    continue
-
                 # Guard if there is overlap
                 if super().does_overlap(pos_primerpair, pool):
-                    self._failed_primerpairs[pool].add(pos_primerpair)
                     continue
 
                 # Guard if there is an interaction
@@ -354,7 +367,6 @@ class Panel(Multiplex):
                     all_seqs_in_pools[pool],
                     self.cfg["dimerscore"],
                 ):
-                    self._failed_primerpairs[pool].add(pos_primerpair)
                     continue
 
                 # Guard if there is a match
@@ -367,11 +379,12 @@ class Panel(Multiplex):
                     ),
                     self._matches[pool],
                 ):
-                    self._failed_primerpairs[pool].add(pos_primerpair)
                     continue
 
                 # If primerpair passes all checks add it to the pool
                 self._add_primerpair(pos_primerpair, pool, self._current_msa_index)
+                # Update the pointer
+                msa.primerpairpointer = new_pointer
                 return PanelReturn.ADDED_PRIMERPAIR
 
         # If no primerpairs were added to this msa, mark it as done
