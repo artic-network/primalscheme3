@@ -33,7 +33,7 @@ def _mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
     cfg = data[1]
     # If they do interact return None
     return do_pools_interact_py(
-        list(pp.fprimer.seqs), list(pp.rprimer.seqs), cfg["dimerscore"]
+        [*pp.fprimer.seqs], [*pp.rprimer.seqs], cfg["dimerscore"]
     )
 
 
@@ -71,16 +71,27 @@ def generate_valid_primerpairs(
 
     ## Interaction check all the primerpairs
     iter_free_primer_pairs = []
-    with Pool(cfg["n_cores"]) as p:
-        mp_pp_bool = tqdm(
-            p.imap_unordered(_mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp)),
-            total=len(non_checked_pp),
+    if cfg["n_cores"] == 1:
+        for pp in tqdm(
+            non_checked_pp,
             desc="Generating PrimerPairs",
             disable=disable_progress_bar,
-        )
-        for bool, pp in zip(mp_pp_bool, non_checked_pp):
-            if not bool:
+        ):
+            if not pp.inter_free(cfg):
                 iter_free_primer_pairs.append(pp)
+    else:
+        with Pool(cfg["n_cores"]) as p:
+            mp_pp_bool = tqdm(
+                p.imap_unordered(
+                    _mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp)
+                ),
+                total=len(non_checked_pp),
+                desc="Generating PrimerPairs",
+                disable=disable_progress_bar,
+            )
+            for bool, pp in zip(mp_pp_bool, non_checked_pp):
+                if not bool:
+                    iter_free_primer_pairs.append(pp)
 
     iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
     return iter_free_primer_pairs
@@ -320,7 +331,7 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
         thermo_check_kmers(tmp_kmer.seqs, cfg)
         and not forms_hairpin(tmp_kmer.seqs, cfg=cfg)
         and not do_pools_interact_py(
-            list(tmp_kmer.seqs), list(tmp_kmer.seqs), cfg["dimerscore"]
+            [*tmp_kmer.seqs], [*tmp_kmer.seqs], cfg["dimerscore"]
         )
     ):
         return tmp_kmer
