@@ -18,8 +18,9 @@ from primalscheme3.scheme.classes import Scheme, SchemeReturn, PrimerPair
 
 # Global imports
 from primalscheme3 import __version__
-from primalscheme3.create_reports import generate_plot
-from primalscheme3.create_report_data import generate_data
+from primalscheme3.core.create_reports import generate_plot
+from primalscheme3.core.create_report_data import generate_all_plotdata
+
 
 # Extental imports
 import hashlib
@@ -234,7 +235,8 @@ def schemecreate(args):
     cfg = config_dict
 
     # Add version to config
-    cfg["algorithmversion"] = f"primaldigest:{__version__}"
+    cfg["algorithmversion"] = f"primalscheme3:{__version__}"
+    cfg["primerclass"] = "primerschemes"
     # Primer Digestion settings
     cfg["primer_gc_min"] = args.primer_gc_min
     cfg["primer_gc_max"] = args.primer_gc_max
@@ -577,8 +579,11 @@ def schemecreate(args):
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data
-    for msa in msa_dict.values():
-        generate_data(msa, OUTPUT_DIR / "work")
+    generate_all_plotdata(
+        list(msa_dict.values()),
+        OUTPUT_DIR / "work",
+        last_pp_added=scheme._last_pp_added,
+    )
 
     # Create the fancy plots
     if cfg["plot"]:
