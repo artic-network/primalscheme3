@@ -102,6 +102,10 @@ def panelcreate(args):
     if args.npools != 1:
         sys.exit("ERROR: primalpanel only supports one pool")
 
+    # Enforce region only has a region bedfile
+    if args.mode == "region-only" and args.regionbedfile is None:
+        sys.exit("ERROR: region-only mode requires a region bedfile")
+
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir() and not args.force:
         sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
@@ -253,13 +257,13 @@ def panelcreate(args):
         )
 
         if args.mode == "all":
-            msa._untested_primerpairs.sort(
+            msa._primerpairs.sort(
                 key=lambda x: msa.get_pp_entropy(x) ** 2 / sqrt(len(x.all_seqs())),  # type: ignore
                 reverse=True,
             )
         if args.mode == "region-only":
             # Sort the primerpairs by the number of SNPs in the amplicon
-            msa._untested_primerpairs.sort(
+            msa._primerpairs.sort(
                 key=lambda pp: msa.get_pp_snp_score(pp),  # type: ignore
                 reverse=True,
             )
@@ -373,6 +377,8 @@ def panelcreate(args):
                 )
                 for x in x
             }
+            if msa.regions is None:
+                continue
             # See which regions are completely covered by the covered_positions
             for region in msa.regions:
                 all_regions = {x for x in range(region.start, region.stop)}
