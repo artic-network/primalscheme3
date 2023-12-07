@@ -10,6 +10,7 @@ from primalscheme3.core.errors import (
     CustomErrors,
     ERROR_SET,
     CustomRecursionError,
+    WalksTooFar,
 )
 
 # Submodules
@@ -23,6 +24,46 @@ import itertools
 import networkx as nx
 from collections import Counter
 from typing import Callable, Set, Union
+from enum import Enum
+
+
+class DIGESTION_ERROR(Enum):
+    """
+    Enum for the different types of errors that can occur during digestion
+    """
+
+    WALKS_OUT = "WalksOut"
+    CONTAINS_INVALID_BASE = "ContainsInvalidBase"
+    CUSTOM_RECURSION_ERROR = "CustomRecursionError"
+    CUSTOM_ERRORS = "CustomErrors"
+    GAP_ON_SET_BASE = "GapOnSetBase"
+    THERMO_FAIL = "ThermoFail"
+    HAIRPIN_FAIL = "HairpinFail"
+    DIMER_FAIL = "DimerFail"  # Interaction within the kmer
+    WALK_TO_FAR = "WalkToFar"  # When indels causes the walk to go to far
+    AMB_FAIL = "AmbFail"  # Generic error for when the error is unknown
+
+
+def parse_error(results: set) -> DIGESTION_ERROR:
+    """
+    Parses the error set for the error that occured
+    As only one error is returned, there is an arbitrary heirarchy of errors
+    - CONTAINS_INVALID_BASE > GAP_ON_SET_BASE > WALKS_OUT > CUSTOM_RECURSION_ERROR > WALK_TO_FAR > CUSTOM_ERRORS
+    """
+    if ContainsInvalidBase() in results:
+        return DIGESTION_ERROR.CONTAINS_INVALID_BASE
+    elif GapOnSetBase() in results:
+        return DIGESTION_ERROR.GAP_ON_SET_BASE
+    elif WalksOut() in results:
+        return DIGESTION_ERROR.WALKS_OUT
+    elif CustomRecursionError() in results:
+        return DIGESTION_ERROR.CUSTOM_RECURSION_ERROR
+    elif CustomErrors() in results:
+        return DIGESTION_ERROR.CUSTOM_ERRORS
+    elif WalksTooFar() in results:
+        return DIGESTION_ERROR.WALK_TO_FAR
+    else:  # Return a generic error
+        return DIGESTION_ERROR.AMB_FAIL
 
 
 def _mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
@@ -131,6 +172,10 @@ def walk_right(
     if col_index_right >= array.shape[1] - 1:
         raise WalksOut()
 
+    # Guard for walking too far
+    if col_index_right - col_index_left >= cfg["primer_max_walk"]:
+        raise WalksTooFar()
+
     new_base = array[row_index, col_index_right]
 
     # Fix incomplete ends
@@ -190,13 +235,18 @@ def walk_left(
         WalksOut: If the function attempts to walk out of the array.
         ContainsInvalidBase: If the constructed sequence contains an invalid DNA base.
     """
-    # Guard for correct tm
-    if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
-        return {seq_str}
 
     # Guard prevents walking out of array size
     if col_index_left <= 0:
         raise WalksOut()
+
+    # Guard for correct tm
+    if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
+        return {seq_str}
+
+    # Guard for walking too far
+    if col_index_right - col_index_left >= cfg["primer_max_walk"]:
+        raise WalksTooFar()
 
     new_base = array[row_index, col_index_left - 1]
 
@@ -249,17 +299,22 @@ def wrap_walk(
             seq_str=seq_str,
             cfg=cfg,
         )
-    except CustomErrors as e:
+    except Exception as e:
         return_list.append(e)
-    except RecursionError:
-        return_list.append(CustomRecursionError())
     else:
         return_list.extend(seqs)
 
     return return_list
 
 
-def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
+def mp_r_digest(
+    data: tuple[np.ndarray, dict, int, float]
+) -> RKmer | tuple[int, DIGESTION_ERROR]:
+    """
+    This will try and create a RKmer started at the given index
+    :data: A tuple of (align_array, cfg, start_col, min_freq)
+    :return: A RKmer object or a tuple of (start_col, error)
+    """
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     start_col: int = data[2]
@@ -273,7 +328,11 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
 
     # If the freq of gap is above minfreq
     if first_base_freq.get("-", 0) > min_freq:
-        return None
+        return (start_col, DIGESTION_ERROR.GAP_ON_SET_BASE)
+
+    # If the initial slice is outside the range of the array
+    if start_col + cfg["primer_size_min"] >= align_array.shape[1]:
+        return (start_col, DIGESTION_ERROR.WALKS_OUT)
 
     # Create a counter
     total_col_seqs = Counter()
@@ -301,9 +360,9 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
             seq_str=start_seq,
             cfg=cfg,
         )
-        # If all mutations matter, return None on any Error
+        # If all mutations matter, return on any Error
         if min_freq == 0 and set(results) & ERROR_SET:
-            return None
+            return (start_col, parse_error(set(results)))
 
         # Add the results to the Counter
         total_col_seqs.update(results)
@@ -314,7 +373,7 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
 
     # Guard: If wanted_seqs contains errors return None
     if ERROR_SET & wanted_seqs:
-        return None
+        return (start_col, parse_error(wanted_seqs))
 
     # Create the Kmer
     tmp_kmer = RKmer(start=start_col, seqs=wanted_seqs)
@@ -327,19 +386,26 @@ def mp_r_digest(data: tuple[np.ndarray, dict, int, float]) -> RKmer | None:
             end_3p=cfg["editdist_end3p"],
         )
     # Thermo check the kmers
-    if (
-        thermo_check_kmers(tmp_kmer.seqs, cfg)
-        and not forms_hairpin(tmp_kmer.seqs, cfg=cfg)
-        and not do_pools_interact_py(
-            [*tmp_kmer.seqs], [*tmp_kmer.seqs], cfg["dimerscore"]
-        )
-    ):
-        return tmp_kmer
-    else:
-        return None
+    if not thermo_check_kmers(tmp_kmer.seqs, cfg):
+        return (start_col, DIGESTION_ERROR.THERMO_FAIL)
+    # Check for hairpins
+    if forms_hairpin(tmp_kmer.seqs, cfg=cfg):
+        return (start_col, DIGESTION_ERROR.HAIRPIN_FAIL)
+    # Check for dimer
+    if do_pools_interact_py([*tmp_kmer.seqs], [*tmp_kmer.seqs], cfg["dimerscore"]):
+        return (start_col, DIGESTION_ERROR.DIMER_FAIL)
+    # All checks pass return the kmer
+    return tmp_kmer
 
 
-def mp_f_digest(data: tuple[np.ndarray, dict, int, float]) -> FKmer | None:
+def mp_f_digest(
+    data: tuple[np.ndarray, dict, int, float]
+) -> FKmer | tuple[int, DIGESTION_ERROR]:
+    """
+    This will try and create a FKmer ended at the given index
+    :data: A tuple of (align_array, cfg, end_col, min_freq)
+    :return: A FKmer object or a tuple of (end_col, error)
+    """
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     end_col: int = data[2]
@@ -353,7 +419,11 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, float]) -> FKmer | None:
 
     # If the freq of gap is above minfreq
     if first_base_freq.get("-", 0) > min_freq:
-        return None
+        return (end_col, DIGESTION_ERROR.GAP_ON_SET_BASE)
+
+    # If the initial slice is outside the range of the array
+    if end_col - cfg["primer_size_min"] < 0:
+        return (end_col, DIGESTION_ERROR.WALKS_OUT)
 
     total_col_seqs = Counter()
     for row_index in range(0, align_array.shape[0]):
@@ -380,7 +450,7 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, float]) -> FKmer | None:
             cfg=cfg,
         )
         if min_freq == 0 and set(results) & ERROR_SET:
-            return None
+            return (end_col, parse_error(set(results)))
 
         total_col_seqs.update(results)
 
@@ -390,7 +460,7 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, float]) -> FKmer | None:
 
     # Guard: If wanted_seqs contains errors return None
     if ERROR_SET & wanted_seqs:
-        return None
+        return (end_col, parse_error(wanted_seqs))
 
     # DownSample the seqs if asked
     if cfg["reducekmers"]:
@@ -400,16 +470,16 @@ def mp_f_digest(data: tuple[np.ndarray, dict, int, float]) -> FKmer | None:
             end_3p=cfg["editdist_end3p"],
         )
     # Thermo check the kmers
-    if (
-        thermo_check_kmers(wanted_seqs, cfg)
-        and not forms_hairpin(wanted_seqs, cfg=cfg)
-        and not do_pools_interact_py(
-            list(wanted_seqs), list(wanted_seqs), cfg["dimerscore"]
-        )
-    ):
-        return FKmer(end=end_col, seqs=wanted_seqs)
-    else:
-        return None
+    if not thermo_check_kmers(wanted_seqs, cfg):
+        return (end_col, DIGESTION_ERROR.THERMO_FAIL)
+
+    if forms_hairpin(wanted_seqs, cfg=cfg):
+        return (end_col, DIGESTION_ERROR.HAIRPIN_FAIL)
+
+    if do_pools_interact_py(list(wanted_seqs), list(wanted_seqs), cfg["dimerscore"]):
+        return (end_col, DIGESTION_ERROR.DIMER_FAIL)
+
+    return FKmer(end=end_col, seqs=wanted_seqs)
 
 
 def hamming_dist(s1, s2) -> int:
@@ -491,6 +561,7 @@ def digest(
     msa_array: np.ndarray,
     cfg: dict,
     indexes: tuple[list[int], list[int]] | None = None,
+    logger: None = None,
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
     Digest the given MSA array and return the FKmers and RKmers.
@@ -498,7 +569,7 @@ def digest(
     :param msa_array: The input MSA array.
     :param cfg: A dictionary containing configuration parameters.
     :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or None to use all indexes.
-    :param disable_progress_bar: True to disable to the progress bar.
+    :param logger: None or the Logguru logger object.
     :return: A tuple containing lists of sorted FKmers and RKmers.
     """
     # Guard for invalid indexes
@@ -527,7 +598,8 @@ def digest(
             mp_f_digest,
             ((msa_array, cfg, end_col, cfg["minbasefreq"]) for end_col in findexes),
         )
-        pass_fprimer_mp = [x for x in fprimer_mp if x is not None and x.seqs]
+
+        pass_fprimer_mp = [x for x in fprimer_mp if type(x) is FKmer and x.seqs]
         pass_fprimer_mp.sort(key=lambda fkmer: fkmer.end)
 
         # Generate the FKmers via MP
@@ -535,8 +607,36 @@ def digest(
             mp_r_digest,
             ((msa_array, cfg, start_col, cfg["minbasefreq"]) for start_col in rindexes),
         )
-        pass_rprimer_mp = [x for x in rprimer_mp if x is not None and x.seqs]
+        pass_rprimer_mp = [x for x in rprimer_mp if type(x) is RKmer and x.seqs]
         # mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
         pass_rprimer_mp.sort(key=lambda rkmer: rkmer.start)
+
+        # If a logger has been provided dumb the error stats
+        if logger is not None:
+            # Log the fkmer errors
+            for fkmer_result in fprimer_mp:
+                if type(fkmer_result) is tuple:
+                    logger.debug(
+                        "FKmer: <red>{end_col}\t{error}</>",
+                        end_col=fkmer_result[0],
+                        error=fkmer_result[1].value,
+                    )
+                else:
+                    logger.debug(
+                        "FKmer: <green>{end_col}</>: AllPass", end_col=fkmer_result.end  # type: ignore
+                    )
+            # log the rkmer errors
+            for rkmer_result in rprimer_mp:
+                if type(rkmer_result) is tuple:
+                    logger.debug(
+                        "RKmer: <red>{start_col}\t{error}</>",
+                        start_col=rkmer_result[0],
+                        error=rkmer_result[1].value,
+                    )
+                else:
+                    logger.debug(
+                        "RKmer: <green>{start_col}</>: AllPass",
+                        start_col=rkmer_result.start,  # type: ignore
+                    )
 
     return (pass_fprimer_mp, pass_rprimer_mp)
