@@ -8,6 +8,8 @@ from primalscheme3.core.digestion import (
     mp_r_digest,
     mp_f_digest,
     digest,
+    DIGESTION_ERROR,
+    parse_error,
 )
 from primalscheme3.core.classes import FKmer, RKmer
 from primalscheme3.core.config import config_dict as cfg
@@ -15,6 +17,44 @@ from primalscheme3.core.thermo import calc_tm
 
 from primalscheme3.core.errors import *
 import numpy as np
+
+
+class Test_parse_errors(unittest.TestCase):
+    def test_parse_error(self):
+        """
+        Test the parsing of errors
+        """
+        # Test that ContainsInvalidBase() is detected
+        self.assertEqual(
+            parse_error({"ATCG", ContainsInvalidBase()}),
+            DIGESTION_ERROR.CONTAINS_INVALID_BASE,
+        )
+
+        # Test that WalksOut() is detected
+        self.assertEqual(
+            parse_error({"ATCG", WalksOut()}),
+            DIGESTION_ERROR.WALKS_OUT,
+        )
+
+        # Test that GapOnSetBase() is detected
+        self.assertEqual(
+            parse_error({"ATCG", GapOnSetBase()}), DIGESTION_ERROR.GAP_ON_SET_BASE
+        )
+
+        # CustomRecursionError() is detected
+        self.assertEqual(
+            parse_error({"ATCG", CustomRecursionError()}),
+            DIGESTION_ERROR.CUSTOM_RECURSION_ERROR,
+        )
+
+        # WalksOut() is detected
+        self.assertEqual(
+            parse_error({"ATCG", WalksTooFar()}),
+            DIGESTION_ERROR.WALK_TO_FAR,
+        )
+
+        # Test that DIGESTION_ERROR.AMB_FAIL is returned on no error provided
+        self.assertEqual(parse_error({"ATCG", "ATCG"}), DIGESTION_ERROR.AMB_FAIL)
 
 
 class Test_HammingDist(unittest.TestCase):
@@ -377,21 +417,25 @@ class Test_WalkRight(unittest.TestCase):
 
 
 class Test_MPRDigest(unittest.TestCase):
+    def setUp(self):
+        self.cfg = cfg
+        self.cfg["reducekmers"] = False
+        self.cfg["dimerscore"] = -26
+
+    def create_array(self, seqs) -> np.ndarray:
+        array_list = []
+        for seq in seqs:
+            array_list.append([x for x in seq])
+        return np.array(array_list)
+
     def test_mp_r_digest(self):
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
 
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-        cfg["dimerscore"] = -26
-
-        data = (msa_array, cfg, 20, 0)
+        data = (self.create_array(seqs), cfg, 20, 0)
         result = mp_r_digest(data)
 
         # The Expected Sequence
@@ -406,38 +450,23 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
-
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-        cfg["dimerscore"] = -26
-
-        data = (msa_array, cfg, 20, 0)
+        data = (self.create_array(seqs), cfg, 20, 0)
         result = mp_r_digest(data)
 
         # The Expected Sequence
-        expected = None
+        expected = (20, DIGESTION_ERROR.CONTAINS_INVALID_BASE)
 
         self.assertEqual(result, expected)
 
-    def test_mp_r_digest_one_invalid(self):
+    def test_mp_r_digest_one_invalid_MBF(self):
         """The invalid base and min_freq 0.5 should return sequence"""
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
 
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-        cfg["dimerscore"] = -26
-
-        data = (msa_array, cfg, 20, 0.5)
+        data = (self.create_array(seqs), cfg, 20, 0.5)
         result = mp_r_digest(data)
 
         # The Expected Sequence
@@ -445,23 +474,80 @@ class Test_MPRDigest(unittest.TestCase):
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
+    def test_mp_r_digest_walkout(self):
+        """
+        Tests that walking out of the array returns the correct error
+        """
+        seqs = [
+            "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+        ]
+        data = (self.create_array(seqs), self.cfg, 60, 0.5)
+        result = mp_r_digest(data)
+
+        # The Expected Sequence
+        expected = (60, DIGESTION_ERROR.WALKS_OUT)
+        self.assertEqual(result, expected)  # type: ignore
+
+    def test_mp_r_digest_gaponsetbase(self):
+        """
+        Tests GapOnSetBase is returned
+        """
+        seqs = [
+            "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+        ]
+        data = (self.create_array(seqs), self.cfg, 24, 0)
+        result = mp_r_digest(data)
+
+        # The Expected Sequence
+        expected = (24, DIGESTION_ERROR.GAP_ON_SET_BASE)
+        self.assertEqual(result, expected)  # type: ignore
+
+    def test_mp_r_digest_walktofar(self):
+        """
+        Tests WalksToFar is returned
+        """
+
+        seqs = [
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+        ]
+
+        local_cfg = self.cfg.copy()
+        local_cfg["primer_max_walk"] = 10  # Force the primer to walk to far
+
+        data = (self.create_array(seqs), local_cfg, 10, 0)
+        result = mp_r_digest(data)
+
+        # The Expected Sequence
+        expected = (10, DIGESTION_ERROR.WALK_TO_FAR)
+        self.assertEqual(result, expected)  # type: ignore
+
 
 class Test_MPFDigest(unittest.TestCase):
+    def setUp(self):
+        self.cfg = cfg
+        self.cfg["reducekmers"] = False
+        self.cfg["dimerscore"] = -26
+
+    def create_array(self, seqs) -> np.ndarray:
+        array_list = []
+        for seq in seqs:
+            array_list.append([x for x in seq])
+        return np.array(array_list)
+
     def test_mp_f_digest(self):
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
 
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-        cfg["dimerscore"] = -26
-
-        data = (msa_array, cfg, 40, 0)
+        data = (self.create_array(seqs), self.cfg, 40, 0)
         result = mp_f_digest(data)
 
         # The Expected Sequence
@@ -476,37 +562,22 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
-
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-
-        data = (msa_array, cfg, 40, 0)
+        data = (self.create_array(seqs), self.cfg, 40, 0)
         result = mp_f_digest(data)
 
         # The Expected Sequence
-        expected = None
+        expected = (40, DIGESTION_ERROR.CONTAINS_INVALID_BASE)
 
         self.assertEqual(result, expected)
 
-    def test_mp_r_digest_one_invalid(self):
+    def test_mp_f_digest_one_invalid_with_mbf(self):
         """The invalid base and min_freq 0.5 should return sequence"""
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
-
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-        cfg["dimerscore"] = -26
-
-        data = (msa_array, cfg, 40, 0.5)
+        data = (self.create_array(seqs), self.cfg, 40, 0.5)
         result = mp_f_digest(data)
 
         # The Expected Sequence
@@ -514,8 +585,73 @@ class Test_MPFDigest(unittest.TestCase):
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
+    def test_mp_f_digest_walkout(self):
+        """
+        Tests that walking out of the array returns the correct error
+        """
+        seqs = [
+            "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+        ]
+        data = (self.create_array(seqs), self.cfg, 5, 0.5)
+        result = mp_f_digest(data)
+
+        # The Expected Sequence
+        expected = (5, DIGESTION_ERROR.WALKS_OUT)
+        self.assertEqual(result, expected)  # type: ignore
+
+    def test_mp_f_digest_gaponsetbase(self):
+        """
+        Tests GapOnSetBase is returned
+        """
+        seqs = [
+            "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+        ]
+        data = (self.create_array(seqs), self.cfg, 24, 0)
+        result = mp_f_digest(data)
+
+        # The Expected Sequence
+        expected = (24, DIGESTION_ERROR.GAP_ON_SET_BASE)
+        self.assertEqual(result, expected)  # type: ignore
+
+    def test_mp_f_digest_walktofar(self):
+        """
+        Tests WalksToFar is returned
+        """
+
+        seqs = [
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+            "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
+        ]
+
+        local_cfg = self.cfg.copy()
+        local_cfg["primer_max_walk"] = 10  # Force the primer to walk to far
+
+        data = (self.create_array(seqs), local_cfg, 60, 0)
+        result = mp_f_digest(data)
+
+        # The Expected Sequence
+        expected = (60, DIGESTION_ERROR.WALK_TO_FAR)
+        self.assertEqual(result, expected)  # type: ignore
+
 
 class TestDigest(unittest.TestCase):
+    def setUp(self):
+        self.cfg = cfg
+        self.cfg["reducekmers"] = False
+        self.cfg["dimerscore"] = -26
+        cfg["minbasefreq"] = 0
+
+    def create_array(self, seqs) -> np.ndarray:
+        array_list = []
+        for seq in seqs:
+            array_list.append([x for x in seq])
+        return np.array(array_list)
+
     def test_digestion_valid_fkmer(self):
         """Test the digestion"""
         self.maxDiff = None
@@ -524,14 +660,7 @@ class TestDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
-
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-        cfg["minbasefreq"] = 0
-        cfg["dimerscore"] = -26
+        msa_array = self.create_array(seqs)
 
         results = digest(msa_array=msa_array, cfg=cfg, indexes=([60], [1]))
         expected_fkmer = FKmer(60, {"GTCCAATGGTGCAAAAGGTATAATCATTAAT"})
@@ -547,14 +676,7 @@ class TestDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        array_list = []
-        for seq in seqs:
-            array_list.append([x for x in seq])
-
-        msa_array = np.array(array_list)
-        cfg["reducekmers"] = False
-        cfg["minbasefreq"] = 0
-        cfg["dimerscore"] = -26
+        msa_array = msa_array = self.create_array(seqs)
 
         results = digest(msa_array=msa_array, cfg=cfg, indexes=([1], [25]))
         expected_rkmer = RKmer(25, {"TGATTATACCTTTTGCACCATTGGACATTA"})
