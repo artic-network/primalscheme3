@@ -35,7 +35,7 @@ def create_mapping(
     current_ref_index = 0
     for col_index in range(truncated_msa.shape[1]):
         # If the base is not a gap, assign the mapping
-        if reference_genome[col_index] != "-":
+        if reference_genome[col_index] != "-" or reference_genome[col_index] != "":
             mapping_array[col_index] = current_ref_index
             # increase refence index
             current_ref_index += 1
