@@ -168,7 +168,7 @@ def generate_plot(msa: MSA, scheme_pools: list[list[PrimerPair]], outdir: pathli
             y=[x.pool + 1 for x in included_primers],
             opacity=0,
             name="RPrimers",
-            hovertext=[f"AMP_{x.amplicon_number}_LEFT" for x in included_primers],
+            hovertext=[f"AMP_{x.amplicon_number}_RIGHT" for x in included_primers],
         ),
         row=1,
         col=1,
