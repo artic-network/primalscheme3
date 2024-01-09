@@ -17,7 +17,7 @@ config_dict = {
     "editdist_end3p": 6,
     "primer_size_max": 36,
     "primer_size_min": 18,
-    "primer_max_walk": 50,
+    "primer_max_walk": 80,
 }
 
 
