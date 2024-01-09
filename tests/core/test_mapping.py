@@ -44,6 +44,9 @@ class Test_TruncateMsa(unittest.TestCase):
         # Check the result is as expected
         self.assertEqual(result.shape, (4, 12))
 
+        # Check the result is as expected
+        self.assertEqual(list(result[0, :]), [x for x in "ATCTA--TCAGC"])
+
 
 class Test_CreateMapping(unittest.TestCase):
     input = np.array(
