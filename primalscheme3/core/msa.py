@@ -1,4 +1,5 @@
 import numpy as np
+import pathlib
 from Bio import SeqIO
 from uuid import uuid4
 
@@ -25,10 +26,13 @@ class MSA:
     rkmers: list[RKmer]
     primerpairs: list[PrimerPair]
 
-    def __init__(self, name, path, msa_index, mapping) -> None:
+    def __init__(
+        self, name: str, path: pathlib.Path, msa_index: int, mapping: str, logger=None
+    ) -> None:
         self.name = name
         self.path = str(path)
         self.msa_index = msa_index
+        self.logger = logger
 
         # Read in the MSA
         records_index = SeqIO.index(self.path, "fasta")
@@ -49,7 +53,9 @@ class MSA:
         self._uuid = str(uuid4())[:8]
 
     def digest(
-        self, cfg: dict, indexes: tuple[list[int], list[int]] | None = None
+        self,
+        cfg: dict,
+        indexes: tuple[list[int], list[int]] | None = None,
     ) -> None:
         """
         Digest the given MSA array and return the FKmers and RKmers.
@@ -63,6 +69,7 @@ class MSA:
             msa_array=self.array,
             cfg=cfg,
             indexes=indexes,
+            logger=self.logger,
         )
         # remap the fkmer and rkmers if needed
         if self._mapping_array is not None:
@@ -71,7 +78,7 @@ class MSA:
             self.rkmers = [rkmer.remap(self._mapping_array) for rkmer in self.rkmers]  # type: ignore
             self.rkmers = [x for x in self.rkmers if x is not None]
 
-    def generate_primerpairs(self, cfg) -> None:
+    def generate_primerpairs(self, cfg: dict) -> None:
         self.primerpairs = generate_valid_primerpairs(
             self.fkmers,
             self.rkmers,

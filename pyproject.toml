@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "primalscheme3"
-version = "1.2.2"
+version = "1.1.0-alpha"
 description = ""
 authors = ["ChrisKent <chrisgkent@gmail.com>"]
 readme = "README.md"
@@ -11,7 +11,7 @@ primer3-py = "^1.2.2"
 biopython = "^1.80"
 Jinja2 = "^3.1.2"
 numpy = "^1.24.2"
-primaldimer_py = "1.0.1"
+primaldimer_py = "^1.0.1"
 networkx = "^3.1"
 loguru = "^0.7.0"
 kaleido = "0.2.1"

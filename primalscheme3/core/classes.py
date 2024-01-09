@@ -215,7 +215,7 @@ class PrimerPair:
         True means interaction
         """
         return do_pools_interact_py(
-            self.fprimer.seqs, self.rprimer.seqs, cfg["dimerscore"]
+            [*self.fprimer.seqs], [*self.rprimer.seqs], cfg["dimerscore"]
         )
 
     def all_seqs(self) -> list[str]:

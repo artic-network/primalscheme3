@@ -18,8 +18,9 @@ from primalscheme3.scheme.classes import Scheme, SchemeReturn, PrimerPair
 
 # Global imports
 from primalscheme3 import __version__
-from primalscheme3.create_reports import generate_plot
-from primalscheme3.create_report_data import generate_data
+from primalscheme3.core.create_reports import generate_plot
+from primalscheme3.core.create_report_data import generate_all_plotdata
+
 
 # Extental imports
 import hashlib
@@ -46,6 +47,10 @@ def schemereplace(args):
 
         cfg["amplicon_size_max"] = args.ampliconsizemax
         cfg["amplicon_size_min"] = args.ampliconsizemin
+
+    # Add the newer primer_max_walk to the config if not already there
+    if "primer_max_walk" not in cfg:
+        cfg["primer_max_walk"] = 100
 
     # If more than two pools are given throw error
     if cfg["npools"] > 2:
@@ -122,6 +127,7 @@ def schemereplace(args):
             wanted_pp.fprimer.end - cfg["amplicon_size_max"],
             wanted_pp.fprimer.end + cfg["amplicon_size_max"],
         )
+        if x >= 0
     ]
     rindexes = [
         x
@@ -129,10 +135,13 @@ def schemereplace(args):
             wanted_pp.rprimer.start - cfg["amplicon_size_max"],
             wanted_pp.rprimer.start + cfg["amplicon_size_max"],
         )
+        if x < len(msa.array[0])
     ]
 
+    print(f"Digesting MSA between {min(findexes)} and {max(rindexes)}")
     # Digest the MSA into FKmers and RKmers
     msa.digest(cfg, indexes=(findexes, rindexes))
+    print(f"Found {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
     msa.generate_primerpairs(cfg)
@@ -168,10 +177,10 @@ def schemereplace(args):
         and x.rprimer.start > cov_end + cfg["min_overlap"]
     ]
 
-    if not spanning_primerpairs:
+    if len(spanning_primerpairs) > 0:
+        print(f"Spanning amplicons found: {len(spanning_primerpairs)}")
+    else:
         raise ValueError(f"ERROR: No spanning primers found")
-
-    print(len(spanning_primerpairs))
 
     # Sort for number of primer pairs
     spanning_primerpairs.sort(key=lambda x: len(x.all_seqs()))
@@ -189,6 +198,7 @@ def schemereplace(args):
         if x.pool == wanted_pp.pool and x.msa_index == wanted_pp.msa_index
     ]
 
+    accepted_primerpairs = []
     for pos_primerpair in spanning_primerpairs:
         # Make sure the new primerpair doesnt contain the primers we want to replace
         if (
@@ -218,13 +228,15 @@ def schemereplace(args):
         ):
             continue
 
-        # primer passes!
-        print(
-            f"fprimer: {pos_primerpair.fprimer.end}\trprimer: {pos_primerpair.rprimer.start}"
-        )
-        print(pos_primerpair.__str__(msa._chrom_name, msa._uuid))
+        pos_primerpair.pool = wanted_pp.pool
+        pos_primerpair.amplicon_number = wanted_pp.amplicon_number
 
-    ## TODO check for clashes between the last primer in the same pool and the first primer in the spanning primer
+        accepted_primerpairs.append(pos_primerpair)
+
+    print(f"Found {len(accepted_primerpairs)} valid replacement amplicons")
+    for pp_number, pp in enumerate(accepted_primerpairs, 1):
+        print(f"Amplicon {pp_number}")
+        print(pp.__str__(wanted_pp.chromname, wanted_pp.ampliconprefix))
 
 
 def schemecreate(args):
@@ -234,7 +246,8 @@ def schemecreate(args):
     cfg = config_dict
 
     # Add version to config
-    cfg["algorithmversion"] = f"primaldigest:{__version__}"
+    cfg["algorithmversion"] = f"primalscheme3:{__version__}"
+    cfg["primerclass"] = "primerschemes"
     # Primer Digestion settings
     cfg["primer_gc_min"] = args.primer_gc_min
     cfg["primer_gc_max"] = args.primer_gc_max
@@ -365,6 +378,7 @@ def schemecreate(args):
             path=msa_path,
             msa_index=msa_index,
             mapping=cfg["mapping"],
+            logger=logger,
         )
 
         if "/" in msa._chrom_name:
@@ -577,8 +591,11 @@ def schemecreate(args):
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data
-    for msa in msa_dict.values():
-        generate_data(msa, OUTPUT_DIR / "work")
+    generate_all_plotdata(
+        list(msa_dict.values()),
+        OUTPUT_DIR / "work",
+        last_pp_added=scheme._last_pp_added,
+    )
 
     # Create the fancy plots
     if cfg["plot"]:

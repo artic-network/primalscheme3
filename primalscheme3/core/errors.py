@@ -30,6 +30,12 @@ class WalksOut(CustomErrors):
     pass
 
 
+class WalksTooFar(CustomErrors):
+    """Primer walks more than primer_max_walk"""
+
+    pass
+
+
 class CustomRecursionError(CustomErrors):
     """Walks out of the index of the MSA"""
 
@@ -42,4 +48,5 @@ ERROR_SET = {
     ContainsInvalidBase(),
     CustomErrors(),
     GapOnSetBase(),
+    WalksTooFar(),
 }

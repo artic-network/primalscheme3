@@ -1,7 +1,8 @@
 # Core imports
 from primalscheme3.core.config import config_dict
 from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.create_reports import generate_plot
+from primalscheme3.core.create_reports import generate_plot
+from primalscheme3.core.create_report_data import generate_all_plotdata
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.bedfiles import BedPrimerPair, read_in_bedprimerpairs
 from primalscheme3.core.logger import setup_loger
@@ -94,11 +95,16 @@ def panelcreate(args):
     cfg["maxamplicons"] = args.maxamplicons
 
     # Add the version
-    cfg["algorithmversion"] = f"primalpanel:{__version__}"
+    cfg["algorithmversion"] = f"primalscheme3:{__version__}"
+    cfg["primerclass"] = "primerpanels"
 
     # Enforce only one pool
     if args.npools != 1:
         sys.exit("ERROR: primalpanel only supports one pool")
+
+    # Enforce region only has a region bedfile
+    if args.mode == "region-only" and args.regionbedfile is None:
+        sys.exit("ERROR: region-only mode requires a region bedfile")
 
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir() and not args.force:
@@ -251,13 +257,13 @@ def panelcreate(args):
         )
 
         if args.mode == "all":
-            msa._untested_primerpairs.sort(
+            msa._primerpairs.sort(
                 key=lambda x: msa.get_pp_entropy(x) ** 2 / sqrt(len(x.all_seqs())),  # type: ignore
                 reverse=True,
             )
         if args.mode == "region-only":
             # Sort the primerpairs by the number of SNPs in the amplicon
-            msa._untested_primerpairs.sort(
+            msa._primerpairs.sort(
                 key=lambda pp: msa.get_pp_snp_score(pp),  # type: ignore
                 reverse=True,
             )
@@ -371,6 +377,8 @@ def panelcreate(args):
                 )
                 for x in x
             }
+            if msa.regions is None:
+                continue
             # See which regions are completely covered by the covered_positions
             for region in msa.regions:
                 all_regions = {x for x in range(region.start, region.stop)}
@@ -470,11 +478,6 @@ def panelcreate(args):
                 )
         SeqIO.write(reference_records, reference_outfile, "fasta")
 
-    # Create all the plots
-    if cfg["plot"]:
-        for msa in panel.msas:
-            generate_plot(msa, panel._pools, OUTPUT_DIR)
-
     # Generate all the hashes
     ## Generate the bedfile hash, and add it into the config
     primer_md5 = hashlib.md5("\n".join(primer_bed_str).encode()).hexdigest()
@@ -499,3 +502,10 @@ def panelcreate(args):
     cfg["inputbedfile"] = str(args.inputbedfile)
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
         outfile.write(json.dumps(cfg, sort_keys=True))
+
+    # Create all the plots
+    if cfg["plot"]:
+        generate_all_plotdata(panel.msas, OUTPUT_DIR / "work", panel._last_pp_added)
+
+        for msa in panel.msas:
+            generate_plot(msa, panel._pools, OUTPUT_DIR)
