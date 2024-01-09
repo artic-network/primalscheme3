@@ -10,6 +10,7 @@ from primalscheme3.__init__ import __version__
 from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
 from primalscheme3.panel.panel_main import panelcreate
 from primalscheme3.interaction.interaction import visulise_interactions
+from primalscheme3.repair.repair import repair
 
 ## Commands are in the format of
 # {pclass}-{mode}
@@ -56,7 +57,7 @@ def validate_scheme_create_args(args) -> None:
             f"ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
         )
 
-        # Check amplicon size
+    # Check amplicon size
     if args.ampliconsizemin >= args.ampliconsizemax:
         raise ValueError(
             f"ERROR: --ampliconsize min cannot be greater than max [100<=x<=2000]"
@@ -377,6 +378,34 @@ def cli():
     )
     interactions_parser.set_defaults(func=visulise_interactions)
 
+    ##############################
+    #   Parser for repair mode   #
+    ##############################
+    repair_parser = subparsers.add_parser(
+        "repair",
+        help="repair a primer scheme via adding more primers to account for new mutations",
+    )
+    repair_parser.add_argument(
+        "--bedfile", help="Path to the bedfile", type=pathlib.Path
+    )
+    repair_parser.add_argument(
+        "--msa",
+        help="An MSA, with the reference.fasta, aligned to any new genomes with mutations",
+        type=pathlib.Path,
+        required=True,
+    )
+    repair_parser.add_argument(
+        "--config", help="Path to the config.json", type=pathlib.Path, required=True
+    )
+    repair_parser.add_argument(
+        "-c",
+        "--cores",
+        help="The number of cores to use in Kmer digestion and thermo checking",
+        type=int,
+        default=1,
+    )
+    repair_parser.set_defaults(func=repair)
+
     args = global_parser.parse_args()
 
     # Validate some global args
@@ -397,7 +426,7 @@ def cli():
             f"ERROR: Output directory '{args.output}' already exists. Use --force to override"
         )
 
-    # Validate then run
+    # Run the functions
     if args.func == schemecreate:
         validate_scheme_create_args(args)
         schemecreate(args)
@@ -409,6 +438,8 @@ def cli():
         panelcreate(args)
     elif args.func == visulise_interactions:
         visulise_interactions(args)
+    elif args.func == repair:
+        repair(args)
 
 
 if __name__ == "__main__":
