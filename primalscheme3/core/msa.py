@@ -22,7 +22,7 @@ def msa_qc(array: np.ndarray):
     for col_index in range(0, array.shape[1]):
         slice: set[str] = set(array[:, col_index])
         if slice.issubset(empty_set):
-            raise ValueError(f"MSA contains empty columns at colum: {col_index}")
+            raise ValueError(f"MSA contains empty column at: {col_index}")
 
 
 class MSA:
@@ -109,3 +109,7 @@ class MSA:
             cfg,
             self.msa_index,
         )
+        # Update primerpairs to include the chrom_name and amplicon_prefix
+        for primerpair in self.primerpairs:
+            primerpair.chrom_name = self._chrom_name
+            primerpair.amplicon_prefix = self._uuid
