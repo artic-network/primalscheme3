@@ -3,12 +3,12 @@ import pathlib
 import gzip
 from itertools import groupby
 from operator import itemgetter
+import numpy as np
 
 # Module imports
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.seq_functions import entropy_score_array
-from primalscheme3.core.create_reports import calc_gc, calc_occupancy, reduce_data
 
 # Panel imports
 from primalscheme3.panel.minimal_scheme_classes import PanelMSA
@@ -18,6 +18,54 @@ from primalscheme3.panel.minimal_scheme_classes import PanelMSA
 # plot2 Base occupancy + genome gc
 # plot3: Entropy plot
 # plot4: Thermo pass Fkmer and Rkmer plot
+
+
+def calc_occupancy(align_array) -> list[tuple[int, float]]:
+    results = []
+    # Calculate the base proportions
+    for index, column in enumerate(align_array.T):
+        gaps = np.count_nonzero(column == "-")
+        gaps += np.count_nonzero(column == "")
+        results.append((index, 1 - (gaps / len(column))))
+    return reduce_data(results)
+
+
+def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
+    results = []
+    # Calculate the base proportions
+    for col_index in range(0, align_array.shape[1] - kmer_size, 15):
+        slice = align_array[:, col_index : col_index + kmer_size]
+        ng = np.count_nonzero(slice == "G")
+        nc = np.count_nonzero(slice == "C")
+
+        n_invalid = np.count_nonzero(slice == "-")
+        gc_prop = round((ng + nc) / ((len(slice) * kmer_size) - n_invalid), 2)
+
+        results.append((col_index, gc_prop))
+    return reduce_data(results)
+
+
+def reduce_data(results: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """
+    Reduce the size of data by merging consecutive points
+    """
+    reduced_results = []
+    for iindex, (index, oc) in enumerate(results):
+        # Add first point
+        if iindex == 0:
+            reduced_results.append((index, oc))
+            continue
+        # Add the last point
+        if iindex == len(results) - 1:
+            reduced_results.append((index, oc))
+            continue
+
+        # If the previous point is the same, and the next point is the same
+        if results[iindex - 1][1] == oc and results[iindex + 1][1] == oc:
+            continue
+        else:
+            reduced_results.append((index, oc))
+    return reduced_results
 
 
 def generate_uncovered_data(length, primerpairs: list[PrimerPair]) -> dict[int, int]:
@@ -165,7 +213,7 @@ def generate_all_plotdata(
     # Write all data to a single json file
     data = dict()
     for msa in msas:
-        data[msa.name] = generate_data(msa, last_pp_added)
+        data[msa._chrom_name] = generate_data(msa, last_pp_added)
 
     # Write the data to a json file
     json_bytes = json.dumps(data, sort_keys=True).encode("utf-8")
