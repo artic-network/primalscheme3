@@ -1,7 +1,10 @@
+from io import TextIOWrapper
 import pathlib
 from itertools import groupby
 import sys
 import re
+
+import csv
 
 # Module imports
 from primalscheme3.core.seq_functions import expand_ambs
@@ -116,41 +119,42 @@ class BedLine:
         return f"{self.ref}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
 
 
-def read_in_bedlines(path: pathlib.Path) -> list[BedLine]:
+def read_in_bedlines(path: pathlib.Path) -> tuple[list[BedLine], list[str]]:
     """
     Read in bedlines from a file.
 
     :param path: The path to the bed file.
     :type path: pathlib.Path
     :return: A list of BedLine objects.
-    :rtype: list[BedLine]
+    :rtype: tuple(list[BedLine], list[str])
     """
-    bed_primers = []
+    bed_primers: list[BedLine] = []
+    bed_headers: list[str] = []
     with open(path, "r") as bedfile:
         for line in bedfile.readlines():
-            if line:
+            if not line:  # Skip empty lines
+                continue
+            elif line.startswith("#"):  # Store header lines
+                bed_headers.append(line.strip())
+            else:  # Store primer lines
                 line = line.strip().split()
                 bed_primers.append(BedLine(line))
-    return bed_primers
+    return (bed_primers, bed_headers)
 
 
 def read_in_bedprimerpairs(path: pathlib.Path) -> list[BedPrimerPair]:
     """
     Read in a bedfile and return a list of BedPrimerPairs, MSA index is set to None as it is not known at this point
     """
+
     # Read in the bedfile
-    primerpairs: list[BedPrimerPair] = []
-    with open(path, "r") as primerbedfile:
-        # Read in the raw primer data
-        bed_lines: list[BedLine] = []
-        for line in primerbedfile.readlines():
-            line = line.strip().split()
-            bed_lines.append(BedLine(line))
+    primerpairs = []
+    primerlines, _headers = read_in_bedlines(path)  # Ignore headers for now
 
     # Group primers by referance
     ref_to_bedlines: dict[str, list[BedLine]] = dict()
-    for ref in {bedline.ref for bedline in bed_lines}:
-        ref_to_bedlines[ref] = [x for x in bed_lines if x.ref == ref]
+    for ref in {bedline.ref for bedline in primerlines}:
+        ref_to_bedlines[ref] = [x for x in primerlines if x.ref == ref]
 
     for ref, ref_bed_lines in ref_to_bedlines.items():
         # Group the bedlines by amplicon number
