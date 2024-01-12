@@ -287,7 +287,8 @@ def panelcreate(args):
 
     # Read in the inputbedfile if given
     if args.inputbedfile is not None:
-        for bedprimerpair in read_in_bedprimerpairs(args.inputbedfile):
+        bedprimerpairs, _headers = read_in_bedprimerpairs(args.inputbedfile)
+        for bedprimerpair in bedprimerpairs:
             # Add the primerpair into the panel, with a fake msaindex
             panel._add_primerpair(bedprimerpair, pool=bedprimerpair.pool, msa_index=-1)
 
@@ -409,41 +410,14 @@ def panelcreate(args):
     )
     # Write primer bed file
     with open(OUTPUT_DIR / f"primer.bed", "w") as outfile:
-        primer_bed_str = []
-        for pp in panel._last_pp_added:
-            # If there is an corrasponding msa
-            ## Primers parsed in via bed do not have an msa_index
-            if msa := msa_dict.get(pp.msa_index):
-                chrom_name = msa._chrom_name
-                primer_prefix = msa._uuid
-
-                st = pp.__str__(
-                    chrom_name,
-                    primer_prefix,
-                )
-            else:
-                # This Chrom name is not used in the bedfile
-                # As Bedprimerpairs have there own name/prefix
-                chrom_name = "scheme"
-                primer_prefix = "scheme"
-                st = pp.__str__(chrom_name, primer_prefix)
-
-            primer_bed_str.append(st.strip())
+        primer_bed_str = panel.to_bed(headers=None)
         outfile.write("\n".join(primer_bed_str))
 
     # Write out the amplcion bed file
     with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
         amp_bed_str = []
         for pp in panel._last_pp_added:
-            if msa := msa_dict.get(pp.msa_index):
-                chrom_name = msa._chrom_name
-                primer_prefix = msa._uuid
-            else:
-                chrom_name = "scheme"
-                primer_prefix = "scheme"
-
             region_list = []
-
             for regions in msa_name_to_regions.get(
                 msa_index_to_name.get(pp.msa_index, -1), []
             ):
@@ -453,7 +427,7 @@ def panelcreate(args):
             regions_str = "\t".join(region_list)
 
             amp_bed_str.append(
-                f"{chrom_name}\t{pp.start}\t{pp.end}\t{primer_prefix}_{pp.amplicon_number}\t{pp.pool + 1}\t{regions_str}"
+                f"{pp.chrom_name}\t{pp.start}\t{pp.end}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}\t{regions_str}"
             )
         outfile.write("\n".join(amp_bed_str))
 

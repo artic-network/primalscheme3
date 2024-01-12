@@ -102,11 +102,11 @@ def visulise_interactions(args) -> None:
     threshold = args.threshold
 
     # Read in the bedfile
-    bedfile = read_in_bedlines(bedpath)
+    bedlines, header = read_in_bedlines(bedpath)
 
     # Split the bedfile into pools
-    pools = [[] for _ in {bedline.pool for bedline in bedfile}]
-    for bedline in bedfile:
+    pools = [[] for _ in {bedline.pool for bedline in bedlines}]
+    for bedline in bedlines:
         pools[bedline.pool].append(bedline)
 
     # Loop over the pools

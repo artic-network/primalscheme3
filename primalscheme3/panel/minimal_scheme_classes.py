@@ -394,13 +394,3 @@ class Panel(Multiplex):
             return PanelReturn.NO_MORE_PRIMERPAIRS_IN_MSA
         else:
             return PanelReturn.NO_PRIMERPAIRS
-
-    def to_bed(self, ref_name: str, amplicon_prefix: str) -> str:
-        """
-        Returns a bedfile of the current pool
-        """
-        bed = ""
-        for pool in range(self.n_pools):
-            for pp in self._pools[pool]:
-                bed += pp.to_bed(ref_name, amplicon_prefix)
-        return bed
