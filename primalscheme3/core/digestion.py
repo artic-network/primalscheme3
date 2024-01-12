@@ -169,7 +169,7 @@ def walk_right(
         return {seq_str}
 
     # Guard prevents walking out of array size
-    if col_index_right >= array.shape[1] - 1:
+    if col_index_right >= array.shape[1] - 1 or col_index_left >= array.shape[1] - 1:
         raise WalksOut()
 
     # Guard for walking too far
@@ -237,7 +237,7 @@ def walk_left(
     """
 
     # Guard prevents walking out of array size
-    if col_index_left <= 0:
+    if col_index_left <= 0 or col_index_right <= 0:
         raise WalksOut()
 
     # Guard for correct tm
@@ -299,8 +299,10 @@ def wrap_walk(
             seq_str=seq_str,
             cfg=cfg,
         )
-    except Exception as e:
+    except CustomErrors as e:
         return_list.append(e)
+    except Exception as e:
+        raise e
     else:
         return_list.extend(seqs)
 
@@ -472,7 +474,6 @@ def mp_f_digest(
     # Thermo check the kmers
     if not thermo_check_kmers(wanted_seqs, cfg):
         return (end_col, DIGESTION_ERROR.THERMO_FAIL)
-
     if forms_hairpin(wanted_seqs, cfg=cfg):
         return (end_col, DIGESTION_ERROR.HAIRPIN_FAIL)
 
