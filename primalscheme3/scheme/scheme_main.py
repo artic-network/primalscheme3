@@ -17,9 +17,11 @@ from primalscheme3.core.logger import setup_loger
 from primalscheme3.scheme.classes import Scheme, SchemeReturn, PrimerPair
 
 # Global imports
-from primalscheme3 import __version__
-from primalscheme3.core.create_reports import generate_plot
-from primalscheme3.core.create_report_data import generate_all_plotdata
+from primalscheme3.__init__ import __version__
+from primalscheme3.core.create_reports import generate_all_plots
+from primalscheme3.core.create_report_data import (
+    generate_all_plotdata,
+)
 
 
 # Extental imports
@@ -591,13 +593,9 @@ def schemecreate(args):
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data
-    generate_all_plotdata(
+    plot_data = generate_all_plotdata(
         list(msa_dict.values()),
         OUTPUT_DIR / "work",
         last_pp_added=scheme._last_pp_added,
     )
-
-    # Create the fancy plots
-    if cfg["plot"]:
-        for msa in msa_dict.values():
-            generate_plot(msa, scheme._pools, OUTPUT_DIR)
+    generate_all_plots(plot_data, OUTPUT_DIR)
