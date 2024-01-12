@@ -160,8 +160,18 @@ class PrimerPair:
     amplicon_number: int
     pool: int
     msa_index: int
+    chrom_name: str | None
+    amplicon_prefix: str | None
 
-    __slots__ = ["fprimer", "rprimer", "amplicon_number", "pool", "msa_index"]
+    __slots__ = [
+        "fprimer",
+        "rprimer",
+        "amplicon_number",
+        "pool",
+        "msa_index",
+        "chrom_name",
+        "amplicon_prefix",
+    ]
 
     def __init__(
         self,
@@ -176,6 +186,8 @@ class PrimerPair:
         self.amplicon_number = amplicon_number
         self.pool = pool
         self.msa_index = msa_index
+        self.chrom_name = None
+        self.amplicon_prefix = None
 
     def set_amplicon_number(self, amplicon_number) -> None:
         self.amplicon_number = amplicon_number
@@ -238,30 +250,22 @@ class PrimerPair:
         else:
             return False
 
-    def to_bed(self, chromname: str, amplicon_prefix: str) -> str:
+    def to_bed(self) -> str:
         """
         Turns the primerpair into a string for a bed file
         :param chromname: name of the chromosome
         :param amplicon_prefix: prefix for the amplicon
         :return: string for the bed file
         """
-        return self.fprimer.__str__(
-            reference=f"{chromname}",
-            amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
-            pool=self.pool + 1,
-        ) + self.rprimer.__str__(
-            reference=f"{chromname}",
-            amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
-            pool=self.pool + 1,
-        )
+        return self.__str__()
 
-    def __str__(self, ref_name, amplicon_prefix):
+    def __str__(self):
         return self.fprimer.__str__(
-            reference=f"{ref_name}",
-            amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
+            reference=f"{self.chrom_name}",
+            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number}",
             pool=self.pool + 1,
         ) + self.rprimer.__str__(
-            reference=f"{ref_name}",
-            amplicon_prefix=f"{amplicon_prefix}_{self.amplicon_number}",
+            reference=f"{self.chrom_name}",
+            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number}",
             pool=self.pool + 1,
         )
