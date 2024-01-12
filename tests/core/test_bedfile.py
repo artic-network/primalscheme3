@@ -70,11 +70,13 @@ class Test_ReadInBedlines(unittest.TestCase):
         """
         input_path = pathlib.Path("tests/core/test_primer.bed").absolute()
 
-        bedlines = read_in_bedlines(input_path)
+        bedlines, _headers = read_in_bedlines(input_path)
 
         first_bedline = bedlines[0]
         # Check all primers were read in
         self.assertEqual(len(bedlines), 160)
+        # Check empty headers
+        self.assertEqual(_headers, [])
 
         # Check the first line matches the expected output
         self.assertEqual(
@@ -92,6 +94,27 @@ class Test_ReadInBedlines(unittest.TestCase):
             first_bedline.sequence,
             "GTAACAAACCAACCAACTTTCGATCTC",
         )
+
+    def test_readin_header(self):
+        """
+        Test that a bedline with header can be read in correctly
+
+        First bedline in test_primer.bed:
+        #header
+        # version 2.0 primer.bed
+        MN908947.3	23	50	50dcc73b_0_LEFT_0	1	+	GTAACAAACCAACCAACTTTCGATCTC
+
+        160 lines in test_primer.bed
+        """
+        input_path = pathlib.Path("tests/core/test_primer_header.bed").absolute()
+
+        bedlines, headers = read_in_bedlines(input_path)
+
+        # Check all primers were read in
+        self.assertEqual(headers, ["#header", "# version 2.0 primer.bed"])
+
+        # Check the first line matches the expected output
+        self.assertEqual(len(bedlines), 160)
 
 
 if __name__ == "__main__":
