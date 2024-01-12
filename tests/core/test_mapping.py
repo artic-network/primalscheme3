@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import pathlib
 
 from primalscheme3.core.mapping import trucnate_msa, create_mapping, generate_consensus
 
@@ -93,7 +94,6 @@ class Test_CreateMapping(unittest.TestCase):
 
         test_input = self.input.copy()
         mapping_array, trunc_msa = create_mapping(test_input, 0)
-
         # Check the result is as expected
         self.assertEqual(
             list(mapping_array),
@@ -142,3 +142,7 @@ class Test_GenerateConsensus(unittest.TestCase):
         expected_answer = "TTTATCTATTTCAGCACTG"
         result = generate_consensus(input)
         self.assertEqual(result, expected_answer)
+
+
+if __name__ == "__main__":
+    unittest.main()
