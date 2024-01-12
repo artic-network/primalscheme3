@@ -1,10 +1,10 @@
 # Core imports
 from primalscheme3.core.config import config_dict
 from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.create_reports import generate_plot
+from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.create_report_data import generate_all_plotdata
 from primalscheme3.core.mapping import generate_consensus, generate_reference
-from primalscheme3.core.bedfiles import BedPrimerPair, read_in_bedprimerpairs
+from primalscheme3.core.bedfiles import read_in_bedprimerpairs
 from primalscheme3.core.logger import setup_loger
 
 # version import
@@ -503,9 +503,11 @@ def panelcreate(args):
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
         outfile.write(json.dumps(cfg, sort_keys=True))
 
-    # Create all the plots
-    if cfg["plot"]:
-        generate_all_plotdata(panel.msas, OUTPUT_DIR / "work", panel._last_pp_added)
-
-        for msa in panel.msas:
-            generate_plot(msa, panel._pools, OUTPUT_DIR)
+    ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
+    # Writing plot data
+    plot_data = generate_all_plotdata(
+        list(msa_dict.values()),
+        OUTPUT_DIR / "work",
+        last_pp_added=panel._last_pp_added,
+    )
+    generate_all_plots(plot_data, OUTPUT_DIR)
