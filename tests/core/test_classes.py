@@ -177,10 +177,12 @@ class Test_PrimerPair(unittest.TestCase):
         expected_refname = "reference"
         expected_amplicon_prefix = "amplicon"
 
-        expected_str = f"{expected_refname}\t85\t100\t{expected_amplicon_prefix}_0_LEFT_0\t{expected_pool}\t+\tACTAGCTAGCTAGCA\n{expected_refname}\t1000\t1012\t{expected_amplicon_prefix}_0_RIGHT_0\t{expected_pool}\t-\tATCGATCGGTAC\n"
-        print(primerpair.to_bed(expected_refname, expected_amplicon_prefix))
+        primerpair.chrom_name = expected_refname
+        primerpair.amplicon_prefix = expected_amplicon_prefix
 
-        self.assertEqual(primerpair.to_bed("reference", "amplicon"), expected_str)
+        expected_str = f"{expected_refname}\t85\t100\t{expected_amplicon_prefix}_0_LEFT_0\t{expected_pool}\t+\tACTAGCTAGCTAGCA\n{expected_refname}\t1000\t1012\t{expected_amplicon_prefix}_0_RIGHT_0\t{expected_pool}\t-\tATCGATCGGTAC\n"
+
+        self.assertEqual(primerpair.to_bed(), expected_str)
 
 
 if __name__ == "__main__":
