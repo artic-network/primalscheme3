@@ -410,7 +410,7 @@ def panelcreate(args):
     )
     # Write primer bed file
     with open(OUTPUT_DIR / f"primer.bed", "w") as outfile:
-        primer_bed_str = panel.to_bed(headers=None)
+        primer_bed_str = panel.to_bed()
         outfile.write("\n".join(primer_bed_str))
 
     # Write out the amplcion bed file

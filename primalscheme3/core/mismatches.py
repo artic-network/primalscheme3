@@ -38,7 +38,7 @@ class MatchDB:
         match_bstr = f"{match[0]};{match[1]}".encode()
 
         if db_bstr := self.db.get(sequence):
-            bmatches = {x for x in db_bstr.split(b"*")}
+            bmatches = {*db_bstr.split(b"*")}
 
             # If the new match bstr is not already in db
             if match_bstr not in bmatches:
@@ -50,7 +50,7 @@ class MatchDB:
     def read_matches(self, sequence) -> list[list]:
         parsed_matches = []
         if db_string := self.db.get(sequence):
-            matches = [bmatch for bmatch in db_string.split(b"*")]
+            matches = [*db_string.split(b"*")]
 
             for match in matches:
                 d = match.split(b";")

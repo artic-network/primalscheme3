@@ -11,6 +11,7 @@ from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
 from primalscheme3.panel.panel_main import panelcreate
 from primalscheme3.interaction.interaction import visulise_interactions
 from primalscheme3.repair.repair import repair
+from primalscheme3.flu.flu_main import create_flu
 
 ## Commands are in the format of
 # {pclass}-{mode}
@@ -420,13 +421,30 @@ def cli():
             f"ERROR: --primer_tm_max ({args.primer_tm_max}) cannot be smaller than --primer_tm_min ({args.primer_tm_min})"
         )
 
+    ############################
+    #   Parser for flu mode   #
+    ############################
+
+    flu_parser = subparsers.add_parser(
+        "flu",
+        help="create a flu panel",
+    )
+    flu_parser.add_argument("--bedfile", help="Path to the bedfile", type=pathlib.Path)
+    flu_parser.add_argument(
+        "--msa",
+        help="An MSA, with the reference.fasta, aligned to any new genomes with mutations",
+        type=pathlib.Path,
+        required=True,
+        nargs="+",
+    )
+    flu_parser.set_defaults(func=create_flu)
+
     # if output directory exists and force is not set
     if pathlib.Path(args.output).is_dir() and not args.force:
         raise ValueError(
             f"ERROR: Output directory '{args.output}' already exists. Use --force to override"
         )
 
-    # Run the functions
     if args.func == schemecreate:
         validate_scheme_create_args(args)
         schemecreate(args)
@@ -440,6 +458,10 @@ def cli():
         visulise_interactions(args)
     elif args.func == repair:
         repair(args)
+    elif args.func == create_flu:
+        create_flu(args)
+    else:
+        raise ValueError(f"ERROR: No function found for {args.func}")
 
 
 if __name__ == "__main__":

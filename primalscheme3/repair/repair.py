@@ -6,8 +6,70 @@ import sys
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.bedfiles import read_in_bedprimerpairs
 from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.digestion import (
+    f_digest_to_count,
+    r_digest_to_count,
+    process_seqs,
+    DIGESTION_ERROR,
+)
+from primalscheme3.core.thermo import (
+    forms_hairpin,
+    thermo_check_kmers,
+)
+from primalscheme3.core.classes import FKmer, RKmer
 
 from primaldimer_py import do_pools_interact_py  # type: ignore
+
+
+class FKmerFixer:
+    stop: int
+    seqs: set[str]
+    new_seqs: set[str]
+    new_seqs_scores: dict[str, tuple[int, str | DIGESTION_ERROR]]
+
+    def __init__(
+        self,
+        end: int,
+        seqs: set[str],
+        new_seqs: set[str],
+        new_seqs_scores: dict[str, tuple[int, str | DIGESTION_ERROR]],
+    ) -> None:
+        self.seqs = seqs
+        self.end = end
+        self.new_seqs = new_seqs
+        self.new_seqs_scores = new_seqs_scores
+
+    def add_seq(self, seq: str) -> None:
+        # Moves a seq from new_seqs to seq
+        self.new_seqs.remove(seq)
+        self.new_seqs_scores.pop(seq)
+
+        self.seqs.add(seq)
+
+
+class RKmerFixer:
+    start: int
+    seqs: set[str]
+    new_seqs: set[str]
+    new_seqs_scores: dict[str, tuple[int, str | DIGESTION_ERROR]]
+
+    def __init__(
+        self,
+        start: int,
+        seqs: set[str],
+        new_seqs_scores: dict[str, tuple[int, str | DIGESTION_ERROR]],
+    ) -> None:
+        self.seqs = seqs
+        self.start = start
+        self.new_seqs = set()
+        self.new_seqs_scores = new_seqs_scores
+
+    def add_seq(self, seq: str) -> None:
+        # Moves a seq from new_seqs to seq
+        self.new_seqs.remove(seq)
+        self.new_seqs_scores.pop(seq)
+
+        self.seqs.add(seq)
 
 
 def repair(args):
@@ -21,6 +83,7 @@ def repair(args):
     base_cfg["n_cores"] = args.cores  # Overwrite the number of cores
     base_cfg["output_dir"] = str(OUTPUT_DIR)
     base_cfg["primer_max_walk"] = 50
+    base_cfg["primer_hairpin_th_max"] = 49.5
 
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir() and not args.force:
@@ -58,35 +121,104 @@ def repair(args):
     )
 
     # Read in the bedfile
-    all_primerpairs = read_in_bedprimerpairs(args.bedfile)
+    all_primerpairs, _header = read_in_bedprimerpairs(args.bedfile)
 
     # Get the primerpairs for this new MSA
     primerpairs_in_msa = [
-        pp for pp in all_primerpairs if pp.chromname == msa._chrom_name
+        pp for pp in all_primerpairs if pp.chrom_name == msa._chrom_name
     ]
     if len(primerpairs_in_msa) == 0:
         raise ValueError(
             f"No primerpairs found for {msa._chrom_name} in {args.bedfile}"
         )
 
-    # Digest the MSA
-    # Go lower to ensure digestion products are always returned even if error
-    msa.digest(
-        base_cfg,
-        indexes=(
-            [x.fprimer.end for x in primerpairs_in_msa],
-            [x.rprimer.start for x in primerpairs_in_msa],
-        ),
-    )
+    # Find the indexes in the MSA that the primerbed refere to
+    fkmer_ends = {x.fprimer.end for x in primerpairs_in_msa}
+    rkmer_starts = {x.rprimer.start for x in primerpairs_in_msa}
+    assert msa._mapping_array is not None
+    mapping_list = list(msa._mapping_array)
+    mapped_fkmer_ends = {mapping_list.index(fkmer_end) for fkmer_end in fkmer_ends}
+    mapped_rkmer_starts = {
+        mapping_list.index(rkmer_start) for rkmer_start in rkmer_starts
+    }
+    # Go lower into digestion process so we can extract the Seqs/Errors and there counts
+    # For Fkmers
 
-    # Test
-    from primalscheme3.core.digestion import (
-        mp_f_digest,
-        mp_r_digest,
-        walk_left,
-        wrap_walk,
-    )
-    from primalscheme3.core.thermo import calc_tm, thermo_check_kmers, forms_hairpin
+    repair_fkmers: list[FKmerFixer] = []
+    for mapped_fkmer_end in mapped_fkmer_ends:
+        errored = False
+        _end_col, seq_counts = f_digest_to_count(
+            (msa.array, base_cfg, mapped_fkmer_end, base_cfg["minbasefreq"])
+        )
+        # Check for early return conditions
+        for error, count in seq_counts.items():
+            if count == -1 and type(error) == DIGESTION_ERROR:
+                errored = True
+                print(f"errored: {error} {count}")
+                break
+        if errored:
+            continue
+
+        # Thermo check each sequence
+        thermo_status = dict()
+        for seq, count in seq_counts.items():
+            # Thermo check
+            if not thermo_check_kmers([seq], base_cfg):  # type: ignore
+                thermo_status[seq] = DIGESTION_ERROR.THERMO_FAIL
+                continue
+
+            # Check for hairpins
+            elif forms_hairpin([seq], base_cfg):  # type: ignore
+                thermo_status[seq] = DIGESTION_ERROR.HAIRPIN_FAIL
+                continue
+
+            # Check for dimer
+            if do_pools_interact_py([seq], [seq], base_cfg["dimerscore"]):
+                thermo_status[seq] = DIGESTION_ERROR.DIMER_FAIL
+                continue
+
+            thermo_status[seq] = "PASS"
+
+        print(_end_col)
+        fkmer = [
+            x.fprimer
+            for x in primerpairs_in_msa
+            if x.fprimer.end == msa._mapping_array[mapped_fkmer_end]
+        ][0]
+        fkmer_fixer = FKmerFixer(
+            end=fkmer.end,
+            seqs=fkmer.seqs,
+            new_seqs={seq for seq in seq_counts.keys() if seq not in fkmer.seqs},  # type: ignore
+            new_seqs_scores={seq: (count, thermo_status[seq]) for seq, count in seq_counts.items() if seq not in fkmer.seqs},  # type: ignore
+        )
+
+        print(len(fkmer_fixer.new_seqs_scores))
+        print(len(fkmer_fixer.seqs))
+
+        fkmer_fixer.add_seq([x for x in fkmer_fixer.new_seqs_scores.keys()][0])
+
+        print(len(fkmer_fixer.new_seqs_scores))
+        print(len(fkmer_fixer.seqs))
+
+    exit()
+    # Digest the MSA
+    msa.digest(base_cfg)
+
+    # Go lower to ensure digestion products are always returned even if error
+
+    # Create a mapping array to map the msa to the digestion products
+
+    # Get Fkmers that match the input scheme
+    wanted_fkmer_ends = {x.fprimer.end for x in primerpairs_in_msa}
+    new_fkmers = [fkmer for fkmer in msa.fkmers if fkmer.end in wanted_fkmer_ends]
+    # Get Rkmers that match the input scheme
+    wanted_rkmer_starts = {x.rprimer.start for x in primerpairs_in_msa}
+    new_rkmers = [rkmer for rkmer in msa.rkmers if rkmer.start in wanted_rkmer_starts]
+
+    print(len(new_fkmers), len(new_rkmers))
+    print(new_fkmers[0].seqs)
+    print(new_fkmers[0].end)
+    exit()
 
     for x in primerpairs_in_msa:
         total_col_seqs = set()
@@ -108,7 +240,6 @@ def repair(args):
             )
             total_col_seqs.update(results)
         # Thermo check each sequence
-        print(x.fprimer.end, total_col_seqs)
 
         seqs_results = {}
         for seq in total_col_seqs:
@@ -127,7 +258,7 @@ def repair(args):
                 continue
             # Check for dimer
             if do_pools_interact_py([seq], [seq], base_cfg["dimerscore"]):
-                seqs_results[seq] = "FAIL_DIMER"
+                seqs_results[seq] = "FAIL_HOMODIMER"
                 continue
 
         print(seqs_results)
@@ -164,8 +295,8 @@ def repair(args):
             ):
                 logger.warning(
                     "<red>WARNING</>: Interaction detected for new fprimer {pp_chromname}:{pp_ampliconprefix}:{pp_amplicon_number}",
-                    pp_chromname=pp.chromname,
-                    pp_ampliconprefix=pp.ampliconprefix,
+                    pp_chromname=pp.chrom_name,
+                    pp_ampliconprefix=pp.amplicon_prefix,
                     pp_amplicon_number=pp.amplicon_number,
                 )
                 raise ValueError()
@@ -177,8 +308,8 @@ def repair(args):
             seqs_in_pools[pp.pool].extend(new_fprimer_seqs)
             logger.info(
                 "Added new seqs {seqs} to <green>fprimer</> {pp_chromname}:{pp_ampliconprefix}:{pp_amplicon_number}",
-                pp_chromname=pp.chromname,
-                pp_ampliconprefix=pp.ampliconprefix,
+                pp_chromname=pp.chrom_name,
+                pp_ampliconprefix=pp.amplicon_prefix,
                 pp_amplicon_number=pp.amplicon_number,
                 seqs=",".join(new_fprimer_seqs),
             )
@@ -187,7 +318,7 @@ def repair(args):
         new_rprimer = [rkmer for rkmer in msa.rkmers if rkmer.start == pp.rprimer.start]
         if len(new_rprimer) != 1:
             raise ValueError(
-                f"Could not find a new rprimer for {pp.chromname}:{pp.ampliconprefix}:{pp.amplicon_number}:RIGHT"
+                f"Could not find a new rprimer for {pp.chrom_name}:{pp.amplicon_prefix}:{pp.amplicon_number}:RIGHT"
             )
         new_rprimer_seqs = new_rprimer[0].seqs.difference(pp.rprimer.seqs)
         # If new seqs run the interaction checker
@@ -198,8 +329,8 @@ def repair(args):
             ):
                 logger.warning(
                     "<red>WARNING</>: Interaction detected for new rprimer {pp_chromname}:{pp_ampliconprefix}:{pp_amplicon_number}",
-                    pp_chromname=pp.chromname,
-                    pp_ampliconprefix=pp.ampliconprefix,
+                    pp_chromname=pp.chrom_name,
+                    pp_ampliconprefix=pp.amplicon_prefix,
                     pp_amplicon_number=pp.amplicon_number,
                 )
                 raise ValueError()
@@ -211,8 +342,8 @@ def repair(args):
             seqs_in_pools[pp.pool].extend(new_rprimer_seqs)
             logger.info(
                 "Added new seqs {seqs} to <green>rprimer</> {pp_chromname}:{pp_ampliconprefix}:{pp_amplicon_number}",
-                pp_chromname=pp.chromname,
-                pp_ampliconprefix=pp.ampliconprefix,
+                pp_chromname=pp.chrom_name,
+                pp_ampliconprefix=pp.amplicon_prefix,
                 pp_amplicon_number=pp.amplicon_number,
                 seqs=",".join(new_rprimer_seqs),
             )

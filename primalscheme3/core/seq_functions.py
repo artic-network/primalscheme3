@@ -4,6 +4,8 @@ import numpy as np
 from collections import Counter
 from math import log2
 
+from numba import jit
+
 # Module Imports
 from primalscheme3.core.config import (
     ALL_DNA,
@@ -54,7 +56,7 @@ def expand_ambs(seqs: Iterable[str]) -> set[str] | None:
     returned_seq = set()
 
     for seq in seqs:
-        bases = {base for base in seq}
+        bases = {*seq}
 
         # if invalid bases are in sequence return None
         if not bases.issubset(ALL_BASES):
@@ -72,7 +74,7 @@ def expand_ambs(seqs: Iterable[str]) -> set[str] | None:
 
 def extend_ambiguous_base(base: str) -> list[str]:
     """Return list of all possible sequences given an ambiguous DNA input"""
-    return [x for x in ALL_DNA.get(base, "N")]
+    return [*ALL_DNA.get(base, "N")]
 
 
 def calc_entropy(probs: list[float]) -> float:
