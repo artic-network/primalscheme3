@@ -143,7 +143,7 @@ class Multiplex:
 
     def to_bed(
         self,
-        headers: list[str] | None = None,
+        headers: list[str] | None = ["# artic-bed-version v3.0"],
     ) -> str:
         """
         Returns the multiplex as a bed file

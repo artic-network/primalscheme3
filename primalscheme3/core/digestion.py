@@ -44,7 +44,7 @@ class DIGESTION_ERROR(Enum):
     AMB_FAIL = "AmbFail"  # Generic error for when the error is unknown
 
 
-def parse_error(results: set) -> DIGESTION_ERROR:
+def parse_error(results: set[CustomErrors | str]) -> DIGESTION_ERROR:
     """
     Parses the error set for the error that occured
     As only one error is returned, there is an arbitrary heirarchy of errors
@@ -64,6 +64,21 @@ def parse_error(results: set) -> DIGESTION_ERROR:
         return DIGESTION_ERROR.WALK_TO_FAR
     else:  # Return a generic error
         return DIGESTION_ERROR.AMB_FAIL
+
+
+def parse_error_list(
+    error_list: list[str | CustomErrors],
+) -> list[str | DIGESTION_ERROR]:
+    """
+    Parses a list of errors and returns a list of DIGESTION_ERROR
+    """
+    return_list = []
+    for result in error_list:
+        if type(result) == str:
+            return_list.append(result)
+        elif type(result) == CustomErrors:
+            return_list.append(parse_error({result}))
+    return return_list
 
 
 def _mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
@@ -288,7 +303,7 @@ def wrap_walk(
     row_index: int,
     seq_str: str,
     cfg: dict,
-) -> list[str | Exception]:
+) -> list[str | CustomErrors]:
     return_list = []
     try:
         seqs = walkfunction(
@@ -309,39 +324,40 @@ def wrap_walk(
     return return_list
 
 
-def mp_r_digest(
+def r_digest_to_count(
     data: tuple[np.ndarray, dict, int, float]
-) -> RKmer | tuple[int, DIGESTION_ERROR]:
+) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
-    This will try and create a RKmer started at the given index
-    :data: A tuple of (align_array, cfg, start_col, min_freq)
-    :return: A RKmer object or a tuple of (start_col, error)
+    Returns the count of each sequence / error at a given index
+
+    A value of -1 in the return dict means the function returned early, and not all seqs were counted
     """
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
     start_col: int = data[2]
     min_freq: float = data[3]
 
+    ### Process early return conditions
+    # If the initial slice is outside the range of the array
+    if start_col + cfg["primer_size_min"] >= align_array.shape[1]:
+        return (start_col, {DIGESTION_ERROR.WALKS_OUT: -1})
+
     # Check for gap frequency on first base
     first_base_counter = Counter(align_array[:, start_col])
     del first_base_counter[""]
     num_seqs = sum(first_base_counter.values())
     first_base_freq = {k: v / num_seqs for k, v in first_base_counter.items()}
-
     # If the freq of gap is above minfreq
     if first_base_freq.get("-", 0) > min_freq:
-        return (start_col, DIGESTION_ERROR.GAP_ON_SET_BASE)
+        return (start_col, {DIGESTION_ERROR.GAP_ON_SET_BASE: -1})
 
-    # If the initial slice is outside the range of the array
-    if start_col + cfg["primer_size_min"] >= align_array.shape[1]:
-        return (start_col, DIGESTION_ERROR.WALKS_OUT)
-
+    ### Calculate the total number of sequences
     # Create a counter
-    total_col_seqs = Counter()
+    total_col_seqs: Counter[str | DIGESTION_ERROR] = Counter()
     for row_index in range(0, align_array.shape[0]):
         # Check if this row starts on a gap, and if so update the counter and skip
         if align_array[row_index, start_col] == "-":
-            total_col_seqs.update([GapOnSetBase()])
+            total_col_seqs.update([DIGESTION_ERROR.GAP_ON_SET_BASE])
             continue
 
         start_array = align_array[
@@ -364,21 +380,77 @@ def mp_r_digest(
         )
         # If all mutations matter, return on any Error
         if min_freq == 0 and set(results) & ERROR_SET:
-            return (start_col, parse_error(set(results)))
+            return (start_col, {parse_error(set(results)): -1})
 
         # Add the results to the Counter
-        total_col_seqs.update(results)
+        total_col_seqs.update(parse_error_list(results))
 
-    total_values = sum(total_col_seqs.values())
+    return (start_col, dict(total_col_seqs))
+
+
+def process_seqs(
+    seq_counts: dict[str | DIGESTION_ERROR, int], min_freq
+) -> DIGESTION_ERROR | dict[str, float]:
+    """
+    Takes the output from *_digest_to_count and returns a set of valid sequences. Or the error that occurred.
+
+    Args:
+        col (int): The column number.
+        seq_counts (dict[str | DIGESTION_ERROR, int]): A dictionary containing sequence counts.
+        min_freq: The minimum frequency threshold.
+
+    Returns:
+        DIGESTION_ERROR | dict[str, float]: either an error or a dictionary of parsed sequences.
+    """
+    # Check for early return conditions
+    for error, count in seq_counts.items():
+        if count == -1 and type(error) == DIGESTION_ERROR:
+            return error
+
+    total_values = sum(seq_counts.values())
     # Filter out values below the threshold freq
-    wanted_seqs = {k for k, v in total_col_seqs.items() if v / total_values > min_freq}
-
+    above_freq_seqs: dict[str | DIGESTION_ERROR, float] = {
+        k: v / total_values
+        for k, v in seq_counts.items()
+        if v / total_values > min_freq
+    }
+    parsed_seqs: dict[str, float] = {}
     # Guard: If wanted_seqs contains errors return None
-    if ERROR_SET & wanted_seqs:
-        return (start_col, parse_error(wanted_seqs))
+    for seq in above_freq_seqs.keys():
+        if type(seq) == DIGESTION_ERROR:
+            return seq
+        elif type(seq) == str:
+            parsed_seqs[seq] = above_freq_seqs[seq]
+
+    return parsed_seqs
+
+
+def mp_r_digest(
+    data: tuple[np.ndarray, dict, int, float]
+) -> RKmer | tuple[int, DIGESTION_ERROR]:
+    """
+    This will try and create a RKmer started at the given index
+    :data: A tuple of (align_array, cfg, start_col, min_freq)
+    :return: A RKmer object or a tuple of (start_col, error)
+    """
+    align_array: np.ndarray = data[0]
+    cfg: dict = data[1]
+    start_col: int = data[2]
+    min_freq: float = data[3]
+
+    # Count how many times each sequence / error occurs
+    _start_col, seq_counts = r_digest_to_count((align_array, cfg, start_col, min_freq))
+
+    tmp_parsed_seqs = process_seqs(seq_counts, min_freq)
+    if type(tmp_parsed_seqs) == DIGESTION_ERROR:
+        return (start_col, tmp_parsed_seqs)
+    elif type(tmp_parsed_seqs) == dict:
+        parsed_seqs = tmp_parsed_seqs
+    else:
+        raise ValueError("Unknown error occured")
 
     # Create the Kmer
-    tmp_kmer = RKmer(start=start_col, seqs=wanted_seqs)
+    tmp_kmer = RKmer(start=start_col, seqs={*parsed_seqs.keys()})
     tmp_kmer.seqs = tmp_kmer.reverse_complement()
     # Downsample the seqs if asked
     if cfg["reducekmers"]:
@@ -400,9 +472,9 @@ def mp_r_digest(
     return tmp_kmer
 
 
-def mp_f_digest(
+def f_digest_to_count(
     data: tuple[np.ndarray, dict, int, float]
-) -> FKmer | tuple[int, DIGESTION_ERROR]:
+) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
     This will try and create a FKmer ended at the given index
     :data: A tuple of (align_array, cfg, end_col, min_freq)
@@ -421,11 +493,11 @@ def mp_f_digest(
 
     # If the freq of gap is above minfreq
     if first_base_freq.get("-", 0) > min_freq:
-        return (end_col, DIGESTION_ERROR.GAP_ON_SET_BASE)
+        return (end_col, {DIGESTION_ERROR.GAP_ON_SET_BASE: -1})
 
     # If the initial slice is outside the range of the array
     if end_col - cfg["primer_size_min"] < 0:
-        return (end_col, DIGESTION_ERROR.WALKS_OUT)
+        return (end_col, {DIGESTION_ERROR.WALKS_OUT: -1})
 
     total_col_seqs = Counter()
     for row_index in range(0, align_array.shape[0]):
@@ -452,35 +524,57 @@ def mp_f_digest(
             cfg=cfg,
         )
         if min_freq == 0 and set(results) & ERROR_SET:
-            return (end_col, parse_error(set(results)))
+            return (end_col, {parse_error(set(results)): -1})
 
-        total_col_seqs.update(results)
+        # Add the results to the Counter
+        total_col_seqs.update(parse_error_list(results))
 
-    total_values = sum(total_col_seqs.values())
-    # Filter out values below the threshold freq
-    wanted_seqs = {k for k, v in total_col_seqs.items() if v / total_values > min_freq}
+    return (end_col, dict(total_col_seqs))
 
-    # Guard: If wanted_seqs contains errors return None
-    if ERROR_SET & wanted_seqs:
-        return (end_col, parse_error(wanted_seqs))
+
+def mp_f_digest(
+    data: tuple[np.ndarray, dict, int, float]
+) -> FKmer | tuple[int, DIGESTION_ERROR]:
+    """
+    This will try and create a FKmer ended at the given index
+    :data: A tuple of (align_array, cfg, end_col, min_freq)
+    :return: A FKmer object or a tuple of (end_col, error)
+    """
+    align_array: np.ndarray = data[0]
+    cfg: dict = data[1]
+    end_col: int = data[2]
+    min_freq: float = data[3]
+
+    # Count how many times each sequence / error occurs
+    _end_col, seq_counts = f_digest_to_count((align_array, cfg, end_col, min_freq))
+    tmp_parsed_seqs = process_seqs(seq_counts, min_freq)
+    if type(tmp_parsed_seqs) == DIGESTION_ERROR:
+        return (end_col, tmp_parsed_seqs)
+    elif type(tmp_parsed_seqs) == dict:
+        parsed_seqs = tmp_parsed_seqs
+    else:
+        raise ValueError("Unknown error occured")
 
     # DownSample the seqs if asked
     if cfg["reducekmers"]:
         wanted_seqs = reduce_kmers(
-            seqs=wanted_seqs,
+            seqs={*parsed_seqs.keys()},
             max_edit_dist=cfg["editdist_max"],
             end_3p=cfg["editdist_end3p"],
         )
+
     # Thermo check the kmers
-    if not thermo_check_kmers(wanted_seqs, cfg):
+    if not thermo_check_kmers({*parsed_seqs.keys()}, cfg):
         return (end_col, DIGESTION_ERROR.THERMO_FAIL)
-    if forms_hairpin(wanted_seqs, cfg=cfg):
+    if forms_hairpin({*parsed_seqs.keys()}, cfg=cfg):
         return (end_col, DIGESTION_ERROR.HAIRPIN_FAIL)
 
-    if do_pools_interact_py(list(wanted_seqs), list(wanted_seqs), cfg["dimerscore"]):
+    if do_pools_interact_py(
+        [*parsed_seqs.keys()], [*parsed_seqs.keys()], cfg["dimerscore"]
+    ):
         return (end_col, DIGESTION_ERROR.DIMER_FAIL)
 
-    return FKmer(end=end_col, seqs=wanted_seqs)
+    return FKmer(end=end_col, seqs={*parsed_seqs.keys()})
 
 
 def hamming_dist(s1, s2) -> int:

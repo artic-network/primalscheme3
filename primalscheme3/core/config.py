@@ -12,7 +12,7 @@ config_dict = {
     "primer_tm_min": 59.5,
     "primer_tm_max": 62.5,
     "primer_homopolymer_max": 5,
-    "primer_hairpin_th_max": 47.0,
+    "primer_hairpin_th_max": 47.0,  #
     "editdist_max": 1,
     "editdist_end3p": 6,
     "primer_size_max": 36,
@@ -36,7 +36,7 @@ AMBIGUOUS_DNA = {
     "D": "AGT",
     "B": "CGT",
 }
-ALL_DNA = {
+ALL_DNA: dict[str, str] = {
     "A": "A",
     "C": "C",
     "G": "G",
@@ -52,7 +52,7 @@ ALL_DNA = {
     "D": "AGT",
     "B": "CGT",
 }
-ALL_BASES = {
+ALL_BASES: set[str] = {
     "A",
     "C",
     "G",

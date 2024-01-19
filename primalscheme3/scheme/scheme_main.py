@@ -514,7 +514,7 @@ def schemecreate(args):
 
     # Write primer bed file
     with open(OUTPUT_DIR / "primer.bed", "w") as outfile:
-        primer_bed_str = scheme.to_bed(headers=None)
+        primer_bed_str = scheme.to_bed()
         outfile.write(primer_bed_str)
 
     # Write amplicon bed file

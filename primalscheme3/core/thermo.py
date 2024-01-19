@@ -28,6 +28,21 @@ def calc_hairpin_tm(seq: str, config: dict) -> float:
     ).tm
 
 
+def calc_hairpin_struct(seq: str, config: dict) -> float:
+    """
+    Calculate the hairpin formation thermodynamics of a DNA sequence.
+    Returns tm.
+    """
+    return p3_calc_hairpin(
+        seq,
+        mv_conc=config["mv_conc"],
+        dv_conc=config["dv_conc"],
+        dntp_conc=config["dntp_conc"],
+        dna_conc=config["dna_conc"],
+        output_structure=True,
+    ).ascii_structure_lines
+
+
 def forms_hairpin(seqs: Iterable[str], cfg: dict) -> bool:
     """
     Given a iterable of strings it will check the hairpin tm of all seqs
