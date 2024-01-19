@@ -9,6 +9,22 @@ from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
 from primalscheme3.core.mapping import create_mapping
 
 
+def msa_qc(array: np.ndarray):
+    """
+    Checks all sequences are the same length. Checks there are no empty cols
+    """
+    empty_set = {"", "-"}
+
+    for row_index in range(0, array.shape[0]):
+        if len(array[row_index]) != len(array[0]):
+            raise ValueError("MSA contains sequences of different lengths")
+
+    for col_index in range(0, array.shape[1]):
+        slice: set[str] = set(array[:, col_index])
+        if slice.issubset(empty_set):
+            raise ValueError(f"MSA contains empty column at: {col_index}")
+
+
 class MSA:
     # Provided
     name: str
@@ -39,6 +55,8 @@ class MSA:
         self.array = np.array(
             [record.seq.upper() for record in records_index.values()], dtype="U1"
         )
+        # Do some basic QC
+        msa_qc(self.array)
         self.array = remove_end_insertion(self.array)
 
         # Create the mapping array
@@ -73,10 +91,16 @@ class MSA:
         )
         # remap the fkmer and rkmers if needed
         if self._mapping_array is not None:
-            self.fkmers = [fkmer.remap(self._mapping_array) for fkmer in self.fkmers]  # type: ignore
-            self.fkmers = [x for x in self.fkmers if x is not None]
-            self.rkmers = [rkmer.remap(self._mapping_array) for rkmer in self.rkmers]  # type: ignore
-            self.rkmers = [x for x in self.rkmers if x is not None]
+            mapping_set = set(self._mapping_array)
+
+            remaped_fkmers = [fkmer.remap(self._mapping_array) for fkmer in self.fkmers]  # type: ignore
+            self.fkmers = [
+                x for x in remaped_fkmers if x is not None and x.end in mapping_set
+            ]
+            remaped_rkmers = [rkmer.remap(self._mapping_array) for rkmer in self.rkmers]  # type: ignore
+            self.rkmers = [
+                x for x in remaped_rkmers if x is not None and x.start in mapping_set
+            ]
 
     def generate_primerpairs(self, cfg: dict) -> None:
         self.primerpairs = generate_valid_primerpairs(
@@ -85,3 +109,7 @@ class MSA:
             cfg,
             self.msa_index,
         )
+        # Update primerpairs to include the chrom_name and amplicon_prefix
+        for primerpair in self.primerpairs:
+            primerpair.chrom_name = self._chrom_name
+            primerpair.amplicon_prefix = self._uuid

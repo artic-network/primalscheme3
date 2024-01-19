@@ -18,6 +18,9 @@ config_dict = {
     "primer_size_max": 36,
     "primer_size_min": 18,
     "primer_max_walk": 80,
+    "minbasefreq": 0,
+    "reducekmers": False,
+    "dimerscore": -27,
 }
 
 

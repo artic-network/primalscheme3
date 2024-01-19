@@ -1,6 +1,4 @@
 import pathlib
-from itertools import groupby
-import sys
 import re
 
 # Module imports
@@ -23,12 +21,7 @@ def re_primer_name(string) -> list[str] | None:
 class BedPrimerPair(PrimerPair):
     """Class to contain a single primercloud from a bedfile, which contains the extra info parsed from the bedfile"""
 
-    fprimer: FKmer
-    rprimer: RKmer
-    chromname: str
-    ampliconprefix: str
-    msa_index: int
-
+    amplicon_prefix: str
     # Calc values
     _primername: str
 
@@ -37,28 +30,24 @@ class BedPrimerPair(PrimerPair):
         fprimer: FKmer,
         rprimer: RKmer,
         msa_index: int,
-        chromname: str,
-        ampliconprefix: str,
-        ampliconnumber: int,
+        chrom_name: str,
+        amplicon_prefix: str,
+        amplicon_number: int,
         pool: int,
     ) -> None:
         self.fprimer = fprimer
         self.rprimer = rprimer
-        self.chromname = chromname
-        self.ampliconprefix = ampliconprefix
+        self.chrom_name = chrom_name
+        self.amplicon_prefix = amplicon_prefix
         self.msa_index = msa_index
-        self.amplicon_number = ampliconnumber
+        self.amplicon_number = amplicon_number
         self.pool = pool
 
         #
-        self._primername = f"{self.amplicon_number}_{self.ampliconprefix}"
+        self._primername = f"{self.amplicon_number}_{self.amplicon_prefix}"
 
     def match_primer_stem(self, primernamestem: str) -> bool:
         return self._primername == primernamestem
-
-    def __str__(self, **kargs) -> str:
-        # I use **kwargs so that it can have the same behavor as PrimerPairs
-        return super().__str__(self.chromname, self.ampliconprefix)
 
 
 class BedLine:
@@ -116,41 +105,47 @@ class BedLine:
         return f"{self.ref}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
 
 
-def read_in_bedlines(path: pathlib.Path) -> list[BedLine]:
+def read_in_bedlines(path: pathlib.Path) -> tuple[list[BedLine], list[str]]:
     """
     Read in bedlines from a file.
 
     :param path: The path to the bed file.
     :type path: pathlib.Path
     :return: A list of BedLine objects.
-    :rtype: list[BedLine]
+    :rtype: tuple(list[BedLine], list[str])
     """
-    bed_primers = []
+    bed_primers: list[BedLine] = []
+    bed_headers: list[str] = []
     with open(path, "r") as bedfile:
         for line in bedfile.readlines():
-            if line:
+            if not line:  # Skip empty lines
+                continue
+            elif line.startswith("#"):  # Store header lines
+                bed_headers.append(line.strip())
+            else:  # Store primer lines
                 line = line.strip().split()
                 bed_primers.append(BedLine(line))
-    return bed_primers
+    return (bed_primers, bed_headers)
 
 
-def read_in_bedprimerpairs(path: pathlib.Path) -> list[BedPrimerPair]:
+def read_in_bedprimerpairs(path: pathlib.Path) -> tuple[list[BedPrimerPair], list[str]]:
     """
     Read in a bedfile and return a list of BedPrimerPairs, MSA index is set to None as it is not known at this point
+
+    :param path: The path to the bed file.
+    :type path: pathlib.Path
+    :return: A list of BedPrimerPair objects, and the header lines from the bedfile.
+    :rtype: tuple(list[BedPrimerPair], list[str])
     """
+
     # Read in the bedfile
-    primerpairs: list[BedPrimerPair] = []
-    with open(path, "r") as primerbedfile:
-        # Read in the raw primer data
-        bed_lines: list[BedLine] = []
-        for line in primerbedfile.readlines():
-            line = line.strip().split()
-            bed_lines.append(BedLine(line))
+    primerpairs = []
+    primerlines, _headers = read_in_bedlines(path)  # Ignore headers for now
 
     # Group primers by referance
     ref_to_bedlines: dict[str, list[BedLine]] = dict()
-    for ref in {bedline.ref for bedline in bed_lines}:
-        ref_to_bedlines[ref] = [x for x in bed_lines if x.ref == ref]
+    for ref in {bedline.ref for bedline in primerlines}:
+        ref_to_bedlines[ref] = [x for x in primerlines if x.ref == ref]
 
     for ref, ref_bed_lines in ref_to_bedlines.items():
         # Group the bedlines by amplicon number
@@ -176,12 +171,12 @@ def read_in_bedprimerpairs(path: pathlib.Path) -> list[BedPrimerPair]:
                     fprimer=fkmer,
                     rprimer=rkmer,
                     msa_index=None,  # This is set later # type: ignore
-                    chromname=ref,
-                    ampliconnumber=int(ampliconnumber),
-                    ampliconprefix=amplicon_prefix,
+                    chrom_name=ref,
+                    amplicon_number=int(ampliconnumber),
+                    amplicon_prefix=amplicon_prefix,
                     pool=pool,
                 )
             )
 
-    primerpairs.sort(key=lambda x: (x.chromname, x.amplicon_number))
-    return primerpairs
+    primerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
+    return (primerpairs, _headers)

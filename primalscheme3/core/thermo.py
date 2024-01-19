@@ -51,7 +51,7 @@ def max_homo(kmer_seq) -> int:
     return max(sum(1 for _ in group) for _, group in groupby(kmer_seq))
 
 
-def passes_thermo_checks(kmer_seq, cfg) -> bool:
+def passes_thermo_checks(kmer_seq: str, cfg: dict) -> bool:
     """Are all kmer thermo values below threshold?"""
     return (
         (cfg["primer_gc_min"] <= gc(kmer_seq) <= cfg["primer_gc_max"])
@@ -60,7 +60,7 @@ def passes_thermo_checks(kmer_seq, cfg) -> bool:
     )
 
 
-def thermo_check_kmers(kmers: Iterable[str], cfg) -> bool:
+def thermo_check_kmers(kmers: Iterable[str], cfg: dict) -> bool:
     """
     Will call passes_thermo_checks on each kmer in the kmers list
     Will stop evaluating on false

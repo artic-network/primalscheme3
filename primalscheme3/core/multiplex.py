@@ -140,3 +140,26 @@ class Multiplex:
         all_pp = [pp for pool in (x for x in self._pools) for pp in pool]
         all_pp.sort(key=lambda pp: (str(pp.msa_index), pp.amplicon_number))
         return all_pp
+
+    def to_bed(
+        self,
+        headers: list[str] | None = None,
+    ) -> str:
+        """
+        Returns the multiplex as a bed file
+        :return: str
+        """
+        primer_bed_str: list[str] = []
+
+        # Ensure headers are commented and valid
+        if headers is not None:
+            for headerline in headers:
+                if not headerline.startswith("#"):
+                    headerline = "# " + headerline
+                primer_bed_str.append(headerline.strip())
+
+        # Add the primerpairs to the bed file
+        for pp in self.all_primerpairs():
+            primer_bed_str.append(pp.to_bed().strip())
+
+        return "\n".join(primer_bed_str)

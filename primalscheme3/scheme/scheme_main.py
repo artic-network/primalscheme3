@@ -17,9 +17,11 @@ from primalscheme3.core.logger import setup_loger
 from primalscheme3.scheme.classes import Scheme, SchemeReturn, PrimerPair
 
 # Global imports
-from primalscheme3 import __version__
-from primalscheme3.core.create_reports import generate_plot
-from primalscheme3.core.create_report_data import generate_all_plotdata
+from primalscheme3.__init__ import __version__
+from primalscheme3.core.create_reports import generate_all_plots
+from primalscheme3.core.create_report_data import (
+    generate_all_plotdata,
+)
 
 
 # Extental imports
@@ -63,10 +65,10 @@ def schemereplace(args):
     }
 
     # Read in the bedfile
-    bedprimerpairs: list[BedPrimerPair] = read_in_bedprimerpairs(args.primerbed)
+    bedprimerpairs, headers = read_in_bedprimerpairs(args.primerbed)
     # Map each primer to an MSA index
     for primerpair in bedprimerpairs:
-        msa_index = msa_chrom_to_index.get(primerpair.chromname)
+        msa_index = msa_chrom_to_index.get(str(primerpair.chrom_name), None)
         if msa_index is not None:
             primerpair.msa_index = msa_index
         elif cfg["bedfile"]:
@@ -74,9 +76,9 @@ def schemereplace(args):
             # Set the msa index to -1
             primerpair.msa_index = -1
         else:
-            raise ValueError(f"ERROR: {primerpair.chromname} not found in MSA data")
+            raise ValueError(f"ERROR: {primerpair.chrom_name} not found in MSA data")
 
-    bedprimerpairs.sort(key=lambda x: (x.chromname, x.amplicon_number))
+    bedprimerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
 
     # Extract the stem from the primername
     try:
@@ -236,7 +238,7 @@ def schemereplace(args):
     print(f"Found {len(accepted_primerpairs)} valid replacement amplicons")
     for pp_number, pp in enumerate(accepted_primerpairs, 1):
         print(f"Amplicon {pp_number}")
-        print(pp.__str__(wanted_pp.chromname, wanted_pp.ampliconprefix))
+        print(pp.to_bed())
 
 
 def schemecreate(args):
@@ -314,7 +316,7 @@ def schemecreate(args):
 
     # If the bedfile flag is given add the primers into the scheme
     if args.bedfile:
-        bedprimerpairs = read_in_bedprimerpairs(args.bedfile)
+        bedprimerpairs, _headers = read_in_bedprimerpairs(args.bedfile)
         # Check the number of pools in the given bedfile, is less or equal to npools arg
         pools_in_bed = {primer.pool for primer in bedprimerpairs}
         if max(pools_in_bed) > cfg["npools"]:
@@ -512,39 +514,15 @@ def schemecreate(args):
 
     # Write primer bed file
     with open(OUTPUT_DIR / "primer.bed", "w") as outfile:
-        primer_bed_str = []
-        for pp in scheme.all_primers():
-            # If there is an corrasponding msa
-            ## Primers parsed in via bed do not have an msa_index
-            if msa := msa_dict.get(pp.msa_index):
-                chrom_name = msa._chrom_name
-                primer_prefix = msa._uuid
-            else:
-                # This Chrom name is not used in the bedfile
-                # As BedLines have there own name/prefix
-                chrom_name = "scheme"
-                primer_prefix = "scheme"
-
-            st = pp.__str__(
-                ref_name=chrom_name,
-                amplicon_prefix=primer_prefix,
-            )
-            primer_bed_str.append(st.strip())
-        outfile.write("\n".join(primer_bed_str))
+        primer_bed_str = scheme.to_bed(headers=None)
+        outfile.write(primer_bed_str)
 
     # Write amplicon bed file
     with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
         amp_bed_str = []
         for pp in scheme.all_primers():
-            if msa := msa_dict.get(pp.msa_index):
-                chrom_name = msa._chrom_name
-                primer_prefix = msa._uuid
-            else:
-                chrom_name = "scheme"
-                primer_prefix = "scheme"
-
             amp_bed_str.append(
-                f"{chrom_name}\t{pp.start}\t{pp.end}\t{primer_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
+                f"{pp.chrom_name}\t{pp.start}\t{pp.end}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
             )
         outfile.write("\n".join(amp_bed_str))
 
@@ -591,13 +569,9 @@ def schemecreate(args):
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data
-    generate_all_plotdata(
+    plot_data = generate_all_plotdata(
         list(msa_dict.values()),
         OUTPUT_DIR / "work",
         last_pp_added=scheme._last_pp_added,
     )
-
-    # Create the fancy plots
-    if cfg["plot"]:
-        for msa in msa_dict.values():
-            generate_plot(msa, scheme._pools, OUTPUT_DIR)
+    generate_all_plots(plot_data, OUTPUT_DIR)
