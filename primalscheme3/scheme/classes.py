@@ -137,7 +137,17 @@ class Scheme(Multiplex):
         This will try and add this primerpair into any valid pool.
         Will return true if the primerpair has been added
         """
-        last_pool = self._last_pp_added[-1].pool
+        try:
+            last_primer_pair = self._last_pp_added[-1]
+            last_pool = last_primer_pair.pool
+            if last_primer_pair.msa_index != msa_index:
+                raise IndexError  # This will force the except block to run
+
+        except IndexError:
+            # If no primer has been added, add the first primerpair
+
+            return self.add_first_primer_pair(all_pp_list, msa_index)
+
         # Find what other pools to look in
         pos_pools_indexes = [
             (last_pool + i) % self.n_pools
@@ -218,22 +228,10 @@ class Scheme(Multiplex):
         # Remove the last primerpair added
         last_pp = self.remove_last_primer_pair()
 
-        # Find all primerpairs that could replace the last primerpair
-        pos_ol_pp = [
-            pp
-            for pp in self.find_ol_primerpairs(all_pp_list, 1)
-            if pp != last_pp  # Change minoverlap to 1 to help the solver
-        ]
-        # Sort the primerpair on score
-        pos_ol_pp.sort(
-            key=lambda pp: bt_ol_pp_score(
-                pp.rprimer.start,
-                len(pp.all_seqs()),
-                self.get_leading_coverage_edge() - 1,
-                self.cfg,
-            ),
-            reverse=True,
-        )
+        # If the last primerpair was from a different msa, add it back in and return false
+        if last_pp.msa_index != msa_index:
+            self.add_primer_pair_to_pool(last_pp, last_pp.pool, msa_index)
+            return SchemeReturn.NO_BACKTRACK
 
         # Find what other pools to look in
         pos_pools_indexes = [last_pp.pool]
@@ -247,24 +245,52 @@ class Scheme(Multiplex):
             for index in pos_pools_indexes
         }
 
+        is_replacement_first = False
+        # If the last primerpair was the first primerpair.
+        if self._last_pp_added[-1].msa_index != last_pp.msa_index:
+            # Handle adding a new first primerpair
+            replacement_pps = [x for x in all_pp_list if x != last_pp]
+            replacement_pps.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
+            is_replacement_first = True
+        else:
+            # Handle adding a new ol primerpair
+            # Find all primerpairs that could replace the last primerpair
+            replacement_pps = [
+                pp
+                for pp in self.find_ol_primerpairs(all_pp_list, 1)
+                if pp != last_pp  # Change minoverlap to 1 to help the solver
+            ]
+            # Sort the primerpair on score
+            replacement_pps.sort(
+                key=lambda pp: bt_ol_pp_score(
+                    pp.rprimer.start,
+                    len(pp.all_seqs()),
+                    self.get_leading_coverage_edge() - 1,
+                    self.cfg,
+                ),
+                reverse=True,
+            )
+
         # For each replacement primerpair
-        for ol_pp in pos_ol_pp:
+        for pp in replacement_pps:
             # For each pool
             for pool_index in pos_pools_indexes:
-                # If the pool is empty
-                if not self._pools[pool_index]:
-                    self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
-                    return SchemeReturn.ADDED_BACKTRACKED
+                primers_in_same_pool = self._pools[pool_index]
 
+                # Guard for clash between the last primer in the same pool
                 # If the last primer is from the same msa and does clash, skip it
-                if self._pools[pool_index][-1].msa_index == msa_index and max(
-                    self._pools[pool_index][-1].rprimer.ends()
-                ) >= min(ol_pp.fprimer.starts()):
+                if (
+                    not is_replacement_first
+                    and len(primers_in_same_pool) > 0
+                    and self._pools[pool_index][-1].msa_index == msa_index
+                    and max(self._pools[pool_index][-1].rprimer.ends())
+                    >= min(pp.fprimer.starts())
+                ):
                     continue
 
                 # Guard for interactions
                 if do_pools_interact_py(
-                    ol_pp.all_seqs(),
+                    pp.all_seqs(),
                     index_to_seqs.get(pool_index),
                     self.cfg["dimerscore"],
                 ):
@@ -272,7 +298,7 @@ class Scheme(Multiplex):
 
                 # Guard for misprimal
                 if detect_new_products(
-                    ol_pp.find_matches(
+                    pp.find_matches(
                         self._matchDB,
                         remove_expected=False,
                         kmersize=self.cfg["mismatch_kmersize"],
@@ -282,20 +308,20 @@ class Scheme(Multiplex):
                     self.cfg["mismatch_product_size"],
                 ):
                     continue
+
                 # If all checks pass add the primerpair to the pool this is a valid alternative
                 # See if the valid alternative had a valid overlap
-
                 # Add the primer to the pool
-                self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
+                self.add_primer_pair_to_pool(pp, pool_index, msa_index)
                 # Try and add an overlap
-                ol_result = self.try_ol_primerpairs(all_pp_list, msa_index=msa_index)
-                if ol_result == SchemeReturn.ADDED_OL_PRIMERPAIR:
-                    # Fixed the problem
-                    return SchemeReturn.ADDED_BACKTRACKED
-                else:
-                    # No overlap was found. Remove the primerpair and the try the next one
-                    self.remove_last_primer_pair()
-                    continue
+                match self.try_ol_primerpairs(all_pp_list, msa_index=msa_index):
+                    case SchemeReturn.ADDED_OL_PRIMERPAIR:
+                        # Fixed the problem
+                        return SchemeReturn.ADDED_BACKTRACKED
+                    case _:
+                        # No overlap was found. Remove the primerpair and the try the next one
+                        self.remove_last_primer_pair()
+                        continue
 
         # If non of the primers work, add the last pp back in and return false
         self.add_primer_pair_to_pool(last_pp, last_pp.pool, msa_index)
