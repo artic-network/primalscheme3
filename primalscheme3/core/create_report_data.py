@@ -69,11 +69,19 @@ def reduce_data(results: list[tuple[int, float]]) -> list[tuple[int, float]]:
 
 
 def generate_uncovered_data(length, primerpairs: list[PrimerPair]) -> dict[int, int]:
+    # Set all indexes to uncovered
     uncovered_indexes = {x for x in range(0, length)}
+
     for primerpair in primerpairs:
-        uncovered_indexes -= set(
-            range(primerpair.fprimer.end, primerpair.rprimer.start)
-        )
+        # Handle circular primerpairs
+        if primerpair.fprimer.end > primerpair.rprimer.start:
+            uncovered_indexes -= set(range(primerpair.fprimer.end, length))
+            uncovered_indexes -= set(range(0, primerpair.rprimer.start))
+        # Handle linear primerpairs
+        else:
+            uncovered_indexes -= set(
+                range(primerpair.fprimer.end, primerpair.rprimer.start)
+            )
 
     # Plot the uncovered regions
     uncovered_indexes_list = sorted(uncovered_indexes)
