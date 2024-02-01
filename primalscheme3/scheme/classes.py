@@ -404,33 +404,54 @@ class Scheme(Multiplex):
         # If non of the primers work, return false
         return SchemeReturn.NO_WALK_PRIMERPAIR
 
-    def try_circular(self, msa):
+    def try_circular(self, msa) -> SchemeReturn:
         """
         This will try and add a primerpair that can span from the end of the msa back to the start as if the genome was circular
         """
-        first_pp: PrimerPair = self._last_pp_added[0]
-        last_pp: PrimerPair = self._last_pp_added[-1]
-        last_pool = last_pp.pool
+        try:
+            first_pp: PrimerPair = self._last_pp_added[0]
+            last_pp: PrimerPair = self._last_pp_added[-1]
+            last_pool = last_pp.pool
+        except IndexError:
+            # If no primerpairs have been added
+            return SchemeReturn.NO_CIRCULAR
 
-        # Find all possible fkmers and rkmer that could span the end of the msa
+            # Find all possible fkmers and rkmer that could span the end of the msa
         pos_fkmers = [
             fkmer
             for fkmer in msa.fkmers
             if fkmer.end < last_pp.rprimer.start
-            and fkmer.end > last_pp.rprimer.start - 200
+            and fkmer.end > last_pp.rprimer.start - self.cfg["amplicon_size_max"]
         ]
         pos_rkmers = [
             rkmer
             for rkmer in msa.rkmers
             if rkmer.start > first_pp.fprimer.end
-            and rkmer.start < first_pp.fprimer.end + 200
+            and rkmer.start < first_pp.fprimer.end + self.cfg["amplicon_size_max"]
         ]
+
+        # Get the mapping array
+        if msa._mapping_array is None:
+            ref_size = len(msa.array[0])
+        else:
+            ref_size = max([x for x in msa._mapping_array if x is not None])
 
         # Create all the primerpairs
         non_checked_pp = []
         for fkmer in pos_fkmers:
             for rkmer in pos_rkmers:
-                non_checked_pp.append(PrimerPair(fkmer, rkmer, msa.msa_index))
+                # Check the primerpair is the correct length
+                if (
+                    self.cfg["amplicon_size_min"]
+                    > (ref_size - fkmer.end) + rkmer.start
+                    > self.cfg["amplicon_size_max"]
+                ):
+                    continue
+
+                pp = PrimerPair(fkmer, rkmer, msa.msa_index)
+                pp.chrom_name = msa._chrom_name
+                pp.amplicon_prefix = msa._uuid
+                non_checked_pp.append(pp)
 
         ## Interaction check all the primerpairs
         iter_free_primer_pairs = []
@@ -443,7 +464,12 @@ class Scheme(Multiplex):
                     iter_free_primer_pairs.append(pp)
 
         # Sort the primerpairs by number of primers
-        iter_free_primer_pairs.sort(key=lambda pp: len(pp.all_seqs()))
+        iter_free_primer_pairs.sort(
+            key=lambda pp: (
+                len(pp.all_seqs()),
+                (ref_size - pp.fprimer.end) + pp.rprimer.start,
+            )
+        )
 
         pos_pools_indexes = [
             (last_pool + i) % self.n_pools for i in range(self.n_pools)
