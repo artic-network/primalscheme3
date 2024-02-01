@@ -85,6 +85,7 @@ class Multiplex:
         - Removes the primerpair's matches from the pool's matches
         - Moves the current pool to the last primerpair's pool
         - Returns the last primerpair added
+        :raises: IndexError if no primerpairs have been added
 
         :return: PrimerPair object
         """
