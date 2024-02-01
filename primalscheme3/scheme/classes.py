@@ -441,11 +441,11 @@ class Scheme(Multiplex):
         for fkmer in pos_fkmers:
             for rkmer in pos_rkmers:
                 # Check the primerpair is the correct length
-                if (
-                    self.cfg["amplicon_size_min"]
-                    > (ref_size - fkmer.end) + rkmer.start
-                    > self.cfg["amplicon_size_max"]
-                ):
+                amp_size = (ref_size - fkmer.end) + rkmer.start
+
+                if amp_size < self.cfg["amplicon_size_min"]:
+                    continue
+                if amp_size > self.cfg["amplicon_size_max"]:
                     continue
 
                 pp = PrimerPair(fkmer, rkmer, msa.msa_index)
