@@ -121,28 +121,9 @@ def schemereplace(args):
     else:
         print(f"MSA checksums match")
 
-    # Find which region needs to be digested
-    # Digest +- amplionsizemax from the wanted primer
-    findexes = [
-        x
-        for x in range(
-            wanted_pp.fprimer.end - cfg["amplicon_size_max"],
-            wanted_pp.fprimer.end + cfg["amplicon_size_max"],
-        )
-        if x >= 0
-    ]
-    rindexes = [
-        x
-        for x in range(
-            wanted_pp.rprimer.start - cfg["amplicon_size_max"],
-            wanted_pp.rprimer.start + cfg["amplicon_size_max"],
-        )
-        if x < len(msa.array[0])
-    ]
-
-    print(f"Digesting MSA between {min(findexes)} and {max(rindexes)}")
+    # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
-    msa.digest(cfg, indexes=(findexes, rindexes))
+    msa.digest(cfg)  ## Primer are remapped at this point.
     print(f"Found {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
@@ -235,9 +216,11 @@ def schemereplace(args):
 
         accepted_primerpairs.append(pos_primerpair)
 
+    accepted_primerpairs.sort(key=lambda a: a.fprimer.end)
+
     print(f"Found {len(accepted_primerpairs)} valid replacement amplicons")
     for pp_number, pp in enumerate(accepted_primerpairs, 1):
-        print(f"Amplicon {pp_number}")
+        print(f"Amplicon {pp_number}: {len(pp.all_seqs())} Primers")
         print(pp.to_bed())
 
 
@@ -432,83 +415,81 @@ def schemecreate(args):
 
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():
-        # Add the first primer, and if no primers can be added move to next msa
-        if (
-            scheme.add_first_primer_pair(msa.primerpairs, msa_index)
-            == SchemeReturn.ADDED_FIRST_PRIMERPAIR
-        ):
-            logger.info(
-                "Added <green>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                primer_start=scheme._last_pp_added[-1].start,
-                primer_end=scheme._last_pp_added[-1].end,
-                primer_pool=scheme._last_pp_added[-1].pool + 1,
-                msa_name=msa.name,
-            )
-        else:
-            logger.warning(
-                "No valid primers found for <blue>{msa_name}</>",
-                msa_name=msa.name,
-            )
-            continue
-
         while True:
-            # Try and add an overlapping primer
-            ol_result = scheme.try_ol_primerpairs(msa.primerpairs, msa_index)
-            if ol_result == SchemeReturn.ADDED_OL_PRIMERPAIR:
-                logger.info(
-                    "Added <green>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                    primer_start=scheme._last_pp_added[-1].start,
-                    primer_end=scheme._last_pp_added[-1].end,
-                    primer_pool=scheme._last_pp_added[-1].pool + 1,
-                    msa_name=msa.name,
-                )
-                continue
-            elif ol_result == SchemeReturn.NO_OL_PRIMERPAIR:
-                pass  # Do nothing move on to next step
-
-            # Try to backtrack
-            if cfg["backtrack"]:
-                backtrack_result = scheme.try_backtrack(msa.primerpairs, msa_index)
-                # If successful log and continue
-                if backtrack_result == SchemeReturn.ADDED_BACKTRACKED:
+            match scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
+                case SchemeReturn.ADDED_OL_PRIMERPAIR:
                     logger.info(
-                        "Backtracking allowed <green>overlapping</> amplicon to be added for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                        "Added <green>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                         primer_start=scheme._last_pp_added[-1].start,
                         primer_end=scheme._last_pp_added[-1].end,
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
                         msa_name=msa.name,
                     )
                     continue
-                # If cannot backtrack and backtrack is enabled, log then move on
-                elif backtrack_result == SchemeReturn.NO_BACKTRACK:
+                case SchemeReturn.ADDED_FIRST_PRIMERPAIR:
                     logger.info(
-                        "Could not backtrack for <blue>{msa_name}</>",
+                        "Added <green>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                        primer_start=scheme._last_pp_added[-1].start,
+                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_pool=scheme._last_pp_added[-1].pool + 1,
                         msa_name=msa.name,
                     )
+                    continue
+                case SchemeReturn.NO_OL_PRIMERPAIR:
+                    pass  # Do nothing move on to next step
+                case SchemeReturn.NO_FIRST_PRIMERPAIR:
+                    logger.warning(
+                        "No valid primers found for <blue>{msa_name}</>",
+                        msa_name=msa.name,
+                    )
+                    break
+
+            # Try to backtrack
+            if cfg["backtrack"]:
+                match scheme.try_backtrack(msa.primerpairs, msa_index):
+                    case SchemeReturn.ADDED_BACKTRACKED:
+                        logger.info(
+                            "Backtracking allowed <green>overlapping</> amplicon to be added for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                            primer_start=scheme._last_pp_added[-1].start,
+                            primer_end=scheme._last_pp_added[-1].end,
+                            primer_pool=scheme._last_pp_added[-1].pool + 1,
+                            msa_name=msa.name,
+                        )
+                    case SchemeReturn.NO_BACKTRACK:
+                        logger.info(
+                            "Could not backtrack for <blue>{msa_name}</>",
+                            msa_name=msa.name,
+                        )
+                        pass  # Do nothing move on to next step
 
             # Try and add a walking primer
-            if (
-                scheme.try_walk_primerpair(msa.primerpairs, msa_index)
-                == SchemeReturn.ADDED_WALK_PRIMERPAIR
-            ):
-                logger.info(
-                    "Added <yellow>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                    primer_start=scheme._last_pp_added[-1].start,
-                    primer_end=scheme._last_pp_added[-1].end,
-                    primer_pool=scheme._last_pp_added[-1].pool + 1,
-                    msa_name=msa.name,
-                )
-            else:
-                break
+            match scheme.try_walk_primerpair(msa.primerpairs, msa_index):
+                case SchemeReturn.ADDED_WALK_PRIMERPAIR:
+                    logger.info(
+                        "Added <yellow>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                        primer_start=scheme._last_pp_added[-1].start,
+                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_pool=scheme._last_pp_added[-1].pool + 1,
+                        msa_name=msa.name,
+                    )
+                case _:
+                    break
 
-        if cfg["circular"] and scheme.try_circular(msa) == SchemeReturn.ADDED_CIRULAR:
-            logger.info(
-                "Added <green>circular</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                primer_start=scheme._last_pp_added[-1].start,
-                primer_end=scheme._last_pp_added[-1].end,
-                primer_pool=scheme._last_pp_added[-1].pool + 1,
-                msa_name=msa.name,
-            )
+        if cfg["circular"]:
+            match scheme.try_circular(msa):
+                case SchemeReturn.ADDED_CIRULAR:
+                    logger.info(
+                        "Added <green>circular</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
+                        primer_start=scheme._last_pp_added[-1].start,
+                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_pool=scheme._last_pp_added[-1].pool + 1,
+                        msa_name=msa.name,
+                    )
+                case SchemeReturn.NO_CIRCULAR:
+                    logger.info(
+                        "No <red>circular</> amplicon for <blue>{msa_name}</>",
+                        msa_name=msa.name,
+                    )
 
     logger.info("Writting output files")
 
