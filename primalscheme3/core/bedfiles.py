@@ -56,7 +56,7 @@ class BedLine:
     self.pool is stored as a 0 based index
     """
 
-    ref: str
+    chrom_name: str
     _start: int
     _end: int
     primername: str
@@ -67,7 +67,7 @@ class BedLine:
     amplicon_number: int
 
     def __init__(self, bedline: list[str]) -> None:
-        self.ref = bedline[0]
+        self.chrom_name = bedline[0]
         self._start = int(bedline[1])
         self._end = int(bedline[2])
         self.primername = bedline[3]
@@ -90,7 +90,7 @@ class BedLine:
 
     @property
     def msa_index(self) -> str:
-        return self.ref
+        return self.chrom_name
 
     @property
     def start(self) -> int:
@@ -102,7 +102,7 @@ class BedLine:
 
     def __str__(self, *kwargs) -> str:
         # I use *kwargs so that it can have the same behavor as PrimerPairs
-        return f"{self.ref}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
+        return f"{self.chrom_name}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
 
 
 def read_in_bedlines(path: pathlib.Path) -> tuple[list[BedLine], list[str]]:
@@ -144,8 +144,8 @@ def read_in_bedprimerpairs(path: pathlib.Path) -> tuple[list[BedPrimerPair], lis
 
     # Group primers by referance
     ref_to_bedlines: dict[str, list[BedLine]] = dict()
-    for ref in {bedline.ref for bedline in primerlines}:
-        ref_to_bedlines[ref] = [x for x in primerlines if x.ref == ref]
+    for ref in {bedline.chrom_name for bedline in primerlines}:
+        ref_to_bedlines[ref] = [x for x in primerlines if x.chrom_name == ref]
 
     for ref, ref_bed_lines in ref_to_bedlines.items():
         # Group the bedlines by amplicon number
