@@ -47,24 +47,24 @@ def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
 
 def reduce_data(results: list[tuple[int, float]]) -> list[tuple[int, float]]:
     """
-    Reduce the size of data by merging consecutive points
+    Reduce the size of data by merging consecutive points, and rounding to 4 decimal places
     """
     reduced_results = []
     for iindex, (index, oc) in enumerate(results):
         # Add first point
         if iindex == 0:
-            reduced_results.append((index, oc))
+            reduced_results.append((index, round(oc, 4)))
             continue
         # Add the last point
         if iindex == len(results) - 1:
-            reduced_results.append((index, oc))
+            reduced_results.append((index, round(oc, 4)))
             continue
 
         # If the previous point is the same, and the next point is the same
         if results[iindex - 1][1] == oc and results[iindex + 1][1] == oc:
             continue
         else:
-            reduced_results.append((index, oc))
+            reduced_results.append((index, round(oc, 4)))
     return reduced_results
 
 
