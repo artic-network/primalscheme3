@@ -16,11 +16,13 @@ config_dict = {
     "editdist_max": 1,
     "editdist_end3p": 6,
     "primer_size_max": 36,
-    "primer_size_min": 18,
+    "primer_size_min": 18,  # primer_size_min
     "primer_max_walk": 80,
     "minbasefreq": 0,
     "reducekmers": False,
     "dimerscore": -27,
+    "mismatch_fuzzy": True,
+    "mismatch_kmersize": 18,  # primer_size_min
 }
 
 
