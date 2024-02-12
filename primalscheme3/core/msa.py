@@ -62,7 +62,7 @@ class MSA:
         # Create the mapping array
         if mapping == "consensus":
             self._mapping_array = None
-            self._chrom_name = self.name
+            self._chrom_name = self.name + "_consensus"
         elif mapping == "first":
             self._mapping_array, self.array = create_mapping(self.array, 0)
             self._chrom_name = list(records_index)[0]
