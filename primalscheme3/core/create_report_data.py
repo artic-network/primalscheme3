@@ -20,7 +20,7 @@ from primalscheme3.panel.minimal_scheme_classes import PanelMSA
 # plot4: Thermo pass Fkmer and Rkmer plot
 
 
-def calc_occupancy(align_array) -> list[tuple[int, float]]:
+def calc_occupancy(align_array: np.ndarray) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
     for index, column in enumerate(align_array.T):
@@ -30,7 +30,7 @@ def calc_occupancy(align_array) -> list[tuple[int, float]]:
     return reduce_data(results)
 
 
-def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
+def calc_gc(align_array: np.ndarray, kmer_size: int = 30) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
     for col_index in range(0, align_array.shape[1] - kmer_size, 15):
@@ -149,7 +149,7 @@ def generate_thermo_pass_primer_data(msa: MSA | PanelMSA) -> dict[int, str]:
 
 
 def generate_amplicon_data(
-    primerpairs: list[PrimerPair], msa: MSA | PanelMSA
+    primerpairs: list[PrimerPair],
 ) -> dict[str, dict[str, int | str]]:
     """
     Creates the amplicon plot data
@@ -165,7 +165,7 @@ def generate_amplicon_data(
             "ce": primerpair.rprimer.start,
             "e": max(primerpair.rprimer.ends()),
             "p": primerpair.pool + 1,
-            "n": f"{msa._uuid}_{primerpair.amplicon_number}",
+            "n": f"{primerpair.amplicon_prefix}_{primerpair.amplicon_number}",
         }
 
     return amplicon_data
@@ -199,7 +199,7 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     data["entropy"] = generate_genome_entropy_data(msa)
     data["occupancy"] = generate_genome_occupancy_data(msa)
     data["thermo_pass"] = generate_thermo_pass_primer_data(msa)
-    data["amplicons"] = generate_amplicon_data(msa_pp, msa)
+    data["amplicons"] = generate_amplicon_data(msa_pp)
     data["dims"] = [x for x in msa.array.shape]
     data["uncovered"] = generate_uncovered_data(msa.array.shape[1], msa_pp)
 
