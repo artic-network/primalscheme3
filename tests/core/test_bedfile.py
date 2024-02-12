@@ -122,7 +122,7 @@ class Test_ReadInBedlines(unittest.TestCase):
 
         # Check the first line matches the expected output
         self.assertEqual(
-            first_bedline.ref,
+            first_bedline.chrom_name,
             "MN908947.3",
         )
         self.assertEqual(first_bedline.start, 23)
