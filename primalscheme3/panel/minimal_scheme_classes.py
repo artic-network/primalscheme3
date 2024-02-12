@@ -8,13 +8,13 @@ import pathlib
 
 
 # Core Module imports
-from primalscheme3.core.digestion import digest, generate_valid_primerpairs
-from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
+from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.multiplex import Multiplex
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
-from primalscheme3.core.seq_functions import remove_end_insertion, entropy_score_array
-from primalscheme3.core.mapping import create_mapping
+from primalscheme3.core.seq_functions import (
+    entropy_score_array,
+)
 from primalscheme3.core.bedfiles import BedPrimerPair
 
 # Interations checker
@@ -66,11 +66,15 @@ class Region:
     chromname: str
     start: int
     stop: int
+    name: str
+    score: int
 
-    def __init__(self, chromanem: str, start: int, stop: int):
+    def __init__(self, chromanem: str, start: int, stop: int, name: str, score: int):
         self.chromname = chromanem
         self.start = start
         self.stop = stop
+        self.name = name
+        self.score = score
 
     def positions(self):
         return range(self.start, self.stop)
@@ -83,90 +87,38 @@ class Region:
             return False
         return hash(self) == hash(__value)
 
+    def to_bed(self) -> str:
+        return f"{self.chromname}\t{self.start}\t{self.stop}\t{self.name}\t{self.score}"
+
 
 class PanelMSA(MSA):
-    # Provided
-    name: str
-    path: pathlib.Path
-    msa_index: int
-    array: np.ndarray
-    regions: list[Region] | None
-
-    # Calculated on init
-    array: np.ndarray
-    _uuid: str
-    _chrom_name: str  # only used in the primer.bed file and html report
-    _mapping_array: np.ndarray | None
-
     # Score arrays
-    _snp_count_array: np.ndarray
+    _score_array: np.ndarray
     _entropy_array: np.ndarray
 
-    # Calculated attributes
-    fkmers: list[FKmer]
-    rkmers: list[RKmer]
-    primerpairs: list[PrimerPair]
     primerpairpointer: int
 
     def __init__(
-        self,
-        name: str,
-        path: pathlib.Path,
-        msa_index: int,
-        mapping: str,
-        regions: None | list[Region] = None,
+        self, name: str, path: pathlib.Path, msa_index: int, mapping: str, logger=None
     ) -> None:
-        self.name = name
-        self._chrom_name = path.stem
-        self.path = path
-        self.msa_index = msa_index
-        self.regions = regions
+        # Call the MSA init
+        super().__init__(name, path, msa_index, mapping, logger)
 
-        # Initialise empty kmer lists
-        self.fkmers = []
-        self.rkmers = []
-        self._primerpairs = []
+        # Create the primerpairpointer
         self.primerpairpointer = 0
+        self.regions = None
 
-        # Initialise empty arrays
-        self.snp_count_array = None
-
-        # Read in the MSA
-        records_index = SeqIO.index(str(self.path), "fasta")
-        self.array = np.array(
-            [record.seq.upper() for record in records_index.values()], dtype="U1"
-        )
-        self.array = remove_end_insertion(self.array)
+    def add_regions(self, regions: list[Region]) -> None:
+        self.regions = regions
 
         # Create the entropy array
         self._entropy_array = np.array(entropy_score_array(self.array))
 
-        # Create the mapping array
-        if mapping == "consensus":
-            self._mapping_array = None
-            self._chrom_name = self.name
-        elif mapping == "first":
-            self._mapping_array, self.array = create_mapping(self.array, 0)
-            self._chrom_name = list(records_index)[0]
-        else:
-            raise ValueError(f"Unrecognised mapping type: {mapping}")
-
-        # Create the SNP count array if required
-        self._snp_count_array = np.zeros(self.array.shape[1], dtype=int)
-        if regions is not None:
-            for region in regions:
-                self._snp_count_array[region.start : region.stop] = 1
-
-        # Asign a UUID
-        self._uuid = str(uuid4())[:8]
-
-    # override base digest to use indexes
-    def digest(self, cfg, indexes=False):
-        self.fkmers, self.rkmers = digest(
-            msa_array=self.array,
-            cfg=cfg,
-            indexes=indexes,
-        )
+        # Create the score array
+        self._score_array = np.zeros(self.array.shape[1], dtype=int)
+        for region in regions:
+            for i in range(region.start, region.stop):
+                self._score_array[i] += region.score
 
     def remove_kmers_that_clash_with_regions(self):
         """
@@ -194,32 +146,23 @@ class PanelMSA(MSA):
             )
         ]
 
-    def generate_primerpairs(self, cfg):
-        ## Write a doc string
-        self._primerpairs = generate_valid_primerpairs(
-            self.fkmers,
-            self.rkmers,
-            cfg,
-            self.msa_index,
-        )
-
     def iter_unchecked_primerpairs(self):
         """
         Returns all primerpairs that have not been checked yet
         """
-        return islice(self._primerpairs, self.primerpairpointer, None)
+        return islice(self.primerpairs, self.primerpairpointer, None)
 
     def get_pp_entropy(self, pp: PrimerPair) -> float:
         """
         Returns sum of entropy in the primertrimmed amplicon
         """
-        return np.sum(self._entropy_array[pp.fprimer.end + 1 : pp.rprimer.start - 1])
+        return np.sum(self._entropy_array[pp.fprimer.end : pp.rprimer.start - 1])
 
-    def get_pp_snp_score(self, pp: PrimerPair) -> int:
+    def get_pp_score(self, pp: PrimerPair) -> int:
         """
         Returns number of SNPs in the primertrimmed amplicon
         """
-        return np.sum(self._snp_count_array[pp.fprimer.end + 1 : pp.rprimer.start - 1])
+        return np.sum(self._score_array[pp.fprimer.end : pp.rprimer.start - 1])
 
 
 class Panel(Multiplex):
