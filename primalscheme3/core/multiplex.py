@@ -164,3 +164,25 @@ class Multiplex:
             primer_bed_str.append(pp.to_bed().strip())
 
         return "\n".join(primer_bed_str)
+
+    def to_amplicons(
+        self,
+        trim_primers: bool,
+    ) -> str:
+        """
+        Returns the multiplex as an amplicon file
+        :param trim_primers: bool. If True, the primers are trimmed from the amplicons
+        :return: str
+        """
+        amplicon_str: list[str] = []
+        # Add the amplicons to the string
+        for pp in self.all_primerpairs():
+            if trim_primers:
+                amplicon_str.append(
+                    f"{pp.chrom_name}\t{pp.fprimer.end}\t{pp.rprimer.start - 1}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
+                )
+            else:
+                amplicon_str.append(
+                    f"{pp.chrom_name}\t{pp.start}\t{pp.end}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
+                )
+        return "\n".join(amplicon_str)

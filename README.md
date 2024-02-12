@@ -70,8 +70,21 @@ primalscheme3 -o {anypath} interactions --bedfile {path} --threshold -26
 -   `--bedfile`: The bedfile to parse for interactions.
 -   `--threshold`: Only show dimers below (worse than) this score.
 
+### panel-create
 
+This creates a single pool scheme, in which amplicons cover spesified regions.
 
+#### mode
+
+- ```region-only```: Amplicons only cover region spesified in the --regionbed input
+- ```all```: Amplicons cover the regions with the most variance, measured using Shanon Entropy in the MSA.
+- `regoion-all`: COMMING SOON. Adds the region amplicons first then keeps adding based on higest entropy
+
+#### --regionbed
+
+This is a bedfile. The 4th colunm is the region name, and the 5th is a score. 
+- `chromname`: This needs to match the chromanme used for the msa. Either, first genome ID (--mapping first) or MSA baseame_consensus (--mapping consensus)
+- `score`: This is the score an amplicon gets for covering this site. Amplicions with the largest score are added into the scheme first. 
 
 ------------------------------------------------------------------------
 

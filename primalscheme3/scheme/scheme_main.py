@@ -500,12 +500,10 @@ def schemecreate(args):
 
     # Write amplicon bed file
     with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
-        amp_bed_str = []
-        for pp in scheme.all_primers():
-            amp_bed_str.append(
-                f"{pp.chrom_name}\t{pp.start}\t{pp.end}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
-            )
-        outfile.write("\n".join(amp_bed_str))
+        amp_bed_str = scheme.to_amplicons(trim_primers=False)
+        outfile.write(amp_bed_str)
+    with open(OUTPUT_DIR / "primertrim.amplicon.bed", "w") as outfile:
+        outfile.write(scheme.to_amplicons(trim_primers=True))
 
     # Write all the consensus sequences to a single file
     with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
@@ -536,7 +534,7 @@ def schemecreate(args):
     cfg["primer.bed.md5"] = primer_md5
 
     ## Generate the amplicon hash, and add it into the config
-    amp_md5 = hashlib.md5("\n".join(amp_bed_str).encode()).hexdigest()
+    amp_md5 = hashlib.md5(amp_bed_str.encode()).hexdigest()
     cfg["amplicon.bed.md5"] = amp_md5
 
     ## Read in the reference file and generate the hash

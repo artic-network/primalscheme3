@@ -20,7 +20,7 @@ from primalscheme3.panel.minimal_scheme_classes import PanelMSA
 # plot4: Thermo pass Fkmer and Rkmer plot
 
 
-def calc_occupancy(align_array) -> list[tuple[int, float]]:
+def calc_occupancy(align_array: np.ndarray) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
     for index, column in enumerate(align_array.T):
@@ -30,7 +30,7 @@ def calc_occupancy(align_array) -> list[tuple[int, float]]:
     return reduce_data(results)
 
 
-def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
+def calc_gc(align_array: np.ndarray, kmer_size: int = 30) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
     for col_index in range(0, align_array.shape[1] - kmer_size, 15):
@@ -47,24 +47,24 @@ def calc_gc(align_array, kmer_size=30) -> list[tuple[int, float]]:
 
 def reduce_data(results: list[tuple[int, float]]) -> list[tuple[int, float]]:
     """
-    Reduce the size of data by merging consecutive points
+    Reduce the size of data by merging consecutive points, and rounding to 4 decimal places
     """
     reduced_results = []
     for iindex, (index, oc) in enumerate(results):
         # Add first point
         if iindex == 0:
-            reduced_results.append((index, oc))
+            reduced_results.append((index, round(oc, 4)))
             continue
         # Add the last point
         if iindex == len(results) - 1:
-            reduced_results.append((index, oc))
+            reduced_results.append((index, round(oc, 4)))
             continue
 
         # If the previous point is the same, and the next point is the same
         if results[iindex - 1][1] == oc and results[iindex + 1][1] == oc:
             continue
         else:
-            reduced_results.append((index, oc))
+            reduced_results.append((index, round(oc, 4)))
     return reduced_results
 
 
@@ -149,7 +149,7 @@ def generate_thermo_pass_primer_data(msa: MSA | PanelMSA) -> dict[int, str]:
 
 
 def generate_amplicon_data(
-    primerpairs: list[PrimerPair], msa: MSA | PanelMSA
+    primerpairs: list[PrimerPair],
 ) -> dict[str, dict[str, int | str]]:
     """
     Creates the amplicon plot data
@@ -165,7 +165,7 @@ def generate_amplicon_data(
             "ce": primerpair.rprimer.start,
             "e": max(primerpair.rprimer.ends()),
             "p": primerpair.pool + 1,
-            "n": f"{msa._uuid}_{primerpair.amplicon_number}",
+            "n": f"{primerpair.amplicon_prefix}_{primerpair.amplicon_number}",
         }
 
     return amplicon_data
@@ -199,7 +199,7 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     data["entropy"] = generate_genome_entropy_data(msa)
     data["occupancy"] = generate_genome_occupancy_data(msa)
     data["thermo_pass"] = generate_thermo_pass_primer_data(msa)
-    data["amplicons"] = generate_amplicon_data(msa_pp, msa)
+    data["amplicons"] = generate_amplicon_data(msa_pp)
     data["dims"] = [x for x in msa.array.shape]
     data["uncovered"] = generate_uncovered_data(msa.array.shape[1], msa_pp)
 

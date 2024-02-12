@@ -407,20 +407,6 @@ def cli():
     )
     repair_parser.set_defaults(func=repair)
 
-    args = global_parser.parse_args()
-
-    # Validate some global args
-    if args.primer_gc_max <= args.primer_gc_min:
-        raise ValueError(
-            f"ERROR: --primer_gc_max ({args.primer_gc_max}) cannot be smaller than --primer_gc_min ({args.primer_gc_min})",
-        )
-
-    # Check Tms
-    if args.primer_tm_max <= args.primer_tm_min:
-        raise ValueError(
-            f"ERROR: --primer_tm_max ({args.primer_tm_max}) cannot be smaller than --primer_tm_min ({args.primer_tm_min})"
-        )
-
     ############################
     #   Parser for flu mode   #
     ############################
@@ -438,6 +424,20 @@ def cli():
         nargs="+",
     )
     flu_parser.set_defaults(func=create_flu)
+
+    args = global_parser.parse_args()
+
+    # Validate some global args
+    if args.primer_gc_max <= args.primer_gc_min:
+        raise ValueError(
+            f"ERROR: --primer_gc_max ({args.primer_gc_max}) cannot be smaller than --primer_gc_min ({args.primer_gc_min})",
+        )
+
+    # Check Tms
+    if args.primer_tm_max <= args.primer_tm_min:
+        raise ValueError(
+            f"ERROR: --primer_tm_max ({args.primer_tm_max}) cannot be smaller than --primer_tm_min ({args.primer_tm_min})"
+        )
 
     # if output directory exists and force is not set
     if pathlib.Path(args.output).is_dir() and not args.force:
