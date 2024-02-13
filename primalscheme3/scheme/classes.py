@@ -188,10 +188,8 @@ class Scheme(Multiplex):
                     self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
                     return SchemeReturn.ADDED_OL_PRIMERPAIR
 
-                # Guard for clash between the last primer in the same pool
-                if self._pools[pool_index][-1].msa_index == msa_index and max(
-                    self._pools[pool_index][-1].rprimer.ends()
-                ) >= min(ol_pp.fprimer.starts()):
+                # Guard for overlap
+                if self.does_overlap(ol_pp, pool_index):
                     continue
 
                 # Guard for Primer-Primer Interactions
@@ -373,10 +371,8 @@ class Scheme(Multiplex):
                     self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
                     return SchemeReturn.ADDED_WALK_PRIMERPAIR
 
-                # Guard for clash between the last primer in the same pool
-                if self._pools[pool_index][-1].msa_index == msa_index and max(
-                    self._pools[pool_index][-1].rprimer.ends()
-                ) >= min(walk_pp.fprimer.starts()):
+                # Guard for overlap
+                if self.does_overlap(walk_pp, pool_index):
                     continue
 
                 # Guard for Primer-Primer Interactions
