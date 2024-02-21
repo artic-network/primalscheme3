@@ -251,7 +251,7 @@ def schemecreate(args):
 
     # Add the mismatch params to the cfg
     cfg["mismatch_fuzzy"] = True
-    cfg["mismatch_kmersize"] = 20
+    cfg["mismatch_kmersize"] = cfg["primer_size_min"]
     cfg["mismatch_product_size"] = args.ampliconsizemax
 
     # Add plots to the cfg
@@ -306,14 +306,6 @@ def schemecreate(args):
             sys.exit(
                 f"ERROR: The number of pools in the bedfile is greater than --npools: {max(pools_in_bed)} > {cfg['npools']}"
             )
-
-        # Assign the bedfile generated pool to the scheme in a hacky way
-        bedprimerpairspools: list[list[BedPrimerPair | PrimerPair]] = [
-            [] for _ in range(cfg["npools"])
-        ]
-        for bedprimerpair in bedprimerpairs:
-            bedprimerpairspools[bedprimerpair.pool].append(bedprimerpair)
-        scheme._pools = bedprimerpairspools
 
         # Calculate the bedfile tm
         primer_tms = [
@@ -413,6 +405,16 @@ def schemecreate(args):
     # Add MSA data into cfg
     cfg["msa_data"] = msa_data
 
+    msa_chrom_to_index: dict[str, int] = {
+        msa._chrom_name: msa_index for msa_index, msa in msa_dict.items()
+    }
+    # Add the bedprimerpairs into the scheme
+    if args.bedfile and bedprimerpairs:
+        for pp in bedprimerpairs:
+            # Map the primerpair to the msa via chromname
+            pp.msa_index = msa_chrom_to_index.get(pp.chrom_name, -1)  # type: ignore
+            scheme.add_primer_pair_to_pool(pp, pp.pool, pp.msa_index)
+
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():
         while True:
@@ -446,6 +448,7 @@ def schemecreate(args):
 
             # Try to backtrack
             if cfg["backtrack"]:
+                logger.info("Backtracking...")
                 match scheme.try_backtrack(msa.primerpairs, msa_index):
                     case SchemeReturn.ADDED_BACKTRACKED:
                         logger.info(

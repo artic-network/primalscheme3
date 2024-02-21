@@ -95,11 +95,17 @@ class MSA:
 
             remaped_fkmers = [fkmer.remap(self._mapping_array) for fkmer in self.fkmers]  # type: ignore
             self.fkmers = [
-                x for x in remaped_fkmers if x is not None and x.end in mapping_set
+                x
+                for x in remaped_fkmers
+                if x is not None and x.end in mapping_set and min(x.starts()) >= 0
             ]
             remaped_rkmers = [rkmer.remap(self._mapping_array) for rkmer in self.rkmers]  # type: ignore
             self.rkmers = [
-                x for x in remaped_rkmers if x is not None and x.start in mapping_set
+                x
+                for x in remaped_rkmers
+                if x is not None
+                and x.start in mapping_set
+                and max(x.ends()) < self.array.shape[1]
             ]
 
     def generate_primerpairs(self, cfg: dict) -> None:

@@ -4,7 +4,6 @@ import numpy as np
 from collections import Counter
 from math import log2
 
-from numba import jit
 
 # Module Imports
 from primalscheme3.core.config import (
