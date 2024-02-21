@@ -2,6 +2,18 @@ from primer3 import calc_tm as p3_calc_tm, calc_hairpin as p3_calc_hairpin
 from typing import Iterable
 from itertools import groupby
 
+from enum import Enum
+
+
+class THERMORESULT(Enum):
+    # THERMORESULT.value == 0 is a pass
+    PASS = 0
+    HIGH_GC = 1
+    LOW_GC = 2
+    HIGH_TM = 3
+    LOW_TM = 4
+    MAX_HOMOPOLY = 5
+
 
 def calc_tm(kmer_seq, cfg: dict) -> float:
     """Return Tm for the kmer sequence."""
@@ -66,23 +78,62 @@ def max_homo(kmer_seq) -> int:
     return max(sum(1 for _ in group) for _, group in groupby(kmer_seq))
 
 
-def passes_thermo_checks(kmer_seq: str, cfg: dict) -> bool:
-    """Are all kmer thermo values below threshold?"""
-    return (
-        (cfg["primer_gc_min"] <= gc(kmer_seq) <= cfg["primer_gc_max"])
-        and (cfg["primer_tm_min"] <= calc_tm(kmer_seq, cfg) <= cfg["primer_tm_max"])
-        and (max_homo(kmer_seq) <= cfg["primer_homopolymer_max"])
-    )
+def passes_thermo_checks(kmer_seq: str, cfg: dict) -> THERMORESULT:
+    """Are all kmer thermo values below threshold?.
 
+    Evaluation order.
+    GC CHECK
+    TM CHECK
+    HOMOPOLY CHECK
+    PASS
 
-def thermo_check_kmers(kmers: Iterable[str], cfg: dict) -> bool:
+    Args:
+        kmer_seq (str): The kmer sequence to be checked.
+        cfg (dict): The configuration dictionary containing threshold values.
+
+    Returns:
+        THERMORESULT: The result of the thermo checks.
     """
-    Will call passes_thermo_checks on each kmer in the kmers list
-    Will stop evaluating on false
 
-    False means fail
+    # Check for gc in range
+    kmer_gc = gc(kmer_seq)
+    if kmer_gc > cfg["primer_gc_max"]:
+        return THERMORESULT.HIGH_GC
+    elif kmer_gc < cfg["primer_gc_min"]:
+        return THERMORESULT.LOW_GC
+
+    # Check for tm in range
+    kmer_tm = calc_tm(kmer_seq, cfg)
+    if kmer_tm > cfg["primer_tm_max"]:
+        return THERMORESULT.HIGH_TM
+    elif kmer_tm < cfg["primer_tm_min"]:
+        return THERMORESULT.LOW_TM
+
+    # Check for maxhomopolymer
+    if max_homo(kmer_seq) > cfg["primer_homopolymer_max"]:
+        return THERMORESULT.MAX_HOMOPOLY
+
+    return THERMORESULT.PASS
+
+
+def thermo_check_kmers(kmers: Iterable[str], cfg: dict) -> THERMORESULT:
+    """
+    Will call passes_thermo_checks on each kmer sequence in the kmers list
+    Will stop evaluating on first error
+
+    Args:
+        kmers (Iterable[str]): A list of kmer sequences to be evaluated.
+        cfg (dict): A dictionary containing configuration settings.
+
+    Returns:
+        THERMORESULT: The result of the thermo checks. THERMORESULT.PASS if all kmers pass the checks, otherwise the first encountered error.
+
     """
     for kmer in kmers:
-        if not passes_thermo_checks(kmer, cfg):
-            return False
-    return True
+        result = passes_thermo_checks(kmer, cfg)
+        if result == THERMORESULT.PASS:
+            continue
+        else:
+            return result
+
+    return THERMORESULT.PASS

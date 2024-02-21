@@ -1,5 +1,10 @@
 # Modules
-from primalscheme3.core.thermo import calc_tm, thermo_check_kmers, forms_hairpin
+from primalscheme3.core.thermo import (
+    calc_tm,
+    thermo_check_kmers,
+    forms_hairpin,
+    THERMORESULT,
+)
 from primalscheme3.core.seq_functions import expand_ambs, get_most_common_base
 from primalscheme3.core.classes import RKmer, FKmer, PrimerPair
 from primalscheme3.core.get_window import get_r_window_FAST2
@@ -37,11 +42,17 @@ class DIGESTION_ERROR(Enum):
     CUSTOM_RECURSION_ERROR = "CustomRecursionError"
     CUSTOM_ERRORS = "CustomErrors"
     GAP_ON_SET_BASE = "GapOnSetBase"
-    THERMO_FAIL = "ThermoFail"
     HAIRPIN_FAIL = "HairpinFail"
     DIMER_FAIL = "DimerFail"  # Interaction within the kmer
     WALK_TO_FAR = "WalkToFar"  # When indels causes the walk to go to far
     AMB_FAIL = "AmbFail"  # Generic error for when the error is unknown
+
+    # Thermo errors
+    THEMRO_HIGH_GC = "HighGC"
+    THEMRO_LOW_GC = "LowGC"
+    THEMRO_HIGH_TM = "HighTM"
+    THEMRO_LOW_TM = "LowTM"
+    THEMRO_MAX_HOMOPOLY = "MaxHomopoly"
 
 
 def parse_error(results: set[CustomErrors | str]) -> DIGESTION_ERROR:
@@ -64,6 +75,25 @@ def parse_error(results: set[CustomErrors | str]) -> DIGESTION_ERROR:
         return DIGESTION_ERROR.WALK_TO_FAR
     else:  # Return a generic error
         return DIGESTION_ERROR.AMB_FAIL
+
+
+def parse_thermo_error(result: THERMORESULT) -> DIGESTION_ERROR:
+    """
+    Parses the THERMORESULT for the error that occured
+    """
+    match result:
+        case THERMORESULT.HIGH_GC:
+            return DIGESTION_ERROR.THEMRO_HIGH_GC
+        case THERMORESULT.LOW_GC:
+            return DIGESTION_ERROR.THEMRO_LOW_GC
+        case THERMORESULT.HIGH_TM:
+            return DIGESTION_ERROR.THEMRO_HIGH_TM
+        case THERMORESULT.LOW_TM:
+            return DIGESTION_ERROR.THEMRO_LOW_TM
+        case THERMORESULT.MAX_HOMOPOLY:
+            return DIGESTION_ERROR.THEMRO_MAX_HOMOPOLY
+        case _:
+            raise ValueError("Unknown error occured")
 
 
 def parse_error_list(
@@ -460,8 +490,13 @@ def mp_r_digest(
             end_3p=cfg["editdist_end3p"],
         )
     # Thermo check the kmers
-    if not thermo_check_kmers(tmp_kmer.seqs, cfg):
-        return (start_col, DIGESTION_ERROR.THERMO_FAIL)
+    thermo_result = thermo_check_kmers(tmp_kmer.seqs, cfg)
+    match thermo_result:
+        case THERMORESULT.PASS:
+            pass
+        case _:
+            return (start_col, parse_thermo_error(thermo_result))
+
     # Check for hairpins
     if forms_hairpin(tmp_kmer.seqs, cfg=cfg):
         return (start_col, DIGESTION_ERROR.HAIRPIN_FAIL)
@@ -564,8 +599,13 @@ def mp_f_digest(
         )
 
     # Thermo check the kmers
-    if not thermo_check_kmers({*parsed_seqs.keys()}, cfg):
-        return (end_col, DIGESTION_ERROR.THERMO_FAIL)
+    thermo_result = thermo_check_kmers({*parsed_seqs.keys()}, cfg)
+    match thermo_result:
+        case THERMORESULT.PASS:
+            pass
+        case _:
+            return (end_col, parse_thermo_error(thermo_result))
+
     if forms_hairpin({*parsed_seqs.keys()}, cfg=cfg):
         return (end_col, DIGESTION_ERROR.HAIRPIN_FAIL)
 
