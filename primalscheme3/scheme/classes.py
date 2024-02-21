@@ -244,8 +244,11 @@ class Scheme(Multiplex):
         }
 
         is_replacement_first = False
-        # If the last primerpair was the first primerpair.
-        if self._last_pp_added[-1].msa_index != last_pp.msa_index:
+        # If the last primerpair was the first primerpair, or first for this msa
+        if (
+            len(self._last_pp_added) == 0
+            or self._last_pp_added[-1].msa_index != last_pp.msa_index
+        ):
             # Handle adding a new first primerpair
             replacement_pps = [x for x in all_pp_list if x != last_pp]
             replacement_pps.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
