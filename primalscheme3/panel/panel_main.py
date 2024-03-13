@@ -98,6 +98,9 @@ def panelcreate(args):
 
     cfg["primer_size_min"] = 14
 
+    # Add ignore_n to the cfg
+    cfg["ignore_n"] = args.ignore_n
+
     # Enforce only one pool
     if args.npools != 1:
         sys.exit("ERROR: primalpanel only supports one pool")

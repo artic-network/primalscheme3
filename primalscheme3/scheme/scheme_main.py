@@ -255,7 +255,7 @@ def schemecreate(args):
     cfg["mismatch_product_size"] = args.ampliconsizemax
 
     # Add plots to the cfg
-    cfg["plot"] = args.plot
+    cfg["plot"] = args.no_plot
     cfg["disable_progress_bar"] = False
 
     # Add the mapping to the cfg
@@ -272,6 +272,9 @@ def schemecreate(args):
         cfg["bedfile"] = str(args.bedfile)
     else:
         cfg["bedfile"] = False
+
+    # Add ignore_n to the cfg
+    cfg["ignore_n"] = args.ignore_n
 
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir() and not args.force:
@@ -557,3 +560,5 @@ def schemecreate(args):
         last_pp_added=scheme._last_pp_added,
     )
     generate_all_plots(plot_data, OUTPUT_DIR)
+
+    logger.info("Completed Successfully")

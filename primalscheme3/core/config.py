@@ -23,6 +23,7 @@ config_dict = {
     "dimerscore": -27,
     "mismatch_fuzzy": True,
     "mismatch_kmersize": 18,  # primer_size_min
+    "ignore_n": False,
 }
 
 
