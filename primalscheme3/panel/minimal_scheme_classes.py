@@ -80,7 +80,9 @@ class Region:
         return range(self.start, self.stop)
 
     def __hash__(self) -> int:
-        return hash(f"{self.chromname}:{self.start}:{self.stop}")
+        return hash(
+            f"{self.chromname}:{self.start}:{self.stop}:{self.name}:{self.score}"
+        )
 
     def __eq__(self, __value: object) -> bool:
         if not isinstance(__value, Region):
