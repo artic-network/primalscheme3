@@ -394,6 +394,13 @@ def schemecreate(args):
             num_rkmers=len(msa.rkmers),
         )
 
+        if len(msa.fkmers) == 0 or len(msa.rkmers) == 0:
+            logger.critical(
+                "No valid FKmers or RKmers found for <blue>{msa_name}</>",
+                msa_name=msa.name,
+            )
+            sys.exit(1)
+
         # Generate all primerpairs then interaction check
         msa.generate_primerpairs(cfg)
         logger.info(
@@ -401,6 +408,13 @@ def schemecreate(args):
             msa_path=msa.name,
             num_pp=len(msa.primerpairs),
         )
+
+        if len(msa.primerpairs) == 0:
+            logger.critical(
+                "No valid primers found for <blue>{msa_name}</>",
+                msa_name=msa.name,
+            )
+            sys.exit(1)
 
         # Add the msa to the scheme
         msa_dict[msa_index] = msa
