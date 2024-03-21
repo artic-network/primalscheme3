@@ -255,7 +255,7 @@ def schemecreate(args):
     cfg["mismatch_product_size"] = args.ampliconsizemax
 
     # Add plots to the cfg
-    cfg["plot"] = args.plot
+    cfg["plot"] = args.no_plot
     cfg["disable_progress_bar"] = False
 
     # Add the mapping to the cfg
@@ -272,6 +272,9 @@ def schemecreate(args):
         cfg["bedfile"] = str(args.bedfile)
     else:
         cfg["bedfile"] = False
+
+    # Add ignore_n to the cfg
+    cfg["ignore_n"] = args.ignore_n
 
     # See if the output dir already exsits
     if OUTPUT_DIR.is_dir() and not args.force:
@@ -391,6 +394,13 @@ def schemecreate(args):
             num_rkmers=len(msa.rkmers),
         )
 
+        if len(msa.fkmers) == 0 or len(msa.rkmers) == 0:
+            logger.critical(
+                "No valid FKmers or RKmers found for <blue>{msa_name}</>",
+                msa_name=msa.name,
+            )
+            sys.exit(1)
+
         # Generate all primerpairs then interaction check
         msa.generate_primerpairs(cfg)
         logger.info(
@@ -398,6 +408,13 @@ def schemecreate(args):
             msa_path=msa.name,
             num_pp=len(msa.primerpairs),
         )
+
+        if len(msa.primerpairs) == 0:
+            logger.critical(
+                "No valid primers found for <blue>{msa_name}</>",
+                msa_name=msa.name,
+            )
+            sys.exit(1)
 
         # Add the msa to the scheme
         msa_dict[msa_index] = msa
@@ -557,3 +574,5 @@ def schemecreate(args):
         last_pp_added=scheme._last_pp_added,
     )
     generate_all_plots(plot_data, OUTPUT_DIR)
+
+    logger.info("Completed Successfully")

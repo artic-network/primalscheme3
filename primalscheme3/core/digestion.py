@@ -360,7 +360,7 @@ def r_digest_to_count(
     """
     Returns the count of each sequence / error at a given index
 
-    A value of -1 in the return dict means the function returned early, and not all seqs were counted
+    A value of -1 in the return dict means the function returned early, and not all seqs were counted. Only used for WALKS_OUT and GAP_ON_SET_BASE
     """
     align_array: np.ndarray = data[0]
     cfg: dict = data[1]
@@ -377,6 +377,7 @@ def r_digest_to_count(
     del first_base_counter[""]
     num_seqs = sum(first_base_counter.values())
     first_base_freq = {k: v / num_seqs for k, v in first_base_counter.items()}
+
     # If the freq of gap is above minfreq
     if first_base_freq.get("-", 0) > min_freq:
         return (start_col, {DIGESTION_ERROR.GAP_ON_SET_BASE: -1})
@@ -419,7 +420,7 @@ def r_digest_to_count(
 
 
 def process_seqs(
-    seq_counts: dict[str | DIGESTION_ERROR, int], min_freq
+    seq_counts: dict[str | DIGESTION_ERROR, int], min_freq, ignore_n: bool = False
 ) -> DIGESTION_ERROR | dict[str, float]:
     """
     Takes the output from *_digest_to_count and returns a set of valid sequences. Or the error that occurred.
@@ -436,6 +437,10 @@ def process_seqs(
     for error, count in seq_counts.items():
         if count == -1 and type(error) == DIGESTION_ERROR:
             return error
+
+    # Remove Ns if asked
+    if not ignore_n:
+        seq_counts.pop(DIGESTION_ERROR.CONTAINS_INVALID_BASE, None)
 
     total_values = sum(seq_counts.values())
     # Filter out values below the threshold freq
@@ -471,7 +476,7 @@ def mp_r_digest(
     # Count how many times each sequence / error occurs
     _start_col, seq_counts = r_digest_to_count((align_array, cfg, start_col, min_freq))
 
-    tmp_parsed_seqs = process_seqs(seq_counts, min_freq)
+    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=cfg["ignore_n"])
     if type(tmp_parsed_seqs) == DIGESTION_ERROR:
         return (start_col, tmp_parsed_seqs)
     elif type(tmp_parsed_seqs) == dict:
@@ -582,7 +587,7 @@ def mp_f_digest(
 
     # Count how many times each sequence / error occurs
     _end_col, seq_counts = f_digest_to_count((align_array, cfg, end_col, min_freq))
-    tmp_parsed_seqs = process_seqs(seq_counts, min_freq)
+    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=cfg["ignore_n"])
     if type(tmp_parsed_seqs) == DIGESTION_ERROR:
         return (end_col, tmp_parsed_seqs)
     elif type(tmp_parsed_seqs) == dict:

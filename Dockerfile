@@ -4,7 +4,7 @@ ENV POETRY_VERSION=1.6.1
 ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VENV=/opt/poetry-venv
 
-ENV PRIMALSCHEME3_VERSION=1.1.4
+ENV PRIMALSCHEME3_VERSION=1.1.5
 
 # Install python
 RUN apt-get update -y && apt-get install curl -y

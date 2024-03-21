@@ -159,6 +159,9 @@ def cli():
         help="Override the output directory",
         action="store_true",
     )
+    global_parser.add_argument(
+        "--ignore-n", help="Ignore Ns in the MSA", action="store_true"
+    )
     subparsers = global_parser.add_subparsers(
         title="subcommands", help="scheme types", required=True
     )
@@ -224,8 +227,7 @@ def cli():
     panel_create_parser.add_argument(
         "--reducekmers",
         help="An existing bedfile to add primers to",
-        type=bool,
-        default=False,
+        action="store_true",
     )
     panel_create_parser.add_argument(
         "--minbasefreq",
@@ -292,8 +294,7 @@ def cli():
     scheme_create_parser.add_argument(
         "--reducekmers",
         help="Should number of sequences in each Kmer be reduced",
-        type=bool,
-        default=False,
+        action="store_true",
     )
     scheme_create_parser.add_argument(
         "--minbasefreq",
@@ -302,10 +303,9 @@ def cli():
         default=0.0,
     )
     scheme_create_parser.add_argument(
-        "--plot",
-        type=bool,
-        default=True,
-        help="Should HTML plots be generated",
+        "--no-plot",
+        action="store_true",
+        help="Prevents the creation of a plots of the primer scheme",
     )
     scheme_create_parser.add_argument(
         "--mapping",
@@ -316,14 +316,12 @@ def cli():
     scheme_create_parser.add_argument(
         "--circular",
         help="Should a circular amplicon be added (vv experimental)",
-        type=bool,
-        default=False,
+        action="store_true",
     )
     scheme_create_parser.add_argument(
         "--backtrack",
         help="Should the algorythm backtrack (vv experimental)",
-        type=bool,
-        default=False,
+        action="store_true",
     )
     scheme_create_parser.set_defaults(func=schemecreate)
 
