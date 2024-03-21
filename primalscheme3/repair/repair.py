@@ -1,8 +1,11 @@
 import json
 import pathlib
 import sys
+import hashlib
+import shutil
 
 # Core imports
+from primalscheme3.__init__ import __version__
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.bedfiles import read_in_bedprimerpairs, BedPrimerPair
 from primalscheme3.core.logger import setup_loger
@@ -149,6 +152,25 @@ def repair(args):
         msa_rows=msa.array.shape[0],
         msa_cols=msa.array.shape[1],
     )
+
+    # Update the base_cfg with the new msa
+    # Create MSA checksum
+    with open(args.msa, "rb") as f:
+        msa_checksum = hashlib.file_digest(f, "md5").hexdigest()
+    current_msa_index = max([int(x) for x in base_cfg["msa_data"].keys()])
+    base_cfg["msa_data"][str(current_msa_index + 1)] = {
+        "msa_name": msa.name,
+        "msa_path": str("work/" + args.msa.name),
+        "msa_chromname": msa._chrom_name,
+        "msa_uuid": msa._uuid,
+        "msa_checksum": msa_checksum,
+    }
+    # Copy the MSA file to the work dir
+    local_msa_path = OUTPUT_DIR / "work" / args.msa.name
+    shutil.copy(args.msa, local_msa_path)
+
+    # Update the config with new algoversion
+    base_cfg["algorithmversion"] = f"primalscheme3:{__version__}"
 
     # Read in the bedfile
     all_primerpairs, _header = read_in_bedprimerpairs(args.bedfile)
@@ -331,15 +353,10 @@ def repair(args):
         for pp in primerpairs_in_msa:
             f.write(pp.to_bed(new_primer_prefix=msa._uuid) + "\n")
 
+    # Amplicon and primertrimmed files should not have changed. Can be copied from the input dir
+    # Not sure how to handle the amplicon names, as the primerstem has changed?
+    ## Keep orginal names for now
+
     # Write the config dict to file
     with open(OUTPUT_DIR / f"config.json", "w") as outfile:
         outfile.write(json.dumps(base_cfg, sort_keys=True))
-
-    ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
-    # Writing plot data
-    plot_data = generate_all_plotdata(
-        list(msa_dict.values()),
-        OUTPUT_DIR / "work",
-        last_pp_added=all_primerpairs,
-    )
-    generate_all_plots(plot_data, OUTPUT_DIR)
