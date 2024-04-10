@@ -1,9 +1,8 @@
-import unittest
 import pathlib
+import unittest
 
-from primalscheme3.core.classes import MatchDB, PrimerPair, FKmer, RKmer
 import primalscheme3.core.config as config
-from primalscheme3.core.bedfiles import BedPrimerPair
+from primalscheme3.core.classes import FKmer, MatchDB, PrimerPair, RKmer
 from primalscheme3.core.multiplex import Multiplex
 
 

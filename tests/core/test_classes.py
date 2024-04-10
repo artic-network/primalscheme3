@@ -1,11 +1,11 @@
 import unittest
 
-from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
+from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
 
 
 class Test_FKmer(unittest.TestCase):
     def test_creation(self):
-        seqs = {"ATGC", "ATGC", "ATGC", "ACACAA"}
+        seqs = {"ATGC", "ACACAA"}
         end = 100
 
         # Test case 1: Valid input
@@ -17,7 +17,7 @@ class Test_FKmer(unittest.TestCase):
         self.assertEqual(fkmer._starts, {end - 4, end - 6})
 
     def test_len(self):
-        seqs = {"ATGC", "ATGC", "ATGC"}
+        seqs = {"ATGC"}
         end = 100
 
         # Test case 1: Valid input
@@ -61,7 +61,7 @@ class Test_FKmer(unittest.TestCase):
 
 class Test_RKmer(unittest.TestCase):
     def test_create(self):
-        seqs = {"ATGC", "ATGC", "ATGC"}
+        seqs = {"ATGC"}
         start = 100
 
         # Test case 1: Valid input
@@ -73,7 +73,7 @@ class Test_RKmer(unittest.TestCase):
         self.assertEqual(rkmer._ends, {start + 4})
 
     def test_len(self):
-        seqs = {"ATGC", "ATGC", "ATGC"}
+        seqs = {"ATGC"}
         start = 100
 
         # Test case 1: Valid input
@@ -83,7 +83,7 @@ class Test_RKmer(unittest.TestCase):
         self.assertEqual(rkmer.len(), {4})
 
     def test_ends(self):
-        seqs = {"ATGC", "ATGC", "ATGCAA"}
+        seqs = {"ATGC", "ATGCAA"}
         start = 100
 
         # Test case 1: Valid input

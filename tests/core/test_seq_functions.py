@@ -1,14 +1,15 @@
 import unittest
+
 import numpy as np
+
 from primalscheme3.core.seq_functions import (
-    reverse_complement,
-    get_most_common_base,
-    remove_end_insertion,
-    expand_ambs,
-    extend_ambiguous_base,
     calc_entropy,
     calc_probs,
-    entropy_score_array,
+    expand_ambs,
+    extend_ambiguous_base,
+    get_most_common_base,
+    remove_end_insertion,
+    reverse_complement,
 )
 
 

@@ -1,13 +1,11 @@
-import unittest
-import pathlib
 import hashlib
-import os
+import pathlib
+import unittest
 
 from primalscheme3.core.bedfiles import (
-    read_in_bedprimerpairs,
-    BedPrimerPair,
     re_primer_name,
     read_in_bedlines,
+    read_in_bedprimerpairs,
 )
 
 

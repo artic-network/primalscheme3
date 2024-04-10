@@ -1,7 +1,7 @@
 import unittest
 
-from primalscheme3.core.thermo import THERMORESULT, gc, max_homo, passes_thermo_checks
 from primalscheme3.core.config import config_dict as cfg
+from primalscheme3.core.thermo import THERMORESULT, gc, max_homo, passes_thermo_checks
 
 
 class Test_GC(unittest.TestCase):

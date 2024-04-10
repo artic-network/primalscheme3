@@ -1,8 +1,8 @@
 import unittest
-import numpy as np
-import pathlib
 
-from primalscheme3.core.mapping import trucnate_msa, create_mapping, generate_consensus
+import numpy as np
+
+from primalscheme3.core.mapping import create_mapping, generate_consensus, trucnate_msa
 
 
 class Test_TruncateMsa(unittest.TestCase):

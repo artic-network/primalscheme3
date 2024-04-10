@@ -1,22 +1,23 @@
 import unittest
+
+import numpy as np
+
+from primalscheme3.core.classes import FKmer, RKmer
+from primalscheme3.core.config import config_dict as cfg
 from primalscheme3.core.digestion import (
-    reduce_kmers,
+    DIGESTION_ERROR,
+    digest,
     hamming_dist,
+    mp_f_digest,
+    mp_r_digest,
+    parse_error,
+    reduce_kmers,
     walk_left,
     walk_right,
     wrap_walk,
-    mp_r_digest,
-    mp_f_digest,
-    digest,
-    DIGESTION_ERROR,
-    parse_error,
 )
-from primalscheme3.core.classes import FKmer, RKmer
-from primalscheme3.core.config import config_dict as cfg
-from primalscheme3.core.thermo import calc_tm
-
 from primalscheme3.core.errors import *
-import numpy as np
+from primalscheme3.core.thermo import calc_tm
 
 
 class Test_parse_errors(unittest.TestCase):
@@ -54,7 +55,7 @@ class Test_parse_errors(unittest.TestCase):
         )
 
         # Test that DIGESTION_ERROR.AMB_FAIL is returned on no error provided
-        self.assertEqual(parse_error({"ATCG", "ATCG"}), DIGESTION_ERROR.AMB_FAIL)
+        self.assertEqual(parse_error({"ATCG"}), DIGESTION_ERROR.AMB_FAIL)
 
 
 class Test_HammingDist(unittest.TestCase):

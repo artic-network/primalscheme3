@@ -1,8 +1,9 @@
 import unittest
+
 from primalscheme3.core.mismatches import (
+    MatchDB,
     detect_new_products,
     detect_products,
-    MatchDB,
     generate_single_mismatches,
 )
 
