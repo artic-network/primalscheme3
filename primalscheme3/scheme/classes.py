@@ -1,23 +1,23 @@
 from enum import Enum
 from multiprocessing import Pool
 
+from primaldimer_py import do_pools_interact_py  # type: ignore
+
+from primalscheme3.core.bedfiles import BedPrimerPair
+
 # Module imports
 from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.multiplex import Multiplex
-from primalscheme3.core.mismatches import MatchDB, detect_new_products
-from primalscheme3.core.get_window import get_pp_window
-from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.digestion import _mp_pp_inter_free
-
+from primalscheme3.core.get_window import get_pp_window
+from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.multiplex import Multiplex
 
 # Scheme imports
 from primalscheme3.scheme.primer_pair_score import (
+    bt_ol_pp_score,
     ol_pp_score,
     walk_pp_score,
-    bt_ol_pp_score,
 )
-
-from primaldimer_py import do_pools_interact_py  # type: ignore
 
 
 class SchemeReturn(Enum):

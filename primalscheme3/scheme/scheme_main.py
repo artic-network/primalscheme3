@@ -1,36 +1,29 @@
+import hashlib
+import json
+import pathlib
+import shutil
+import sys
+
+from Bio import Seq, SeqIO, SeqRecord
+
 # Interaction checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
-# Core imports
-from primalscheme3.core.thermo import *
-from primalscheme3.core.config import config_dict
+
+from primalscheme3.__init__ import __version__
 from primalscheme3.core.bedfiles import (
-    BedPrimerPair,
     read_in_bedprimerpairs,
 )
-from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.mapping import generate_consensus, generate_reference
-from primalscheme3.core.msa import MSA
-from primalscheme3.core.logger import setup_loger
-
-# Module imports
-from primalscheme3.scheme.classes import Scheme, SchemeReturn, PrimerPair
-
-# Global imports
-from primalscheme3.__init__ import __version__
-from primalscheme3.core.create_reports import generate_all_plots
+from primalscheme3.core.config import config_dict
 from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
-
-
-# Extental imports
-import hashlib
-import sys
-import pathlib
-import json
-from Bio import SeqIO, SeqRecord, Seq
-import shutil
+from primalscheme3.core.create_reports import generate_all_plots
+from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.mapping import generate_consensus, generate_reference
+from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.msa import MSA
+from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 
 def schemereplace(args):
@@ -38,7 +31,7 @@ def schemereplace(args):
     List all replacements primers
     """
     # Read in the config file
-    with open(args.config, "r") as file:
+    with open(args.config) as file:
         cfg: dict = json.load(file)
 
     # Update the amplicon size if it is provided
@@ -117,9 +110,9 @@ def schemereplace(args):
     with open(msa.path, "rb") as f:
         msa_checksum = hashlib.file_digest(f, "md5").hexdigest()
     if msa_checksum != msa_data["msa_checksum"]:
-        raise ValueError(f"ERROR: MSA checksums do not match.")
+        raise ValueError("ERROR: MSA checksums do not match.")
     else:
-        print(f"MSA checksums match")
+        print("MSA checksums match")
 
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
@@ -163,7 +156,7 @@ def schemereplace(args):
     if len(spanning_primerpairs) > 0:
         print(f"Spanning amplicons found: {len(spanning_primerpairs)}")
     else:
-        raise ValueError(f"ERROR: No spanning primers found")
+        raise ValueError("ERROR: No spanning primers found")
 
     # Sort for number of primer pairs
     spanning_primerpairs.sort(key=lambda x: len(x.all_seqs()))
@@ -558,12 +551,12 @@ def schemecreate(args):
     cfg["amplicon.bed.md5"] = amp_md5
 
     ## Read in the reference file and generate the hash
-    with open(OUTPUT_DIR / "reference.fasta", "r") as reference_outfile:
+    with open(OUTPUT_DIR / "reference.fasta") as reference_outfile:
         ref_md5 = hashlib.md5(reference_outfile.read().encode()).hexdigest()
     cfg["reference.fasta.md5"] = ref_md5
 
     # Write the config dict to file
-    with open(OUTPUT_DIR / f"config.json", "w") as outfile:
+    with open(OUTPUT_DIR / "config.json", "w") as outfile:
         outfile.write(json.dumps(cfg, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
