@@ -1,24 +1,23 @@
+import hashlib
 import json
 import pathlib
-import sys
-import hashlib
 import shutil
+import sys
+
+from primaldimer_py import do_pools_interact_py  # type: ignore
 
 # Core imports
 from primalscheme3.__init__ import __version__
-from primalscheme3.core.msa import MSA
-from primalscheme3.core.bedfiles import read_in_bedprimerpairs, BedPrimerPair
-from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.bedfiles import BedPrimerPair, read_in_bedprimerpairs
 from primalscheme3.core.digestion import (
+    DIGESTION_ERROR,
     f_digest_to_count,
     r_digest_to_count,
-    DIGESTION_ERROR,
 )
-from primalscheme3.core.thermo import forms_hairpin, thermo_check_kmers, THERMORESULT
-from primalscheme3.core.classes import FKmer, RKmer
+from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.msa import MSA
 from primalscheme3.core.seq_functions import reverse_complement
-
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primalscheme3.core.thermo import THERMORESULT, forms_hairpin, thermo_check_kmers
 
 
 class BedPrimerPairRepair(BedPrimerPair):
@@ -349,7 +348,7 @@ def repair(args):
             )
 
     # Write out the new bedfile
-    with open(OUTPUT_DIR / f"primer.bed", "w") as f:
+    with open(OUTPUT_DIR / "primer.bed", "w") as f:
         for pp in primerpairs_in_msa:
             f.write(pp.to_bed(new_primer_prefix=msa._uuid) + "\n")
 
@@ -358,5 +357,5 @@ def repair(args):
     ## Keep orginal names for now
 
     # Write the config dict to file
-    with open(OUTPUT_DIR / f"config.json", "w") as outfile:
+    with open(OUTPUT_DIR / "config.json", "w") as outfile:
         outfile.write(json.dumps(base_cfg, sort_keys=True))

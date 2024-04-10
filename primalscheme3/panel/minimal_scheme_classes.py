@@ -1,24 +1,22 @@
-from Bio import SeqIO
-import numpy as np
-import numpy as np
-from uuid import uuid4
+import pathlib
 from enum import Enum
 from itertools import islice
-import pathlib
 
-
-# Core Module imports
-from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.multiplex import Multiplex
-from primalscheme3.core.msa import MSA
-from primalscheme3.core.mismatches import MatchDB, detect_new_products
-from primalscheme3.core.seq_functions import (
-    entropy_score_array,
-)
-from primalscheme3.core.bedfiles import BedPrimerPair
+import numpy as np
 
 # Interations checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
+
+from primalscheme3.core.bedfiles import BedPrimerPair
+
+# Core Module imports
+from primalscheme3.core.classes import PrimerPair
+from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.msa import MSA
+from primalscheme3.core.multiplex import Multiplex
+from primalscheme3.core.seq_functions import (
+    entropy_score_array,
+)
 
 
 class PanelReturn(Enum):

@@ -1,33 +1,33 @@
 # Core imports
-from primalscheme3.core.config import config_dict
-from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.create_reports import generate_all_plots
-from primalscheme3.core.create_report_data import generate_all_plotdata
-from primalscheme3.core.mapping import generate_consensus, generate_reference
-from primalscheme3.core.bedfiles import read_in_bedprimerpairs
-from primalscheme3.core.logger import setup_loger
+import hashlib
+import json
+
+# General import
+import pathlib
+import shutil
+import sys
+from math import sqrt
+
+from Bio import Seq, SeqIO, SeqRecord
+from loguru import logger
 
 # version import
 from primalscheme3 import __version__
+from primalscheme3.core.bedfiles import read_in_bedprimerpairs
+from primalscheme3.core.config import config_dict
+from primalscheme3.core.create_report_data import generate_all_plotdata
+from primalscheme3.core.create_reports import generate_all_plots
+from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.mapping import generate_consensus, generate_reference
+from primalscheme3.core.mismatches import MatchDB
 
 # Module imports
 from primalscheme3.panel.minimal_scheme_classes import (
     Panel,
+    PanelMSA,
     PanelReturn,
     Region,
-    PanelMSA,
 )
-
-# General import
-import pathlib
-import sys
-from loguru import logger
-import json
-from math import sqrt
-from Bio import SeqIO, SeqRecord, Seq
-import shutil
-import hashlib
-
 
 logger = logger.opt(colors=True)
 
@@ -40,7 +40,7 @@ def read_region_bedfile(path) -> list[list[str]]:
     """
     ## If bedfile given, parse it:
     bed_lines = []
-    with open(path, "r") as bedfile:
+    with open(path) as bedfile:
         for line in bedfile.readlines():
             line = line.strip()
             if not line or line.startswith("#"):  # Skip empty lines and header lines
@@ -259,7 +259,11 @@ def panelcreate(args):
         if args.mode == "region-only":
             # Sort the primerpairs by the number of SNPs in the amplicon
             msa.primerpairs.sort(
-                key=lambda pp: (msa.get_pp_score(pp), -sqrt(len(pp.all_seqs())), pp.fprimer.__hash__()),  # type: ignore # Use a HASH Prevent sequential primerpairs being added
+                key=lambda pp: (
+                    msa.get_pp_score(pp),
+                    -sqrt(len(pp.all_seqs())),
+                    pp.fprimer.__hash__(),
+                ),  # type: ignore # Use a HASH Prevent sequential primerpairs being added
                 reverse=True,
             )
             # Remove all primerpairs with a score of 0
@@ -292,7 +296,8 @@ def panelcreate(args):
         bedprimerpairs, _headers = read_in_bedprimerpairs(args.inputbedfile)
         for bedprimerpair in bedprimerpairs:
             bedprimerpair.msa_index = msa_chromname_to_index.get(
-                bedprimerpair.chrom_name, -1  # type: ignore
+                bedprimerpair.chrom_name,  # type: ignore
+                -1,
             )
             panel._add_primerpair(
                 bedprimerpair,
@@ -463,7 +468,7 @@ def panelcreate(args):
     cfg["amplicon.bed.md5"] = amp_md5
 
     ## Read in the reference file and generate the hash
-    with open(OUTPUT_DIR / "reference.fasta", "r") as reference_outfile:
+    with open(OUTPUT_DIR / "reference.fasta") as reference_outfile:
         ref_md5 = hashlib.md5(reference_outfile.read().encode()).hexdigest()
     cfg["reference.fasta.md5"] = ref_md5
 
@@ -471,7 +476,7 @@ def panelcreate(args):
     # Add the bedfile to the cfg
     cfg["regionbedfile"] = str(args.regionbedfile)
     cfg["inputbedfile"] = str(args.inputbedfile)
-    with open(OUTPUT_DIR / f"config.json", "w") as outfile:
+    with open(OUTPUT_DIR / "config.json", "w") as outfile:
         outfile.write(json.dumps(cfg, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME

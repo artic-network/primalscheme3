@@ -1,13 +1,9 @@
 # Core imports
-from primalscheme3.core.bedfiles import BedLine, read_in_bedlines
-from primalscheme3.core.config import ALL_DNA
-
 from primaldimer_py import (
     calc_at_offset_py,  # type: ignore
-)  # calc_at_offset_py(seq1: &str, seq2: &str, offset: i32) -> f64
+)
 
-
-import pathlib
+from primalscheme3.core.bedfiles import read_in_bedlines
 
 MATCHES: dict[tuple, bool] = {
     ("A", "T"): True,
