@@ -1,5 +1,6 @@
-import numpy as np
 from collections import Counter
+
+import numpy as np
 
 # Module imports
 from primalscheme3.core.seq_functions import extend_ambiguous_base

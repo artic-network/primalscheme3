@@ -1,10 +1,9 @@
 # Module imports
-from primalscheme3.core.seq_functions import reverse_complement
-from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.thermo import calc_tm
-
-
 from primaldimer_py import do_pools_interact_py  # type: ignore
+
+from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.seq_functions import reverse_complement
+from primalscheme3.core.thermo import calc_tm
 
 
 class FKmer:

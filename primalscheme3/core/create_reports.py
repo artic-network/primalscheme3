@@ -1,18 +1,17 @@
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from plotly.offline.offline import plot
-
-import numpy as np
+import pathlib
 from collections import Counter
 from itertools import groupby
 from operator import itemgetter
-import pathlib
+
+import plotly.graph_objects as go
+from plotly.offline.offline import plot
+from plotly.subplots import make_subplots
 
 # Module imports
 from primalscheme3.core.classes import PrimerPair
+from primalscheme3.core.create_report_data import calc_gc, calc_occupancy
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.seq_functions import entropy_score_array
-from primalscheme3.core.create_report_data import calc_gc, calc_occupancy
 
 
 def calc_base_consensus(align_array) -> list[float]:

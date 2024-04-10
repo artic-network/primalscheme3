@@ -1,12 +1,13 @@
-import numpy as np
 import pathlib
-from Bio import SeqIO
 from uuid import uuid4
 
+import numpy as np
+from Bio import SeqIO
+
+from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
-from primalscheme3.core.seq_functions import remove_end_insertion
-from primalscheme3.core.classes import FKmer, RKmer, PrimerPair
 from primalscheme3.core.mapping import create_mapping
+from primalscheme3.core.seq_functions import remove_end_insertion
 
 
 def msa_qc(array: np.ndarray):

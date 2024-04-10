@@ -1,8 +1,9 @@
-from primer3 import calc_tm as p3_calc_tm, calc_hairpin as p3_calc_hairpin
-from typing import Iterable
-from itertools import groupby
-
 from enum import Enum
+from itertools import groupby
+from typing import Iterable
+
+from primer3 import calc_hairpin as p3_calc_hairpin
+from primer3 import calc_tm as p3_calc_tm
 
 
 class THERMORESULT(Enum):

@@ -1,5 +1,5 @@
-from primalscheme3.core.classes import PrimerPair, MatchDB
 from primalscheme3.core.bedfiles import BedPrimerPair
+from primalscheme3.core.classes import MatchDB, PrimerPair
 
 
 class Multiplex:

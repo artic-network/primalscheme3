@@ -1,14 +1,14 @@
-from itertools import product
-from typing import Iterable
-import numpy as np
 from collections import Counter
+from itertools import product
 from math import log2
+from typing import Iterable
 
+import numpy as np
 
 # Module Imports
 from primalscheme3.core.config import (
-    ALL_DNA,
     ALL_BASES,
+    ALL_DNA,
     AMB_BASES,
     AMBIGUOUS_DNA_COMPLEMENT,
 )

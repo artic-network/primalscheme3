@@ -1,10 +1,10 @@
-from Bio import SeqIO
+import dbm.ndbm
 from typing import Iterable
 
-import dbm.ndbm
+from Bio import SeqIO
 
 # Module imports
-from primalscheme3.core.seq_functions import reverse_complement, expand_ambs
+from primalscheme3.core.seq_functions import expand_ambs, reverse_complement
 
 MUTATIONS = {
     "A": "CGT",

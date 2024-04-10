@@ -1,9 +1,10 @@
 import pathlib
 import re
 
+from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+
 # Module imports
 from primalscheme3.core.seq_functions import expand_ambs
-from primalscheme3.core.classes import PrimerPair, FKmer, RKmer
 
 REGEX_PATTERN_PRIMERNAME = re.compile("\\d+(_RIGHT|_LEFT|_R|_L)")
 
@@ -116,7 +117,7 @@ def read_in_bedlines(path: pathlib.Path) -> tuple[list[BedLine], list[str]]:
     """
     bed_primers: list[BedLine] = []
     bed_headers: list[str] = []
-    with open(path, "r") as bedfile:
+    with open(path) as bedfile:
         for line in bedfile.readlines():
             if not line:  # Skip empty lines
                 continue

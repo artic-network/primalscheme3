@@ -1,35 +1,37 @@
 # Modules
-from primalscheme3.core.thermo import (
-    calc_tm,
-    thermo_check_kmers,
-    forms_hairpin,
-    THERMORESULT,
-)
-from primalscheme3.core.seq_functions import expand_ambs, get_most_common_base
-from primalscheme3.core.classes import RKmer, FKmer, PrimerPair
-from primalscheme3.core.get_window import get_r_window_FAST2
-from primalscheme3.core.errors import (
-    WalksOut,
-    GapOnSetBase,
-    ContainsInvalidBase,
-    CustomErrors,
-    ERROR_SET,
-    CustomRecursionError,
-    WalksTooFar,
-)
+import itertools
+from collections import Counter
+from enum import Enum
+from multiprocessing import Pool
+from typing import Callable, Union
+
+import networkx as nx
+import numpy as np
 
 # Submodules
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
 # Externals
 from tqdm import tqdm
-import numpy as np
-from multiprocessing import Pool
-import itertools
-import networkx as nx
-from collections import Counter
-from typing import Callable, Set, Union
-from enum import Enum
+
+from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+from primalscheme3.core.errors import (
+    ERROR_SET,
+    ContainsInvalidBase,
+    CustomErrors,
+    CustomRecursionError,
+    GapOnSetBase,
+    WalksOut,
+    WalksTooFar,
+)
+from primalscheme3.core.get_window import get_r_window_FAST2
+from primalscheme3.core.seq_functions import expand_ambs, get_most_common_base
+from primalscheme3.core.thermo import (
+    THERMORESULT,
+    calc_tm,
+    forms_hairpin,
+    thermo_check_kmers,
+)
 
 
 class DIGESTION_ERROR(Enum):
@@ -355,7 +357,7 @@ def wrap_walk(
 
 
 def r_digest_to_count(
-    data: tuple[np.ndarray, dict, int, float]
+    data: tuple[np.ndarray, dict, int, float],
 ) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
     Returns the count of each sequence / error at a given index
@@ -461,7 +463,7 @@ def process_seqs(
 
 
 def mp_r_digest(
-    data: tuple[np.ndarray, dict, int, float]
+    data: tuple[np.ndarray, dict, int, float],
 ) -> RKmer | tuple[int, DIGESTION_ERROR]:
     """
     This will try and create a RKmer started at the given index
@@ -513,7 +515,7 @@ def mp_r_digest(
 
 
 def f_digest_to_count(
-    data: tuple[np.ndarray, dict, int, float]
+    data: tuple[np.ndarray, dict, int, float],
 ) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
     This will try and create a FKmer ended at the given index
@@ -573,7 +575,7 @@ def f_digest_to_count(
 
 
 def mp_f_digest(
-    data: tuple[np.ndarray, dict, int, float]
+    data: tuple[np.ndarray, dict, int, float],
 ) -> FKmer | tuple[int, DIGESTION_ERROR]:
     """
     This will try and create a FKmer ended at the given index
@@ -763,7 +765,8 @@ def digest(
                     )
                 else:
                     logger.debug(
-                        "FKmer: <green>{end_col}</>: AllPass", end_col=fkmer_result.end  # type: ignore
+                        "FKmer: <green>{end_col}</>: AllPass",
+                        end_col=fkmer_result.end,  # type: ignore
                     )
             # log the rkmer errors
             for rkmer_result in rprimer_mp:

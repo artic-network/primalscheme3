@@ -1,8 +1,9 @@
 # Sets up the logger for the application
 
-from loguru import logger
-import sys
 import pathlib
+import sys
+
+from loguru import logger
 
 log = logger.opt(colors=True)
 

@@ -1,13 +1,15 @@
+import gzip
 import json
 import pathlib
-import gzip
 from itertools import groupby
 from operator import itemgetter
+
 import numpy as np
+
+from primalscheme3.core.classes import PrimerPair
 
 # Module imports
 from primalscheme3.core.msa import MSA
-from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.seq_functions import entropy_score_array
 
 # Panel imports
