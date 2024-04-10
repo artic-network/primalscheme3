@@ -21,6 +21,7 @@ pytest = "^7.4.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^4.1.0"
+ruff = "^0.3.4"
 
 [build-system]
 requires = ["poetry-core"]
@@ -28,3 +29,18 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 primalscheme3 = 'primalscheme3.cli:cli'
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # isort
+    "I",
+]
+ignore = ["E501"]
