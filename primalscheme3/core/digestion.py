@@ -541,11 +541,11 @@ def f_digest_to_count(
     if end_col - cfg["primer_size_min"] < 0:
         return (end_col, {DIGESTION_ERROR.WALKS_OUT: -1})
 
-    total_col_seqs = Counter()
+    total_col_seqs: Counter[str | DIGESTION_ERROR] = Counter()
     for row_index in range(0, align_array.shape[0]):
         # Check if this row starts on a gap, and if so update the counter and skip
         if align_array[row_index, end_col] == "-":
-            total_col_seqs.update([GapOnSetBase()])
+            total_col_seqs.update([DIGESTION_ERROR.GAP_ON_SET_BASE])
             # Skip to next row
             continue
 
