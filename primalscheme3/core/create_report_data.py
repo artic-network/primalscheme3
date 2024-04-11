@@ -187,12 +187,15 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
 
     # Remap the included primers to the MSA if they have been mapped to an genome
     if msa._mapping_array is not None:
-        mapping_list = list(msa._mapping_array)
+        # Create a remapping dict
+        remapping_dict = {
+            x: i for i, x in enumerate(list(msa._mapping_array)) if x is not None
+        }
         for fkmer in msa.fkmers:
-            fkmer.end = mapping_list.index(fkmer.end)
+            fkmer.end = remapping_dict[fkmer.end]
             fkmer._starts = {fkmer.end - len(x) for x in fkmer.seqs}
         for rkmer in msa.rkmers:
-            rkmer.start = mapping_list.index(rkmer.start)
+            rkmer.start = remapping_dict[rkmer.start]
             rkmer._ends = {rkmer.start + len(x) for x in rkmer.seqs}
 
     # Write all data to a single json file
