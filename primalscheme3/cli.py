@@ -1,17 +1,18 @@
 #!/usr/bin/python3
 import argparse
-import sys
 import pathlib
+import sys
 
 # Module imports
 from primalscheme3.__init__ import __version__
+from primalscheme3.flu.flu_main import create_flu
+from primalscheme3.interaction.interaction import visulise_interactions
+from primalscheme3.panel.panel_main import panelcreate
+from primalscheme3.repair.repair import repair
+from primalscheme3.remap.remap import remap
 
 # Import main functions
 from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
-from primalscheme3.panel.panel_main import panelcreate
-from primalscheme3.interaction.interaction import visulise_interactions
-from primalscheme3.repair.repair import repair
-from primalscheme3.flu.flu_main import create_flu
 
 ## Commands are in the format of
 # {pclass}-{mode}
@@ -37,14 +38,14 @@ def validate_panel_create_args(args):
         args.ampliconsizemax = int(args.ampliconsize[1])
     else:
         raise ValueError(
-            f"ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
+            "ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
         )
 
 
 def validate_scheme_create_args(args) -> None:
     # Validate backtrack is not used with more than 2 pools as it is not supported
     if args.backtrack and args.npools > 2:
-        raise ValueError(f"backtrack is not supported with >2 pools")
+        raise ValueError("backtrack is not supported with >2 pools")
 
     # Validate amplicon size
     if len(args.ampliconsize) == 1:
@@ -55,17 +56,17 @@ def validate_scheme_create_args(args) -> None:
         args.ampliconsizemax = int(args.ampliconsize[1])
     else:
         raise ValueError(
-            f"ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
+            "ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
         )
 
     # Check amplicon size
     if args.ampliconsizemin >= args.ampliconsizemax:
         raise ValueError(
-            f"ERROR: --ampliconsize min cannot be greater than max [100<=x<=2000]"
+            "ERROR: --ampliconsize min cannot be greater than max [100<=x<=2000]"
         )
     # Check npools
     if args.npools < 1:
-        raise ValueError(f"ERROR: --npools cannot be less than 1")
+        raise ValueError("ERROR: --npools cannot be less than 1")
 
     # Check the bedfile exsists if given
     if args.bedfile and not args.bedfile.is_file():
@@ -92,13 +93,13 @@ def validate_scheme_replace_args(args):
         args.ampliconsizemax = int(args.ampliconsize[1])
     else:
         raise ValueError(
-            f"ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
+            "ERROR: --ampliconsize must be a single value or two values [100<=x<=2000]"
         )
 
         # Check amplicon size
     if args.ampliconsizemin >= args.ampliconsizemax:
         raise ValueError(
-            f"ERROR: --ampliconsize min cannot be greater than max [100<=x<=2000]"
+            "ERROR: --ampliconsize min cannot be greater than max [100<=x<=2000]"
         )
 
 
@@ -423,6 +424,32 @@ def cli():
     )
     flu_parser.set_defaults(func=create_flu)
 
+    ############################
+    #   Parser for remap mode  #
+    ############################
+
+    remap_parser = subparsers.add_parser(
+        "remap", help="Remap a primer scheme to a new reference genome"
+    )
+    remap_parser.add_argument(
+        "-b", "--bedfile", help="Path to the bedfile", type=pathlib.Path, required=True
+    )
+    remap_parser.add_argument(
+        "-i",
+        "--id-to-remap-to",
+        help="The ID of the reference genome to remap to",
+        type=str,
+        required=True,
+    )
+    remap_parser.add_argument(
+        "-m",
+        "--msa",
+        help="Path to the MSA file",
+        type=pathlib.Path,
+        required=True,
+    )
+    remap_parser.set_defaults(func=remap)
+
     args = global_parser.parse_args()
 
     # Validate some global args
@@ -458,6 +485,8 @@ def cli():
         repair(args)
     elif args.func == create_flu:
         create_flu(args)
+    elif args.func == remap:
+        remap(args)
     else:
         raise ValueError(f"ERROR: No function found for {args.func}")
 
