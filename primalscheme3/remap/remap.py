@@ -19,16 +19,13 @@ def remap(args):
     id_to_remap_to = args.id_to_remap_to
 
     OUTPUT_DIR = pathlib.Path(args.output).absolute()  # Keep absolute path
-    # See if the output dir already exsits
-    if OUTPUT_DIR.is_dir() and not args.force:
-        sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
 
     # Create the output dir and a work subdir
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
     # Setup logger
-    logger = setup_loger(None)
+    logger = setup_loger(OUTPUT_DIR)
 
     # Read in the primerpairs
     primer_pairs, _header = read_in_bedprimerpairs(bedfile)
@@ -45,26 +42,26 @@ def remap(args):
     remap_chrom = next(iter(chrom_names))
     if remap_chrom not in msa_dict:
         logger.error(
-            "chromname:<red>{remap_chrom}</> from primer.bed is not in the MSA",
+            "<red>{remap_chrom}</> ID from primer.bed is <red>not found</> in the MSA",
             remap_chrom=remap_chrom,
         )
         sys.exit(1)
     else:
         logger.info(
-            "chromname:<green>{remap_chrom}</> from primer.bed is in the MSA",
+            "<green>{remap_chrom}</> ID from primer.bed is <green>found</> in the MSA",
             remap_chrom=remap_chrom,
         )
 
     # Check the new reference genome is in the msa
     if id_to_remap_to not in msa_dict:
         logger.error(
-            "Remapping ID: <red>{id_to_remap_to}</> not in the MSA",
+            "<red>{id_to_remap_to}</> remapping ID is <red>not found</> in the MSA",
             id_to_remap_to=id_to_remap_to,
         )
         sys.exit(1)
     else:
         logger.info(
-            "Remapping ID: <green>{id_to_remap_to}</> found in the MSA",
+            "<green>{id_to_remap_to}</> remapping ID is <green>found</> in the MSA",
             id_to_remap_to=id_to_remap_to,
         )
 
@@ -86,23 +83,38 @@ def remap(args):
 
     # Grab genome length
     msa_length = len(msa_dict.get(id_to_remap_to))  # type: ignore
+    perfect_map = True
 
     for primerpair in primer_pairs:
+        primername = f"{primerpair.amplicon_prefix}_{primerpair.amplicon_number}"
         # Dict will always have the key
         pp_fp_msa = primer_to_msa[primerpair.fprimer.end]
         pp_fp_newref = msa_to_new_ref.get(pp_fp_msa)  # type: ignore
 
         if pp_fp_newref is None:
+            logger.warning(
+                f"<red>Gap preventing direct mapping</> of {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}"
+            )
             # Walk to next valid index
             while pp_fp_newref is None and pp_fp_msa < msa_length:
                 pp_fp_msa += 1
                 pp_fp_newref = msa_to_new_ref.get(pp_fp_msa)
-        # Check fixed
-        if pp_fp_newref is None:
-            print(
-                f"Could not find a valid index for {primerpair.amplicon_prefix}_{primerpair.amplicon_number}_RIGHT: {primerpair.fprimer.end}"
-            )
-            continue
+
+            # Check fixed
+            if pp_fp_newref is None:
+                logger.critical(
+                    f"Could not find or repair a valid index for {primername}_LEFT: {primerpair.fprimer.end}"
+                )
+                sys.exit(1)
+            else:
+                logger.warning(
+                    f"Fixed with non-direct mapping {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}:{pp_fp_newref}"
+                )
+                perfect_map = False
+
+        logger.debug(
+            f"<green>Mapped {primername}_LEFT</>: {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}:{pp_fp_newref}"
+        )
 
         primerpair.fprimer.end = pp_fp_newref
         primerpair.fprimer._starts = {
@@ -114,17 +126,28 @@ def remap(args):
         pp_rp_newref = msa_to_new_ref.get(pp_rp_msa)  # type: ignore
 
         if pp_rp_newref is None:
+            logger.warning(
+                f"<red>Gap preventing direct mapping</> of {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}"
+            )
             # Walk left to next valid index
             while pp_rp_newref is None and pp_rp_msa > 0:
                 pp_rp_msa -= 1
                 pp_rp_newref = msa_to_new_ref.get(pp_rp_msa)
 
-        if pp_rp_newref is None:
-            print(
-                f"Could not find a valid index for {primerpair.amplicon_prefix}_{primerpair.amplicon_number}_LEFT: {primerpair.fprimer.end}"
-            )
-            continue
+            if pp_rp_newref is None:
+                logger.critical(
+                    f"Could not find or repair a valid index for {primername}_RIGHT: {primerpair.fprimer.end}"
+                )
+                sys.exit(1)
+            else:
+                logger.warning(
+                    f"Fixed with non-direct mapping {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}:{pp_rp_newref}"
+                )
+                perfect_map = False
 
+        logger.debug(
+            f"<green>Mapped {primername}_RIGHT</>: {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}:{pp_rp_newref}"
+        )
         primerpair.rprimer.start = pp_rp_newref
         primerpair.rprimer._ends = {
             primerpair.rprimer.start + len(x) for x in primerpair.rprimer.seqs
@@ -132,9 +155,16 @@ def remap(args):
 
         primerpair.chrom_name = id_to_remap_to
 
+    # Check if the mapping was perfect
+    if perfect_map:
+        logger.info("<green>Exact</> mapping")
+    else:
+        logger.warning("<red>Imperfect</> mapping. See .log for details.")
+
     # Write out the outputfiles
     primer_pairs.sort(key=lambda x: (x.chrom_name, x.fprimer.end))
     _header.append(f"# remapped {remap_chrom} -> {id_to_remap_to}")
+    _header.append(f"# exact_mapping: {perfect_map}")
 
     # Write the new primer.bed file
     with open(OUTPUT_DIR / "primer.bed", "w") as f:
@@ -162,3 +192,6 @@ def remap(args):
             f,
             "fasta",
         )
+
+    logger.info("Writing output files...")
+    logger.info("<green>Run complete</>")
