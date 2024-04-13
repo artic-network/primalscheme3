@@ -181,3 +181,43 @@ def read_in_bedprimerpairs(path: pathlib.Path) -> tuple[list[BedPrimerPair], lis
 
     primerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
     return (primerpairs, _headers)
+
+
+def create_bedfile_str(
+    headers: list[str] | None, primerpairs: list[PrimerPair | BedPrimerPair]
+) -> str:
+    """
+    Returns the multiplex as a bed file
+    :return: str
+    """
+    primer_bed_str: list[str] = []
+
+    # Ensure headers are commented and valid
+    if headers is not None:
+        for headerline in headers:
+            if not headerline.startswith("#"):
+                headerline = "# " + headerline
+            primer_bed_str.append(headerline.strip())
+
+    # Add the primerpairs to the bed file
+    for pp in primerpairs:
+        primer_bed_str.append(pp.to_bed().strip())
+
+    return "\n".join(primer_bed_str)
+
+
+def create_amplicon_str(
+    primerpairs: list[PrimerPair | BedPrimerPair], trim_primers: bool
+) -> str:
+    amplicon_str: list[str] = []
+    # Add the amplicons to the string
+    for pp in primerpairs:
+        if trim_primers:
+            amplicon_str.append(
+                f"{pp.chrom_name}\t{pp.fprimer.end}\t{pp.rprimer.start - 1}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
+            )
+        else:
+            amplicon_str.append(
+                f"{pp.chrom_name}\t{pp.start}\t{pp.end}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
+            )
+    return "\n".join(amplicon_str)

@@ -1,5 +1,6 @@
 from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import MatchDB, PrimerPair
+from primalscheme3.core.bedfiles import create_bedfile_str, create_amplicon_str
 
 
 class Multiplex:
@@ -13,6 +14,7 @@ class Multiplex:
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
     _matches: list[set[tuple]]
+    _coverage: list[list[bool]]
     cfg: dict
 
     def __init__(self, cfg, matchDB: MatchDB) -> None:
@@ -150,20 +152,7 @@ class Multiplex:
         Returns the multiplex as a bed file
         :return: str
         """
-        primer_bed_str: list[str] = []
-
-        # Ensure headers are commented and valid
-        if headers is not None:
-            for headerline in headers:
-                if not headerline.startswith("#"):
-                    headerline = "# " + headerline
-                primer_bed_str.append(headerline.strip())
-
-        # Add the primerpairs to the bed file
-        for pp in self.all_primerpairs():
-            primer_bed_str.append(pp.to_bed().strip())
-
-        return "\n".join(primer_bed_str)
+        return create_bedfile_str(headers, self.all_primerpairs())
 
     def to_amplicons(
         self,
@@ -174,15 +163,4 @@ class Multiplex:
         :param trim_primers: bool. If True, the primers are trimmed from the amplicons
         :return: str
         """
-        amplicon_str: list[str] = []
-        # Add the amplicons to the string
-        for pp in self.all_primerpairs():
-            if trim_primers:
-                amplicon_str.append(
-                    f"{pp.chrom_name}\t{pp.fprimer.end}\t{pp.rprimer.start - 1}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
-                )
-            else:
-                amplicon_str.append(
-                    f"{pp.chrom_name}\t{pp.start}\t{pp.end}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
-                )
-        return "\n".join(amplicon_str)
+        return create_amplicon_str(self.all_primerpairs(), trim_primers)
