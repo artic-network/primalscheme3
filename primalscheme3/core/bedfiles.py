@@ -207,7 +207,7 @@ def create_bedfile_str(
 
 
 def create_amplicon_str(
-    primerpairs: list[PrimerPair | BedPrimerPair], trim_primers: bool
+    primerpairs: list[PrimerPair | BedPrimerPair], trim_primers: bool = False
 ) -> str:
     amplicon_str: list[str] = []
     # Add the amplicons to the string
