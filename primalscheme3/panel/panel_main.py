@@ -11,6 +11,8 @@ from math import sqrt
 from Bio import Seq, SeqIO, SeqRecord
 from loguru import logger
 
+from enum import Enum
+
 # version import
 from primalscheme3 import __version__
 from primalscheme3.core.bedfiles import read_in_bedprimerpairs
@@ -32,6 +34,12 @@ from primalscheme3.panel.minimal_scheme_classes import (
 logger = logger.opt(colors=True)
 
 
+class PanelRunModes(Enum):
+    ALL = "all"
+    REGION_ONLY = "region-only"
+    REGION_ALL = "region-all"
+
+
 def read_region_bedfile(path) -> list[list[str]]:
     """
     Bedfiles need to be in the format:
@@ -51,46 +59,66 @@ def read_region_bedfile(path) -> list[list[str]]:
     return bed_lines
 
 
-def panelcreate(args):
-    ARG_MSA = args.msa
-    OUTPUT_DIR = pathlib.Path(args.output).absolute()
+def panelcreate(
+    argmsa: list[pathlib.Path],
+    outputdir: pathlib.Path,
+    primer_gc_max: float,
+    primer_gc_min: float,
+    primer_tm_max: float,
+    primer_tm_min: float,
+    dimerscore: float,
+    cores: int,
+    ampliconsizemax: int,
+    ampliconsizemin: int,
+    force: bool,
+    npools: int,
+    reducekmers: bool,
+    minbasefreq: float,
+    regionbedfile: pathlib.Path | None,
+    inputbedfile: pathlib.Path,
+    mapping: str,
+    maxamplicons: int,
+    mode: PanelRunModes,
+    ignore_n: bool,
+):
+    ARG_MSA = argmsa
+    OUTPUT_DIR = pathlib.Path(outputdir).absolute()
 
     cfg = config_dict
     # Primer Digestion settings
-    cfg["primer_gc_min"] = args.primer_gc_min
-    cfg["primer_gc_max"] = args.primer_gc_max
-    cfg["primer_tm_min"] = args.primer_tm_min
-    cfg["primer_tm_max"] = args.primer_tm_max
-    cfg["dimerscore"] = args.dimerscore
-    cfg["n_cores"] = args.cores
+    cfg["primer_gc_min"] = primer_gc_min
+    cfg["primer_gc_max"] = primer_gc_max
+    cfg["primer_tm_min"] = primer_tm_min
+    cfg["primer_tm_max"] = primer_tm_max
+    cfg["dimerscore"] = dimerscore
+    cfg["n_cores"] = cores
     cfg["output_dir"] = str(OUTPUT_DIR)
-    cfg["amplicon_size_max"] = args.ampliconsizemax
-    cfg["amplicon_size_min"] = args.ampliconsizemin
-    cfg["force"] = args.force
-    cfg["npools"] = args.npools
-    cfg["reducekmers"] = args.reducekmers
-    cfg["minbasefreq"] = args.minbasefreq
+    cfg["amplicon_size_max"] = ampliconsizemax
+    cfg["amplicon_size_min"] = ampliconsizemin
+    cfg["force"] = force
+    cfg["npools"] = npools
+    cfg["reducekmers"] = reducekmers
+    cfg["minbasefreq"] = minbasefreq
+    cfg["mode"] = mode.value
 
     # Add the mismatch params to the cfg
     cfg["mismatch_fuzzy"] = True
     cfg["mismatch_kmersize"] = 14
-    cfg["mismatch_product_size"] = args.ampliconsizemax
+    cfg["mismatch_product_size"] = ampliconsizemax
 
     # Add plots to the cfg
     cfg["plot"] = True
     cfg["disable_progress_bar"] = False
 
     # Add the bedfile to the cfg
-    cfg["regionbedfile"] = (
-        str(args.regionbedfile) if args.regionbedfile is not None else None
-    )
-    cfg["inputbedfile"] = str(args.inputbedfile)
+    cfg["regionbedfile"] = str(regionbedfile) if regionbedfile is not None else None
+    cfg["inputbedfile"] = str(inputbedfile)
 
     # Set the mapping
-    cfg["mapping"] = args.mapping
+    cfg["mapping"] = mapping
 
     # Set the max amount of amplicons
-    cfg["maxamplicons"] = args.maxamplicons
+    cfg["maxamplicons"] = maxamplicons
 
     # Add the version
     cfg["algorithmversion"] = f"primalscheme3:{__version__}"
@@ -99,18 +127,18 @@ def panelcreate(args):
     cfg["primer_size_min"] = 14
 
     # Add ignore_n to the cfg
-    cfg["ignore_n"] = args.ignore_n
+    cfg["ignore_n"] = ignore_n
 
     # Enforce only one pool
-    if args.npools != 1:
+    if npools != 1:
         sys.exit("ERROR: primalpanel only supports one pool")
 
     # Enforce region only has a region bedfile
-    if args.mode == "region-only" and args.regionbedfile is None:
+    if mode == PanelRunModes.REGION_ONLY and regionbedfile is None:
         sys.exit("ERROR: region-only mode requires a region bedfile")
 
     # See if the output dir already exsits
-    if OUTPUT_DIR.is_dir() and not args.force:
+    if OUTPUT_DIR.is_dir() and not force:
         sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
 
     # Create the output dir and a work subdir
@@ -124,7 +152,9 @@ def panelcreate(args):
     logger.info(
         "Creating the Mismatch Database",
     )
-    mismatch_db = MatchDB(OUTPUT_DIR / "work/mismatch", ARG_MSA, cfg["primer_size_min"])
+    mismatch_db = MatchDB(
+        OUTPUT_DIR / "work/mismatch", [str(x) for x in ARG_MSA], cfg["primer_size_min"]
+    )
     logger.info(
         "<green>Created:</> {path}",
         path=f"{OUTPUT_DIR.relative_to(OUTPUT_DIR.parent)}/work/mismatch.db",  # Write the path relative to the parent dir
@@ -133,7 +163,7 @@ def panelcreate(args):
     regions_mapping: dict[Region, str | None] | None = None
     # Read in the regionbedfile if given
     if cfg["regionbedfile"] is not None:
-        bed_lines = read_region_bedfile(args.regionbedfile)
+        bed_lines = read_region_bedfile(regionbedfile)
         regions_mapping = {
             Region(
                 bedline[0],
@@ -225,15 +255,12 @@ def panelcreate(args):
         )
 
         # Split the logic for the different modes
-        if args.mode in ["all", "region-all"]:
-            # Digest all of each MSAs
-            msa.digest(cfg, indexes=None)
-        elif args.mode == "region-only":
-            # Digest only the wanted regions
-            msa.digest(cfg, indexes=(findexes, rindexes))  # type: ignore
-            msa.remove_kmers_that_clash_with_regions()  # Remove kmers that clash with regions
-        else:
-            sys.exit(f"ERROR: {args.mode} is not a valid mode")
+        match mode:
+            case PanelRunModes.REGION_ONLY:
+                msa.digest(cfg, indexes=(findexes, rindexes))  # type: ignore
+                msa.remove_kmers_that_clash_with_regions()
+            case _:
+                msa.digest(cfg, indexes=None)
 
         # Log the digestion
         logger.info(
@@ -251,12 +278,12 @@ def panelcreate(args):
             num_pp=len(msa.primerpairs),
         )
 
-        if args.mode == "all":
+        if mode == PanelRunModes.ALL:
             msa.primerpairs.sort(
                 key=lambda pp: msa.get_pp_entropy(pp) ** 2 / sqrt(len(pp.all_seqs())),  # type: ignore
                 reverse=True,
             )
-        if args.mode == "region-only":
+        if mode == PanelRunModes.REGION_ONLY:
             # Sort the primerpairs by the number of SNPs in the amplicon
             msa.primerpairs.sort(
                 key=lambda pp: (
@@ -292,8 +319,8 @@ def panelcreate(args):
     }
 
     # Read in the inputbedfile if given
-    if args.inputbedfile is not None:
-        bedprimerpairs, _headers = read_in_bedprimerpairs(args.inputbedfile)
+    if inputbedfile is not None:
+        bedprimerpairs, _headers = read_in_bedprimerpairs(inputbedfile)
         for bedprimerpair in bedprimerpairs:
             bedprimerpair.msa_index = msa_chromname_to_index.get(
                 bedprimerpair.chrom_name,  # type: ignore
@@ -474,8 +501,8 @@ def panelcreate(args):
 
     # Write the config dict to file
     # Add the bedfile to the cfg
-    cfg["regionbedfile"] = str(args.regionbedfile)
-    cfg["inputbedfile"] = str(args.inputbedfile)
+    cfg["regionbedfile"] = str(regionbedfile)
+    cfg["inputbedfile"] = str(inputbedfile)
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
         outfile.write(json.dumps(cfg, sort_keys=True))
 

@@ -104,15 +104,15 @@ class PanelMSA(MSA):
         # Call the MSA init
         super().__init__(name, path, msa_index, mapping, logger)
 
+        # Create the entropy array
+        self._entropy_array = np.array(entropy_score_array(self.array))
+
         # Create the primerpairpointer
         self.primerpairpointer = 0
         self.regions = None
 
     def add_regions(self, regions: list[Region]) -> None:
         self.regions = regions
-
-        # Create the entropy array
-        self._entropy_array = np.array(entropy_score_array(self.array))
 
         # Create the score array
         self._score_array = np.zeros(self.array.shape[1], dtype=int)
