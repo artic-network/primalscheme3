@@ -531,7 +531,14 @@ def cli():
     elif args.func == visulise_interactions:
         visulise_interactions(bedpath=args.bedfile, threshold=args.threshold)
     elif args.func == repair:
-        repair(args)
+        repair(
+            config_path=args.config,
+            msa_path=args.msa,
+            cores=args.cores,
+            bedfile_path=args.bedfile,
+            output_dir=args.output,
+            force=args.force,
+        )
     elif args.func == create_flu:
         create_flu(args)
     elif args.func == remap:

@@ -179,21 +179,28 @@ def report_check(
     return True
 
 
-def repair(args):
-    OUTPUT_DIR = pathlib.Path(args.output).absolute()  # Keep absolute path
+def repair(
+    config_path: pathlib.Path,
+    msa_path: pathlib.Path,
+    bedfile_path: pathlib.Path,
+    output_dir: pathlib.Path,
+    cores: int,
+    force: bool,
+):
+    OUTPUT_DIR = pathlib.Path(output_dir).absolute()  # Keep absolute path
 
     # Read in the config file
-    with open(args.config) as f:
+    with open(config_path) as f:
         base_cfg = json.load(f)
 
     # Overwrite the config file
-    base_cfg["n_cores"] = args.cores  # Overwrite the number of cores
+    base_cfg["n_cores"] = cores  # Overwrite the number of cores
     base_cfg["output_dir"] = str(OUTPUT_DIR)
     base_cfg["primer_max_walk"] = 50
     base_cfg["primer_hairpin_th_max"] = 49.5
 
     # See if the output dir already exsits
-    if OUTPUT_DIR.is_dir() and not args.force:
+    if OUTPUT_DIR.is_dir() and not force:
         sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
 
     # Create the output dir and a work subdir
@@ -205,8 +212,8 @@ def repair(args):
 
     # Read in the MSA file
     msa = MSA(
-        name=args.msa.stem,
-        path=args.msa,
+        name=msa_path.stem,
+        path=msa_path,
         msa_index=0,
         mapping=base_cfg["mapping"],
         logger=logger,
@@ -229,25 +236,25 @@ def repair(args):
 
     # Update the base_cfg with the new msa
     # Create MSA checksum
-    with open(args.msa, "rb") as f:
+    with open(msa_path, "rb") as f:
         msa_checksum = hashlib.file_digest(f, "md5").hexdigest()
     current_msa_index = max([int(x) for x in base_cfg["msa_data"].keys()])
     base_cfg["msa_data"][str(current_msa_index + 1)] = {
         "msa_name": msa.name,
-        "msa_path": str("work/" + args.msa.name),
+        "msa_path": str("work/" + msa_path.name),
         "msa_chromname": msa._chrom_name,
         "msa_uuid": msa._uuid,
         "msa_checksum": msa_checksum,
     }
     # Copy the MSA file to the work dir
-    local_msa_path = OUTPUT_DIR / "work" / args.msa.name
-    shutil.copy(args.msa, local_msa_path)
+    local_msa_path = OUTPUT_DIR / "work" / msa_path.name
+    shutil.copy(msa_path, local_msa_path)
 
     # Update the config with new algoversion
     base_cfg["algorithmversion"] = f"primalscheme3:{__version__}"
 
     # Read in the bedfile
-    all_primerpairs, _header = read_in_bedprimerpairs(args.bedfile)
+    all_primerpairs, _header = read_in_bedprimerpairs(bedfile_path)
 
     # Get the primerpairs for this new MSA
     primerpairs_in_msa = [
@@ -257,9 +264,9 @@ def repair(args):
     ]
     if len(primerpairs_in_msa) == 0:
         logger.error(
-            "No primerpairs found for {msa._chrom_name} in {args.bedfile}",
+            "No primerpairs found for {msa._chrom_name} in {bedfile_path}",
             msa=msa,
-            args=args,
+            bedfile_path=bedfile_path,
         )
         sys.exit(1)
 
