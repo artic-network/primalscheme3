@@ -125,7 +125,11 @@ def schemereplace(
     print(f"Found {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
-    msa.generate_primerpairs(cfg)
+    msa.generate_primerpairs(
+        amplicon_size_max=cfg["amplicon_size_max"],
+        amplicon_size_min=cfg["amplicon_size_min"],
+        dimerscore=cfg["dimerscore"],
+    )
 
     # Find the primers on either side of the wanted primer
     if wanted_pp.amplicon_number == 0:
@@ -424,7 +428,11 @@ def schemecreate(
             sys.exit(1)
 
         # Generate all primerpairs then interaction check
-        msa.generate_primerpairs(cfg)
+        msa.generate_primerpairs(
+            amplicon_size_max=cfg["amplicon_size_max"],
+            amplicon_size_min=cfg["amplicon_size_min"],
+            dimerscore=cfg["dimerscore"],
+        )
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
             msa_path=msa.name,

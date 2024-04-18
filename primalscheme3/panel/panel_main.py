@@ -270,7 +270,11 @@ def panelcreate(
         )
 
         # Generate all primerpairs
-        msa.generate_primerpairs(cfg=cfg)
+        msa.generate_primerpairs(
+            amplicon_size_max=cfg["amplicon_size_max"],
+            amplicon_size_min=cfg["amplicon_size_min"],
+            dimerscore=cfg["dimerscore"],
+        )
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
             msa_path=msa_path.stem,

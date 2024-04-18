@@ -106,9 +106,9 @@ def parse_error_list(
     """
     return_list = []
     for result in error_list:
-        if type(result) == str:
+        if isinstance(result, str):
             return_list.append(result)
-        elif type(result) == CustomErrors:
+        elif isinstance(result, CustomErrors):
             return_list.append(parse_error({result}))
     return return_list
 
@@ -128,7 +128,9 @@ def _mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
 def generate_valid_primerpairs(
     fkmers: list[FKmer],
     rkmers: list[RKmer],
-    cfg: dict,
+    amplicon_size_min: int,
+    amplicon_size_max: int,
+    dimerscore: float,
     msa_index: int,
     disable_progress_bar: bool = False,
 ) -> list[PrimerPair]:
@@ -145,44 +147,55 @@ def generate_valid_primerpairs(
         A list of valid primer pairs.
     """
     ## Generate all primerpairs without checking
-    non_checked_pp = []
-    for fkmer in fkmers:
+    checked_pp = []
+
+    for fkmer in tqdm(
+        fkmers,
+        desc="Generating PrimerPairs",
+        disable=disable_progress_bar,
+    ):
         fkmer_start = min(fkmer.starts())
         # Get all rkmers that would make a valid amplicon
         pos_rkmer = get_r_window_FAST2(
             kmers=rkmers,
-            start=fkmer_start + cfg["amplicon_size_min"],
-            end=fkmer_start + cfg["amplicon_size_max"],
+            start=fkmer_start + amplicon_size_min,
+            end=fkmer_start + amplicon_size_max,
         )
+        fmer_seqs = [*fkmer.seqs]
         for rkmer in pos_rkmer:
-            non_checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
+            # Check for interactions
+            if not do_pools_interact_py(fmer_seqs, [*rkmer.seqs], dimerscore):
+                checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
+
+    checked_pp.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
+    return checked_pp
 
     ## Interaction check all the primerpairs
-    iter_free_primer_pairs = []
-    if cfg["n_cores"] == 1:
-        for pp in tqdm(
-            non_checked_pp,
-            desc="Generating PrimerPairs",
-            disable=disable_progress_bar,
-        ):
-            if not pp.inter_free(cfg):
-                iter_free_primer_pairs.append(pp)
-    else:
-        with Pool(cfg["n_cores"]) as p:
-            mp_pp_bool = tqdm(
-                p.imap_unordered(
-                    _mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp)
-                ),
-                total=len(non_checked_pp),
-                desc="Generating PrimerPairs",
-                disable=disable_progress_bar,
-            )
-            for bool, pp in zip(mp_pp_bool, non_checked_pp):
-                if not bool:
-                    iter_free_primer_pairs.append(pp)
+    # iter_free_primer_pairs = []
+    # if cfg["n_cores"] == 1:
+    #    for pp in tqdm(
+    #        non_checked_pp,
+    #        desc="Generating PrimerPairs",
+    #        disable=disable_progress_bar,
+    #    ):
+    #        if not pp.inter_free(cfg):
+    #            iter_free_primer_pairs.append(pp)
+    # else:
+    #    with Pool(cfg["n_cores"]) as p:
+    #        mp_pp_bool = tqdm(
+    #            p.imap_unordered(
+    #                _mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp)
+    #            ),
+    #            total=len(non_checked_pp),
+    #            desc="Generating PrimerPairs",
+    #            disable=disable_progress_bar,
+    #        )
+    #        for bool, pp in zip(mp_pp_bool, non_checked_pp):
+    #            if not bool:
+    #                iter_free_primer_pairs.append(pp)
 
-    iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
-    return iter_free_primer_pairs
+    # iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
+    # return iter_free_primer_pairs
 
 
 def walk_right(
@@ -454,9 +467,9 @@ def process_seqs(
     parsed_seqs: dict[str, float] = {}
     # Guard: If wanted_seqs contains errors return None
     for seq in above_freq_seqs.keys():
-        if type(seq) == DIGESTION_ERROR:
+        if isinstance(seq, DIGESTION_ERROR):
             return seq
-        elif type(seq) == str:
+        elif isinstance(seq, str):
             parsed_seqs[seq] = above_freq_seqs[seq]
 
     return parsed_seqs
@@ -590,9 +603,9 @@ def mp_f_digest(
     # Count how many times each sequence / error occurs
     _end_col, seq_counts = f_digest_to_count((align_array, cfg, end_col, min_freq))
     tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=cfg["ignore_n"])
-    if type(tmp_parsed_seqs) == DIGESTION_ERROR:
+    if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
         return (end_col, tmp_parsed_seqs)
-    elif type(tmp_parsed_seqs) == dict:
+    elif isinstance(tmp_parsed_seqs, dict):
         parsed_seqs = tmp_parsed_seqs
     else:
         raise ValueError("Unknown error occured")

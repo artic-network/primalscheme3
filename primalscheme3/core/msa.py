@@ -109,12 +109,16 @@ class MSA:
                 and max(x.ends()) < self.array.shape[1]
             ]
 
-    def generate_primerpairs(self, cfg: dict) -> None:
+    def generate_primerpairs(
+        self, amplicon_size_min: int, amplicon_size_max: int, dimerscore: float
+    ) -> None:
         self.primerpairs = generate_valid_primerpairs(
-            self.fkmers,
-            self.rkmers,
-            cfg,
-            self.msa_index,
+            fkmers=self.fkmers,
+            rkmers=self.rkmers,
+            amplicon_size_min=amplicon_size_min,
+            amplicon_size_max=amplicon_size_max,
+            dimerscore=dimerscore,
+            msa_index=self.msa_index,
         )
         # Update primerpairs to include the chrom_name and amplicon_prefix
         for primerpair in self.primerpairs:
