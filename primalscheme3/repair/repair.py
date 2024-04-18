@@ -76,6 +76,19 @@ class BedPrimerPairRepair(BedPrimerPair):
         )
 
 
+class SeqStatus:
+    seq: str | None
+    count: int
+    thermo_status: THERMORESULT | DIGESTION_ERROR
+
+    def __init__(
+        self, seq: str | None, count: int, thermo_status: THERMORESULT | DIGESTION_ERROR
+    ):
+        self.seq = seq
+        self.count = count
+        self.thermo_status = thermo_status
+
+
 def detect_early_return(seq_counts: dict[str | DIGESTION_ERROR, int]) -> bool:
     """
     Checks for an early return condition, will return True condition is met
@@ -102,6 +115,68 @@ def thermo_check_seq(seq, base_cfg: dict) -> THERMORESULT | DIGESTION_ERROR:
         return DIGESTION_ERROR.DIMER_FAIL
 
     return THERMORESULT.PASS
+
+
+def report_check(
+    seqstatus: SeqStatus,
+    current_primer_seqs: set[str],
+    seqs_in_pools: list[list[str]],
+    pool: int,
+    dimerscore: float,
+    logger,
+) -> bool:
+    """
+    Will carry out the checks and report the results via the logger. Will return False if the seq should not be added
+    """
+
+    report_seq = seqstatus.seq if seqstatus.seq is not None else "DIGESTION_ERROR"
+    report_seq = report_seq.rjust(40, " ")
+
+    # Check it passed thermo
+    if seqstatus.thermo_status != THERMORESULT.PASS or seqstatus.seq is None:
+        logger.warning(
+            "{newseq}\t{count}\t<red>FAILED</>: {thermo_status}",
+            thermo_status=seqstatus.thermo_status,
+            newseq=report_seq,
+            count=seqstatus.count,
+        )
+        return False
+
+    # Check it is a new seq
+    if seqstatus.seq in current_primer_seqs:
+        logger.warning(
+            "{newseq}\t{count}\t<blue>NOTADDED</>: Already Included",
+            newseq=report_seq,
+            count=seqstatus.count,
+        )
+        return False
+
+    # Check for minor allele
+    if seqstatus.count < 0:
+        logger.warning(
+            "{newseq}\t{count}\t<red>FAILED</>: Minor Allele",
+            newseq=report_seq,
+            count=seqstatus.count,
+        )
+        return False
+
+    # Check for dimer with pool
+    if do_pools_interact_py([seqstatus.seq], seqs_in_pools[pool], dimerscore):
+        logger.warning(
+            "{newseq}\t{count}\t<red>FAILED</>: Interaction with pool",
+            newseq=report_seq,
+            count=seqstatus.count,
+        )
+        return False
+
+    # Log the seq
+    logger.info(
+        "{newseq}\t{count}\t<green>ADDED</>",
+        newseq=report_seq,
+        count=seqstatus.count,
+    )
+
+    return True
 
 
 def repair(args):
@@ -197,7 +272,7 @@ def repair(args):
     assert msa._mapping_array is not None
     mapping_list = list(msa._mapping_array)
 
-    # For pp in primerpairs_in_msa
+    # For primerpair in the bedfile, check if new seqs need to be added by digestion the MSA
     for pp in primerpairs_in_msa:
         msa_fkmer_end = mapping_list.index(pp.fprimer.end)
 
@@ -217,58 +292,32 @@ def repair(args):
             continue
 
         # Thermo check each sequence
-        thermo_status = dict()
+        seqstatuss: list[SeqStatus] = []
         for seq, count in fseq_counts.items():
-            thermo_status[seq] = thermo_check_seq(seq, base_cfg)
+            if isinstance(seq, DIGESTION_ERROR):
+                thermo_status = seq
+                seq = None
+            else:
+                thermo_status = thermo_check_seq(seq, base_cfg)
+            seqstatuss.append(SeqStatus(seq, count, thermo_status))
 
         # Decide if the new seqs should be added
-        for newseq, count in fseq_counts.items():
-            # Check it passed thermo
-            if thermo_status[newseq] != THERMORESULT.PASS:
-                logger.warning(
-                    "{newseq}\t<red>FAILED</>: {thermo_status[newseq]}",
-                    thermo_status=thermo_status,
-                    newseq=newseq.rjust(40),
-                )
-                continue
+        for seqstatus in seqstatuss:
 
-            # Check it is a new seq
-            if newseq in pp.fprimer.seqs:
-                logger.warning(
-                    "{newseq}\t{count}\t<green>NOTADDED</>: Already Included",
-                    newseq=newseq.rjust(40),
-                    count=count,
-                )
-                continue
-
-            # Check for minor allele
-            if count < 5:
-                logger.warning(
-                    "{newseq}\t{count}\t<red>FAILED</>: Minor Allele",
-                    newseq=newseq.rjust(40),
-                    count=count,
-                )
-                continue
-
-            # Check for dimer with pool
-            if do_pools_interact_py(
-                [newseq], seqs_in_pools[pp.pool], base_cfg["dimerscore"]
+            if not report_check(
+                seqstatus=seqstatus,
+                current_primer_seqs=pp.fprimer.seqs,
+                seqs_in_pools=seqs_in_pools,
+                pool=pp.pool,
+                dimerscore=base_cfg["dimerscore"],
+                logger=logger,
             ):
-                logger.warning(
-                    "{newseq}\t{count}\t<red>FAILED</>: Interaction with pool",
-                    newseq=newseq.rjust(40),
-                    count=count,
-                )
                 continue
 
             # Add the new seq
-            pp.new_fkmer_seqs.add(newseq)
-            seqs_in_pools[pp.pool].append(newseq)
-            logger.info(
-                "{newseq}\t{count}\t<green>ADDED</>",
-                newseq=newseq.rjust(40),
-                count=count,
-            )
+            pp.new_fkmer_seqs.add(seqstatus.seq)
+            seqs_in_pools[pp.pool].append(seqstatus.seq)
+
         # Handle the right primer
         logger.info(
             "Checking <blue>{pp.amplicon_prefix}_{pp.amplicon_number}_RIGHT</>",
@@ -294,58 +343,30 @@ def repair(args):
         }
 
         # Thermo check each sequence
-        thermo_status = dict()
+        rseqstatuss: list[SeqStatus] = []
         for seq, count in valid_rseqs.items():
-            thermo_status[seq] = thermo_check_seq(seq, base_cfg)
+            if isinstance(seq, DIGESTION_ERROR):
+                thermo_status = seq
+                seq = None
+            else:
+                thermo_status = thermo_check_seq(seq, base_cfg)
+            rseqstatuss.append(SeqStatus(seq, count, thermo_status))
 
         # Decide if the new seqs should be added
-        for newseq, count in valid_rseqs.items():
-            # Check it passed thermo
-            if thermo_status[newseq] != THERMORESULT.PASS:
-                logger.warning(
-                    "{newseq}\t<red>FAILED</>: {thermo_status[newseq]}",
-                    thermo_status=thermo_status,
-                    newseq=newseq.rjust(40),
-                )
-                continue
-
-            # Check it is a new seq
-            if newseq in pp.rprimer.seqs:
-                logger.warning(
-                    "{newseq}\t{count}\t<green>NOTADDED</>: Already Included",
-                    newseq=newseq.rjust(40),
-                    count=count,
-                )
-                continue
-
-            # Check for minor allele
-            if count < 5:
-                logger.warning(
-                    "{newseq}\t{count}\t<red>FAILED</>: Minor Allele",
-                    newseq=newseq.rjust(40),
-                    count=count,
-                )
-                continue
-
-            # Check for dimer with pool
-            if do_pools_interact_py(
-                [newseq], seqs_in_pools[pp.pool], base_cfg["dimerscore"]
+        for rseqstatus in rseqstatuss:
+            if not report_check(
+                seqstatus=rseqstatus,
+                current_primer_seqs=pp.rprimer.seqs,
+                seqs_in_pools=seqs_in_pools,
+                pool=pp.pool,
+                dimerscore=base_cfg["dimerscore"],
+                logger=logger,
             ):
-                logger.warning(
-                    "{newseq}\t{count}\t<red>FAILED</>: Interaction with pool",
-                    newseq=newseq.rjust(40),
-                    count=count,
-                )
                 continue
 
             # Add the new seq
-            pp.new_rkmer_seqs.add(newseq)
-            seqs_in_pools[pp.pool].append(newseq)
-            logger.info(
-                "{newseq}\t{count}\t<green>ADDED</>",
-                newseq=newseq.rjust(40),
-                count=count,
-            )
+            pp.new_rkmer_seqs.add(rseqstatus.seq)
+            seqs_in_pools[pp.pool].append(rseqstatus.seq)
 
     # Write out the new bedfile
     with open(OUTPUT_DIR / "primer.bed", "w") as f:
