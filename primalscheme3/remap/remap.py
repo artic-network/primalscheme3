@@ -13,12 +13,14 @@ from primalscheme3.core.bedfiles import (
 from primalscheme3.core.logger import setup_loger
 
 
-def remap(args):
-    bedfile = args.bedfile
-    msa_file = args.msa
-    id_to_remap_to = args.id_to_remap_to
+def remap(
+    bedfile_path: pathlib.Path,
+    msa_path: pathlib.Path,
+    id_to_remap_to: str,
+    output_dir: pathlib.Path,
+):
 
-    OUTPUT_DIR = pathlib.Path(args.output).absolute()  # Keep absolute path
+    OUTPUT_DIR = pathlib.Path(output_dir).absolute()  # Keep absolute path
 
     # Create the output dir and a work subdir
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
@@ -28,10 +30,10 @@ def remap(args):
     logger = setup_loger(OUTPUT_DIR)
 
     # Read in the primerpairs
-    primer_pairs, _header = read_in_bedprimerpairs(bedfile)
+    primer_pairs, _header = read_in_bedprimerpairs(bedfile_path)
 
     # Read in the MSA
-    msa_dict = SeqIO.index(str(msa_file), "fasta")
+    msa_dict = SeqIO.index(str(msa_path), "fasta")
 
     # Check primer's reference genome is in the msa
     chrom_names = set([primer.chrom_name for primer in primer_pairs])

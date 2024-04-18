@@ -542,7 +542,12 @@ def cli():
     elif args.func == create_flu:
         create_flu(args)
     elif args.func == remap:
-        remap(args)
+        remap(
+            bedfile_path=args.bedfile,
+            id_to_remap_to=args.id_to_remap_to,
+            msa_path=args.msa,
+            output_dir=args.output,
+        )
     else:
         raise ValueError(f"ERROR: No function found for {args.func}")
 
