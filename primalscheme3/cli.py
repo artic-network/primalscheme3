@@ -472,10 +472,39 @@ def cli():
 
     if args.func == schemecreate:
         validate_scheme_create_args(args)
-        schemecreate(args)
+        schemecreate(
+            argmsa=args.msa,
+            primer_gc_min=args.primer_gc_min,
+            primer_gc_max=args.primer_gc_max,
+            primer_tm_min=args.primer_tm_min,
+            primer_tm_max=args.primer_tm_max,
+            force=args.force,
+            ignore_n=args.ignore_n,
+            ampliconsizemin=args.ampliconsizemin,
+            ampliconsizemax=args.ampliconsizemax,
+            minoverlap=args.minoverlap,
+            npools=args.npools,
+            dimerscore=args.dimerscore,
+            bedfile=args.bedfile,
+            reducekmers=args.reducekmers,
+            minbasefreq=args.minbasefreq,
+            mapping=args.mapping,
+            no_plot=args.no_plot,
+            ncores=args.cores,
+            output_dir=args.output,
+            backtrack=args.backtrack,
+            circular=args.circular,
+        )
     elif args.func == schemereplace:
         validate_scheme_replace_args(args)
-        schemereplace(args)
+        schemereplace(
+            config=args.config,
+            primername=args.primername,
+            ampliconsizemin=args.ampliconsizemin,
+            ampliconsizemax=args.ampliconsizemax,
+            primerbed=args.primerbed,
+            msapath=args.msa,
+        )
     elif args.func == panelcreate:
         validate_panel_create_args(args)
         panelcreate(args)
