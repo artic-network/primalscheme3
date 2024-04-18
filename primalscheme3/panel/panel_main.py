@@ -6,12 +6,11 @@ import json
 import pathlib
 import shutil
 import sys
+from enum import Enum
 from math import sqrt
 
 from Bio import Seq, SeqIO, SeqRecord
 from loguru import logger
-
-from enum import Enum
 
 # version import
 from primalscheme3 import __version__
@@ -288,7 +287,7 @@ def panelcreate(
             msa.primerpairs.sort(
                 key=lambda pp: (
                     msa.get_pp_score(pp),
-                    -sqrt(len(pp.all_seqs())),
+                    -sqrt(len(pp.all_seqs())),  # type: ignore
                     pp.fprimer.__hash__(),
                 ),  # type: ignore # Use a HASH Prevent sequential primerpairs being added
                 reverse=True,
