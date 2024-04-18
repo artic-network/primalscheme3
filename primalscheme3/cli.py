@@ -7,9 +7,9 @@ import sys
 from primalscheme3.__init__ import __version__
 from primalscheme3.flu.flu_main import create_flu
 from primalscheme3.interaction.interaction import visulise_interactions
-from primalscheme3.panel.panel_main import panelcreate
-from primalscheme3.repair.repair import repair
+from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
 from primalscheme3.remap.remap import remap
+from primalscheme3.repair.repair import repair
 
 # Import main functions
 from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
@@ -195,8 +195,7 @@ def cli():
     panel_create_parser.add_argument(
         "--mode",
         help="Select what mode for selecting regions in --regionbedfile. \n'region-only': only create primers for the regions \n'region-all': select regions first then keep adding amplicons \n'all': add amplicons based on entropy",
-        choices=["region-only", "region-all", "all"],
-        type=str,
+        type=PanelRunModes,
         default="region-only",
     )
     panel_create_parser.add_argument(
@@ -507,7 +506,28 @@ def cli():
         )
     elif args.func == panelcreate:
         validate_panel_create_args(args)
-        panelcreate(args)
+        panelcreate(
+            argmsa=args.msa,
+            outputdir=args.output,
+            primer_gc_max=args.primer_gc_max,
+            primer_gc_min=args.primer_gc_min,
+            primer_tm_max=args.primer_tm_max,
+            primer_tm_min=args.primer_tm_min,
+            force=args.force,
+            ignore_n=args.ignore_n,
+            regionbedfile=args.regionbedfile,
+            inputbedfile=args.inputbedfile,
+            mode=args.mode,
+            cores=args.cores,
+            ampliconsizemin=args.ampliconsizemin,
+            ampliconsizemax=args.ampliconsizemax,
+            npools=args.npools,
+            dimerscore=args.dimerscore,
+            reducekmers=args.reducekmers,
+            minbasefreq=args.minbasefreq,
+            mapping=args.mapping,
+            maxamplicons=args.maxamplicons,
+        )
     elif args.func == visulise_interactions:
         visulise_interactions(args)
     elif args.func == repair:
