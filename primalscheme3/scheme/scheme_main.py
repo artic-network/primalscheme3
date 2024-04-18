@@ -26,22 +26,29 @@ from primalscheme3.core.msa import MSA
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 
-def schemereplace(args):
+def schemereplace(
+    config: pathlib.Path,
+    ampliconsizemax: int,
+    ampliconsizemin: int,
+    primerbed: pathlib.Path,
+    primername: str,
+    msapath: pathlib.Path,
+):
     """
     List all replacements primers
     """
     # Read in the config file
-    with open(args.config) as file:
+    with open(config) as file:
         cfg: dict = json.load(file)
 
     # Update the amplicon size if it is provided
-    if args.ampliconsizemax:
+    if ampliconsizemax:
         print(
-            f"Updating amplicon size max to {args.ampliconsizemax} and min to {args.ampliconsizemin}"
+            f"Updating amplicon size max to {ampliconsizemax} and min to {ampliconsizemin}"
         )
 
-        cfg["amplicon_size_max"] = args.ampliconsizemax
-        cfg["amplicon_size_min"] = args.ampliconsizemin
+        cfg["amplicon_size_max"] = ampliconsizemax
+        cfg["amplicon_size_min"] = ampliconsizemin
 
     # Add the newer primer_max_walk to the config if not already there
     if "primer_max_walk" not in cfg:
@@ -58,7 +65,7 @@ def schemereplace(args):
     }
 
     # Read in the bedfile
-    bedprimerpairs, headers = read_in_bedprimerpairs(args.primerbed)
+    bedprimerpairs, headers = read_in_bedprimerpairs(primerbed)
     # Map each primer to an MSA index
     for primerpair in bedprimerpairs:
         msa_index = msa_chrom_to_index.get(str(primerpair.chrom_name), None)
@@ -75,10 +82,10 @@ def schemereplace(args):
 
     # Extract the stem from the primername
     try:
-        prefix, ampliconnumber = args.primername.split("_")[:2]
+        prefix, ampliconnumber = primername.split("_")[:2]
         primerstem = f"{ampliconnumber}_{prefix}"
     except ValueError:
-        raise ValueError(f"ERROR: {args.primername} cannot be parsed using _ as delim")
+        raise ValueError(f"ERROR: {primername} cannot be parsed using _ as delim")
 
     # Find primernumber from bedfile
     wanted_pp = None
@@ -86,7 +93,7 @@ def schemereplace(args):
         if pp.match_primer_stem(primerstem):
             wanted_pp = pp
     if wanted_pp is None:
-        raise ValueError(f"ERROR: {args.primername} not found in bedfile")
+        raise ValueError(f"ERROR: {primername} not found in bedfile")
     else:
         print(wanted_pp.__str__())
 
@@ -94,15 +101,13 @@ def schemereplace(args):
     msa_data = cfg["msa_data"].get(wanted_pp.msa_index)
     if msa_data is None:
         if wanted_pp.msa_index == -1:
-            raise ValueError(
-                f"ERROR: The Primer {args.primername} was added via --bedfile"
-            )
+            raise ValueError(f"ERROR: The Primer {primername} was added via --bedfile")
         else:
             raise ValueError(f"ERROR: MSA index {wanted_pp.msa_index} not found")
 
     msa = MSA(
         name=msa_data["msa_name"],
-        path=args.msa,
+        path=msapath,
         msa_index=wanted_pp.msa_index,
         mapping=cfg["mapping"],
     )
@@ -217,9 +222,31 @@ def schemereplace(args):
         print(pp.to_bed())
 
 
-def schemecreate(args):
-    ARG_MSA = args.msa
-    OUTPUT_DIR = pathlib.Path(args.output).absolute()  # Keep absolute path
+def schemecreate(
+    argmsa: list[pathlib.Path],
+    primer_gc_min: float,
+    primer_gc_max: float,
+    primer_tm_min: float,
+    primer_tm_max: float,
+    dimerscore: float,
+    ncores: int,
+    output_dir: pathlib.Path,
+    ampliconsizemax: int,
+    ampliconsizemin: int,
+    minoverlap: int,
+    npools: int,
+    reducekmers: bool,
+    minbasefreq: int,
+    circular: bool,
+    backtrack: bool,
+    ignore_n: bool,
+    bedfile: pathlib.Path | None = None,
+    force: bool = False,
+    mapping: str = "first",
+    no_plot: bool = False,
+):
+    ARG_MSA = argmsa
+    OUTPUT_DIR = pathlib.Path(output_dir).absolute()  # Keep absolute path
 
     cfg = config_dict
 
@@ -227,50 +254,50 @@ def schemecreate(args):
     cfg["algorithmversion"] = f"primalscheme3:{__version__}"
     cfg["primerclass"] = "primerschemes"
     # Primer Digestion settings
-    cfg["primer_gc_min"] = args.primer_gc_min
-    cfg["primer_gc_max"] = args.primer_gc_max
-    cfg["primer_tm_min"] = args.primer_tm_min
-    cfg["primer_tm_max"] = args.primer_tm_max
-    cfg["dimerscore"] = args.dimerscore
-    cfg["n_cores"] = args.cores
+    cfg["primer_gc_min"] = primer_gc_min
+    cfg["primer_gc_max"] = primer_gc_max
+    cfg["primer_tm_min"] = primer_tm_min
+    cfg["primer_tm_max"] = primer_tm_max
+    cfg["dimerscore"] = dimerscore
+    cfg["n_cores"] = ncores
     cfg["output_dir"] = str(OUTPUT_DIR)  # Write localpath
-    cfg["amplicon_size_max"] = args.ampliconsizemax
-    cfg["amplicon_size_min"] = args.ampliconsizemin
-    cfg["min_overlap"] = args.minoverlap
-    cfg["force"] = args.force
-    cfg["npools"] = args.npools
-    cfg["reducekmers"] = args.reducekmers
-    cfg["minbasefreq"] = args.minbasefreq
+    cfg["amplicon_size_max"] = ampliconsizemax
+    cfg["amplicon_size_min"] = ampliconsizemin
+    cfg["min_overlap"] = minoverlap
+    cfg["force"] = force
+    cfg["npools"] = npools
+    cfg["reducekmers"] = reducekmers
+    cfg["minbasefreq"] = minbasefreq
 
     # Add the mismatch params to the cfg
     cfg["mismatch_fuzzy"] = True
     cfg["mismatch_kmersize"] = cfg["primer_size_min"]
-    cfg["mismatch_product_size"] = args.ampliconsizemax
+    cfg["mismatch_product_size"] = ampliconsizemax
 
     # Add plots to the cfg
-    cfg["plot"] = args.no_plot
+    cfg["plot"] = no_plot
     cfg["disable_progress_bar"] = False
 
     # Add the mapping to the cfg
-    cfg["mapping"] = args.mapping
+    cfg["mapping"] = mapping
 
     # Add circular to the cfg
-    cfg["circular"] = args.circular
+    cfg["circular"] = circular
 
     # Add the backtrack to the cfg
-    cfg["backtrack"] = args.backtrack
+    cfg["backtrack"] = backtrack
 
     # Add the bedfile path if given
-    if args.bedfile:
-        cfg["bedfile"] = str(args.bedfile)
+    if bedfile is not None:
+        cfg["bedfile"] = str(bedfile)
     else:
         cfg["bedfile"] = False
 
     # Add ignore_n to the cfg
-    cfg["ignore_n"] = args.ignore_n
+    cfg["ignore_n"] = ignore_n
 
     # See if the output dir already exsits
-    if OUTPUT_DIR.is_dir() and not args.force:
+    if OUTPUT_DIR.is_dir() and not force:
         sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
 
     # Create the output dir and a work subdir
@@ -284,7 +311,9 @@ def schemecreate(args):
     logger.info(
         "Creating the Mismatch Database",
     )
-    mismatch_db = MatchDB(OUTPUT_DIR / "work/mismatch", ARG_MSA, cfg["primer_size_min"])
+    mismatch_db = MatchDB(
+        OUTPUT_DIR / "work/mismatch", [str(x) for x in ARG_MSA], cfg["primer_size_min"]
+    )
     logger.info(
         "<green>Created:</> {path}",
         path=f"{OUTPUT_DIR.relative_to(OUTPUT_DIR.parent)}/work/mismatch.db",
@@ -294,8 +323,8 @@ def schemecreate(args):
     scheme = Scheme(cfg=cfg, matchDB=mismatch_db)
 
     # If the bedfile flag is given add the primers into the scheme
-    if args.bedfile:
-        bedprimerpairs, _headers = read_in_bedprimerpairs(args.bedfile)
+    if bedfile is not None:
+        bedprimerpairs, _headers = read_in_bedprimerpairs(bedfile)
         # Check the number of pools in the given bedfile, is less or equal to npools arg
         pools_in_bed = {primer.pool for primer in bedprimerpairs}
         if max(pools_in_bed) > cfg["npools"]:
@@ -309,7 +338,7 @@ def schemecreate(args):
         ]
         logger.info(
             "Read in bedfile: <blue>{msa_path}</>: <green>{num_pp}</> PrimersPairs with mean Tm of <green>{tm}</>",
-            msa_path=args.bedfile.name,
+            msa_path=bedfile.name,
             num_pp=len(bedprimerpairs),
             tm=round(sum(primer_tms) / len(primer_tms), 2),
         )
@@ -419,7 +448,7 @@ def schemecreate(args):
         msa._chrom_name: msa_index for msa_index, msa in msa_dict.items()
     }
     # Add the bedprimerpairs into the scheme
-    if args.bedfile and bedprimerpairs:
+    if bedfile is not None and bedprimerpairs:
         for pp in bedprimerpairs:
             # Map the primerpair to the msa via chromname
             pp.msa_index = msa_chrom_to_index.get(pp.chrom_name, -1)  # type: ignore
