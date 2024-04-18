@@ -1,7 +1,7 @@
-import unittest
 import pathlib
+import unittest
 
-from primalscheme3.panel.minimal_scheme_classes import does_overlap, PanelMSA
+from primalscheme3.panel.minimal_scheme_classes import PanelMSA, does_overlap
 
 
 class TestPanelMSA(unittest.TestCase):

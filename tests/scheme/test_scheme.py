@@ -1,10 +1,8 @@
-import unittest
 import pathlib
+import unittest
 
-from primalscheme3.core.classes import MatchDB, PrimerPair, FKmer, RKmer
 import primalscheme3.core.config as config
-
-
+from primalscheme3.core.classes import FKmer, MatchDB, PrimerPair, RKmer
 from primalscheme3.scheme.classes import Scheme
 
 
@@ -78,10 +76,10 @@ class TestScheme(unittest.TestCase):
         # Make sure all primers have an overlap
         self.assertTrue(
             all(
-                (
+                
                     x.fprimer.end <= primerpair.rprimer.start - self.cfg["min_overlap"]
                     for x in pos_ol_primerpair
-                )
+                
             )
         )
 
