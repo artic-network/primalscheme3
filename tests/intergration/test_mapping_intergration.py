@@ -1,8 +1,8 @@
 import pathlib
 import unittest
 
-from primalscheme3.core.msa import MSA
 from primalscheme3.core.config import config_dict as cfg
+from primalscheme3.core.msa import MSA
 
 
 class Test_MappingIntergration(unittest.TestCase):
