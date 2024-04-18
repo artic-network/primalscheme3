@@ -93,7 +93,7 @@ def remap(args):
 
         if pp_fp_newref is None:
             logger.warning(
-                f"<red>Gap preventing direct mapping</> of {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}"
+                f"<red>Gap preventing direct mapping</> of {primername}_LEFT {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}"
             )
             # Walk to next valid index
             while pp_fp_newref is None and pp_fp_msa < msa_length:
@@ -127,7 +127,7 @@ def remap(args):
 
         if pp_rp_newref is None:
             logger.warning(
-                f"<red>Gap preventing direct mapping</> of {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}"
+                f"<red>Gap preventing direct mapping</> of {primername}_RIGHT {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}"
             )
             # Walk left to next valid index
             while pp_rp_newref is None and pp_rp_msa > 0:
