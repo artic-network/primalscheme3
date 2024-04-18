@@ -22,7 +22,7 @@ def setup_loger(OUTPUT_DIR: pathlib.Path | None):
         log.add(
             OUTPUT_DIR / "work/file.log",
             colorize=False,
-            format="{time:YYYY-MM-DD at HH:mm:ss}|{level}|{message}",
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
             enqueue=True,
         )
 
