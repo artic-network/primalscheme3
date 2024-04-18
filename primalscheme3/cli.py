@@ -529,7 +529,7 @@ def cli():
             maxamplicons=args.maxamplicons,
         )
     elif args.func == visulise_interactions:
-        visulise_interactions(args)
+        visulise_interactions(bedpath=args.bedfile, threshold=args.threshold)
     elif args.func == repair:
         repair(args)
     elif args.func == create_flu:

@@ -1,4 +1,6 @@
 # Core imports
+import pathlib
+
 from primaldimer_py import (
     calc_at_offset_py,  # type: ignore
 )
@@ -86,7 +88,7 @@ def interaction(seq1: str, seq2: str, threshold: float) -> list[str]:
     return interactions
 
 
-def visulise_interactions(args) -> None:
+def visulise_interactions(bedpath: pathlib.Path, threshold: float) -> None:
     """
     Calculate the interaction score between two sequences.
     If the score is less than the threshold
@@ -94,8 +96,6 @@ def visulise_interactions(args) -> None:
     :param threshold: The threshold for the interaction score
     :return: None
     """
-    bedpath = args.bedfile
-    threshold = args.threshold
 
     # Read in the bedfile
     bedlines, header = read_in_bedlines(bedpath)
