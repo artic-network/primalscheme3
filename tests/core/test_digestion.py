@@ -16,7 +16,13 @@ from primalscheme3.core.digestion import (
     walk_right,
     wrap_walk,
 )
-from primalscheme3.core.errors import *
+from primalscheme3.core.errors import (
+    ContainsInvalidBase,
+    CustomRecursionError,
+    GapOnSetBase,
+    WalksOut,
+    WalksTooFar,
+)
 from primalscheme3.core.thermo import calc_tm
 
 
