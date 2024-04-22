@@ -408,7 +408,10 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
 
     length = msa_data["dims"][1]
 
-    npools = max([x["p"] for x in amplicons])
+    if len(amplicons) == 0:
+        npools = 0
+    else:
+        npools = max([x["p"] for x in amplicons])
 
     fig.add_trace(
         go.Scatter(
