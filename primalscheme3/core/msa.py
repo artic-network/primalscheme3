@@ -1,6 +1,8 @@
 import pathlib
 from uuid import uuid4
 
+import sys
+
 import numpy as np
 from Bio import SeqIO
 
@@ -57,7 +59,15 @@ class MSA:
             [record.seq.upper() for record in records_index.values()], dtype="U1"
         )
         # Do some basic QC
-        msa_qc(self.array)
+        try:
+            msa_qc(self.array)
+        except ValueError as e:
+            if self.logger:
+                self.logger.error(f"MSA: {self.name} failed QC: {e}")
+            else:
+                print(f"MSA: {self.name} failed QC: {e}")
+            sys.exit(1)
+
         self.array = remove_end_insertion(self.array)
 
         # Create the mapping array
