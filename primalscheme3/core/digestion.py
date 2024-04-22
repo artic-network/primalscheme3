@@ -411,6 +411,11 @@ def r_digest_to_count(
         ]
         start_seq = "".join(start_array).replace("-", "")
 
+        # Prevent Ns from being added
+        if "N" in start_seq:
+            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
+            continue
+
         if not start_seq:  # If the start seq is empty go to the next row
             continue
 
@@ -450,7 +455,7 @@ def process_seqs(
     """
     # Check for early return conditions
     for error, count in seq_counts.items():
-        if count == -1 and type(error) == DIGESTION_ERROR:
+        if count == -1 and isinstance(error, DIGESTION_ERROR):
             return error
 
     # Remove Ns if asked
@@ -565,6 +570,11 @@ def f_digest_to_count(
         start_seq = "".join(
             align_array[row_index, end_col - cfg["primer_size_min"] : end_col]
         ).replace("-", "")
+
+        # Prevent Ns from being added
+        if "N" in start_seq:
+            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
+            continue
 
         if not start_seq:  # If the start seq is empty go to the next row
             continue
