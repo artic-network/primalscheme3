@@ -1,7 +1,6 @@
 import pathlib
-from uuid import uuid4
-
 import sys
+from uuid import uuid4
 
 import numpy as np
 from Bio import SeqIO
@@ -46,12 +45,19 @@ class MSA:
     primerpairs: list[PrimerPair]
 
     def __init__(
-        self, name: str, path: pathlib.Path, msa_index: int, mapping: str, logger=None
+        self,
+        name: str,
+        path: pathlib.Path,
+        msa_index: int,
+        mapping: str,
+        progress_manager,
+        logger=None,
     ) -> None:
         self.name = name
         self.path = str(path)
         self.msa_index = msa_index
         self.logger = logger
+        self.progress_manager = progress_manager
 
         # Read in the MSA
         records_index = SeqIO.index(self.path, "fasta")
@@ -99,6 +105,7 @@ class MSA:
             cfg=cfg,
             indexes=indexes,
             logger=self.logger,
+            progress_manager=self.progress_manager,
         )
         # remap the fkmer and rkmers if needed
         if self._mapping_array is not None:
@@ -129,6 +136,7 @@ class MSA:
             amplicon_size_max=amplicon_size_max,
             dimerscore=dimerscore,
             msa_index=self.msa_index,
+            progress_manager=self.progress_manager,
         )
         # Update primerpairs to include the chrom_name and amplicon_prefix
         for primerpair in self.primerpairs:

@@ -9,7 +9,6 @@ from Bio import Seq, SeqIO, SeqRecord
 # Interaction checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
-
 from primalscheme3.__init__ import __version__
 from primalscheme3.core.bedfiles import (
     read_in_bedprimerpairs,
@@ -23,6 +22,7 @@ from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
+from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 
@@ -85,7 +85,9 @@ def schemereplace(
         prefix, ampliconnumber = primername.split("_")[:2]
         primerstem = f"{ampliconnumber}_{prefix}"
     except ValueError:
-        raise ValueError(f"ERROR: {primername} cannot be parsed using _ as delim")
+        raise ValueError(
+            f"ERROR: {primername} cannot be parsed using _ as delim"
+        ) from None
 
     # Find primernumber from bedfile
     wanted_pp = None
@@ -110,6 +112,8 @@ def schemereplace(
         path=msapath,
         msa_index=wanted_pp.msa_index,
         mapping=cfg["mapping"],
+        logger=None,
+        progress_manager=None,
     )
     # Check the hashes match
     with open(msa.path, "rb") as f:
@@ -244,6 +248,7 @@ def schemecreate(
     circular: bool,
     backtrack: bool,
     ignore_n: bool,
+    progress_manager: ProgressManager,
     bedfile: pathlib.Path | None = None,
     force: bool = False,
     mapping: str = "first",
@@ -385,6 +390,7 @@ def schemecreate(
             msa_index=msa_index,
             mapping=cfg["mapping"],
             logger=logger,
+            progress_manager=progress_manager,
         )
 
         if "/" in msa._chrom_name:

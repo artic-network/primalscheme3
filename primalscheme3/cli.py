@@ -5,6 +5,7 @@ import sys
 
 # Module imports
 from primalscheme3.__init__ import __version__
+from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.flu.flu_main import create_flu
 from primalscheme3.interaction.interaction import visulise_interactions
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
@@ -469,6 +470,8 @@ def cli():
             f"ERROR: Output directory '{args.output}' already exists. Use --force to override"
         )
 
+    pm = ProgressManager()
+
     if args.func == schemecreate:
         validate_scheme_create_args(args)
         schemecreate(
@@ -493,6 +496,7 @@ def cli():
             output_dir=args.output,
             backtrack=args.backtrack,
             circular=args.circular,
+            progress_manager=pm,
         )
     elif args.func == schemereplace:
         validate_scheme_replace_args(args)

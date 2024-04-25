@@ -2,7 +2,6 @@
 import itertools
 from collections import Counter
 from enum import Enum
-from multiprocessing import Pool
 from typing import Callable, Union
 
 import networkx as nx
@@ -10,9 +9,6 @@ import numpy as np
 
 # Submodules
 from primaldimer_py import do_pools_interact_py  # type: ignore
-
-# Externals
-from tqdm import tqdm
 
 from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
 from primalscheme3.core.errors import (
@@ -25,6 +21,7 @@ from primalscheme3.core.errors import (
     WalksTooFar,
 )
 from primalscheme3.core.get_window import get_r_window_FAST2
+from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import expand_ambs, get_most_common_base
 from primalscheme3.core.thermo import (
     THERMORESULT,
@@ -132,6 +129,7 @@ def generate_valid_primerpairs(
     amplicon_size_max: int,
     dimerscore: float,
     msa_index: int,
+    progress_manager: ProgressManager,
     disable_progress_bar: bool = False,
 ) -> list[PrimerPair]:
     """Generates valid primer pairs for a given set of forward and reverse kmers.
@@ -149,10 +147,9 @@ def generate_valid_primerpairs(
     ## Generate all primerpairs without checking
     checked_pp = []
 
-    for fkmer in tqdm(
-        fkmers,
-        desc="Generating PrimerPairs",
-        disable=disable_progress_bar,
+    for fkmer in progress_manager.create_sub_progress(
+        iter=fkmers,
+        process="Generating PrimerPairs",
     ):
         fkmer_start = min(fkmer.starts())
         # Get all rkmers that would make a valid amplicon
@@ -459,7 +456,7 @@ def process_seqs(
             return error
 
     # Remove Ns if asked
-    if not ignore_n:
+    if ignore_n:
         seq_counts.pop(DIGESTION_ERROR.CONTAINS_INVALID_BASE, None)
 
     total_values = sum(seq_counts.values())
@@ -495,11 +492,10 @@ def mp_r_digest(
 
     # Count how many times each sequence / error occurs
     _start_col, seq_counts = r_digest_to_count((align_array, cfg, start_col, min_freq))
-
     tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=cfg["ignore_n"])
-    if type(tmp_parsed_seqs) == DIGESTION_ERROR:
+    if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
         return (start_col, tmp_parsed_seqs)
-    elif type(tmp_parsed_seqs) == dict:
+    elif isinstance(tmp_parsed_seqs, dict):
         parsed_seqs = tmp_parsed_seqs
     else:
         raise ValueError("Unknown error occured")
@@ -725,6 +721,7 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
 def digest(
     msa_array: np.ndarray,
     cfg: dict,
+    progress_manager: ProgressManager,
     indexes: tuple[list[int], list[int]] | None = None,
     logger: None = None,
 ) -> tuple[list[FKmer], list[RKmer]]:
@@ -756,53 +753,52 @@ def digest(
         else range(msa_array.shape[1] - cfg["primer_size_min"])
     )
 
-    # Create the MP Pool
-    with Pool(cfg["n_cores"]) as p:
-        # Generate the FKmers via MP
-        fprimer_mp = p.map(
-            mp_f_digest,
-            ((msa_array, cfg, end_col, cfg["minbasefreq"]) for end_col in findexes),
-        )
+    # Digest the findexes
+    fkmers = []
+    for findex in progress_manager.create_sub_progress(
+        iter=findexes, process="FKMER Digestion"
+    ):
+        fkmer = mp_f_digest((msa_array, cfg, findex, cfg["minbasefreq"]))
 
-        pass_fprimer_mp = [x for x in fprimer_mp if type(x) is FKmer and x.seqs]
-        pass_fprimer_mp.sort(key=lambda fkmer: fkmer.end)
-
-        # Generate the FKmers via MP
-        rprimer_mp = p.map(
-            mp_r_digest,
-            ((msa_array, cfg, start_col, cfg["minbasefreq"]) for start_col in rindexes),
-        )
-        pass_rprimer_mp = [x for x in rprimer_mp if type(x) is RKmer and x.seqs]
-        # mp_thermo_pass_rkmers = [x for x in rprimer_mp if x is not None]
-        pass_rprimer_mp.sort(key=lambda rkmer: rkmer.start)
-
-        # If a logger has been provided dumb the error stats
         if logger is not None:
-            # Log the fkmer errors
-            for fkmer_result in fprimer_mp:
-                if type(fkmer_result) is tuple:
-                    logger.debug(
-                        "FKmer: <red>{end_col}\t{error}</>",
-                        end_col=fkmer_result[0],
-                        error=fkmer_result[1].value,
-                    )
-                else:
-                    logger.debug(
-                        "FKmer: <green>{end_col}</>: AllPass",
-                        end_col=fkmer_result.end,  # type: ignore
-                    )
-            # log the rkmer errors
-            for rkmer_result in rprimer_mp:
-                if type(rkmer_result) is tuple:
-                    logger.debug(
-                        "RKmer: <red>{start_col}\t{error}</>",
-                        start_col=rkmer_result[0],
-                        error=rkmer_result[1].value,
-                    )
-                else:
-                    logger.debug(
-                        "RKmer: <green>{start_col}</>: AllPass",
-                        start_col=rkmer_result.start,  # type: ignore
-                    )
+            if isinstance(fkmer, tuple):
+                logger.debug(
+                    "FKmer: <red>{end_col}\t{error}</>",
+                    end_col=fkmer[0],
+                    error=fkmer[1].value,
+                )
+            else:
+                logger.debug(
+                    "FKmer: <green>{end_col}</>: AllPass",
+                    end_col=fkmer.end,  # type: ignore
+                )
 
-    return (pass_fprimer_mp, pass_rprimer_mp)
+        # Append valid FKmers
+        if isinstance(fkmer, FKmer) and fkmer.seqs:
+            fkmers.append(fkmer)
+
+    # Digest the rindexes
+    rkmers = []
+    for rindex in progress_manager.create_sub_progress(
+        iter=rindexes, process="Digesting RKmers"
+    ):
+        rkmer = mp_r_digest((msa_array, cfg, rindex, cfg["minbasefreq"]))
+
+        if logger is not None:
+            if isinstance(rkmer, tuple):
+                logger.debug(
+                    "RKmer: <red>{start_col}\t{error}</>",
+                    start_col=rkmer[0],
+                    error=rkmer[1].value,
+                )
+            else:
+                logger.debug(
+                    "RKmer: <green>{start_col}</>: AllPass",
+                    start_col=rkmer.start,  # type: ignore
+                )
+
+        # Append valid RKmers
+        if isinstance(rkmer, RKmer) and rkmer.seqs:
+            rkmers.append(rkmer)
+
+    return (fkmers, rkmers)
