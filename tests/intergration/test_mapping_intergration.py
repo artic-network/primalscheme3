@@ -3,6 +3,7 @@ import unittest
 
 from primalscheme3.core.config import config_dict as cfg
 from primalscheme3.core.msa import MSA
+from primalscheme3.core.progress_tracker import ProgressManager as PM
 
 
 class Test_MappingIntergration(unittest.TestCase):
@@ -12,7 +13,7 @@ class Test_MappingIntergration(unittest.TestCase):
         """
         Test that a msa can be created
         """
-        msa = MSA("test_mapping", self.input_path, 0, "first")
+        msa = MSA("test_mapping", self.input_path, 0, "first", progress_manager=PM())
         msa.digest(cfg)
 
         self.assertIsNotNone(msa._mapping_array)
