@@ -756,7 +756,7 @@ def digest(
     # Digest the findexes
     fkmers = []
     for findex in progress_manager.create_sub_progress(
-        iter=findexes, process="FKMER Digestion"
+        iter=findexes, process="Creating forward primers"
     ):
         fkmer = mp_f_digest((msa_array, cfg, findex, cfg["minbasefreq"]))
 
@@ -780,7 +780,7 @@ def digest(
     # Digest the rindexes
     rkmers = []
     for rindex in progress_manager.create_sub_progress(
-        iter=rindexes, process="Digesting RKmers"
+        iter=rindexes, process="Creating reverse primers"
     ):
         rkmer = mp_r_digest((msa_array, cfg, rindex, cfg["minbasefreq"]))
 

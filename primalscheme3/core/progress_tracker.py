@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-import time
 
 from tqdm import tqdm
 
@@ -49,16 +48,3 @@ class ProgressManager:
             self, *args, iterable=iter, process=process, **kwargs, desc=process
         )
         return self._subprocess
-
-
-if __name__ == "__main__":
-    pm = ProgressManager()
-
-    print(pm.process(), pm.n(), pm.total())
-
-    for _ in pm.create_sub_progress(iter=range(10), process="test"):
-        print(_)
-        print(pm.process(), pm.n(), pm.total())
-        time.sleep(0.1)
-
-    print(pm.n())
