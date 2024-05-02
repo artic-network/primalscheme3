@@ -496,7 +496,7 @@ def cli():
             output_dir=args.output,
             backtrack=args.backtrack,
             circular=args.circular,
-            progress_manager=pm,
+            pm=pm,
         )
     elif args.func == schemereplace:
         validate_scheme_replace_args(args)
@@ -507,6 +507,7 @@ def cli():
             ampliconsizemax=args.ampliconsizemax,
             primerbed=args.primerbed,
             msapath=args.msa,
+            pm=pm,
         )
     elif args.func == panelcreate:
         validate_panel_create_args(args)
@@ -531,6 +532,7 @@ def cli():
             minbasefreq=args.minbasefreq,
             mapping=args.mapping,
             maxamplicons=args.maxamplicons,
+            pm=pm,
         )
     elif args.func == visulise_interactions:
         visulise_interactions(bedpath=args.bedfile, threshold=args.threshold)
@@ -542,6 +544,7 @@ def cli():
             bedfile_path=args.bedfile,
             output_dir=args.output,
             force=args.force,
+            pm=pm,
         )
     elif args.func == create_flu:
         create_flu(args)

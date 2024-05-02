@@ -33,6 +33,7 @@ def schemereplace(
     primerbed: pathlib.Path,
     primername: str,
     msapath: pathlib.Path,
+    pm: ProgressManager | None,
 ):
     """
     List all replacements primers
@@ -40,6 +41,9 @@ def schemereplace(
     # Read in the config file
     with open(config) as file:
         cfg: dict = json.load(file)
+
+    if pm is None:
+        pm = ProgressManager()
 
     # Update the amplicon size if it is provided
     if ampliconsizemax:
@@ -113,7 +117,7 @@ def schemereplace(
         msa_index=wanted_pp.msa_index,
         mapping=cfg["mapping"],
         logger=None,
-        progress_manager=None,
+        progress_manager=pm,
     )
     # Check the hashes match
     with open(msa.path, "rb") as f:
@@ -248,7 +252,7 @@ def schemecreate(
     circular: bool,
     backtrack: bool,
     ignore_n: bool,
-    progress_manager: ProgressManager,
+    pm: ProgressManager | None,
     bedfile: pathlib.Path | None = None,
     force: bool = False,
     mapping: str = "first",
@@ -315,6 +319,9 @@ def schemecreate(
 
     # Set up the logger
     logger = setup_loger(OUTPUT_DIR)
+
+    if pm is None:
+        pm = ProgressManager()
 
     # Create the mismatch db
     logger.info(
@@ -390,7 +397,7 @@ def schemecreate(
             msa_index=msa_index,
             mapping=cfg["mapping"],
             logger=logger,
-            progress_manager=progress_manager,
+            progress_manager=pm,
         )
 
         if "/" in msa._chrom_name:

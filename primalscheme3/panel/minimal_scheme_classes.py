@@ -17,6 +17,7 @@ from primalscheme3.core.multiplex import Multiplex
 from primalscheme3.core.seq_functions import (
     entropy_score_array,
 )
+from primalscheme3.core.progress_tracker import ProgressManager
 
 
 class PanelReturn(Enum):
@@ -99,10 +100,16 @@ class PanelMSA(MSA):
     primerpairpointer: int
 
     def __init__(
-        self, name: str, path: pathlib.Path, msa_index: int, mapping: str, logger=None
+        self,
+        name: str,
+        path: pathlib.Path,
+        msa_index: int,
+        mapping: str,
+        progress_manager: ProgressManager,
+        logger=None,
     ) -> None:
         # Call the MSA init
-        super().__init__(name, path, msa_index, mapping, logger)
+        super().__init__(name, path, msa_index, mapping, logger, progress_manager)
 
         # Create the entropy array
         self._entropy_array = np.array(entropy_score_array(self.array))

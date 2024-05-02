@@ -21,6 +21,7 @@ from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.progress_tracker import ProgressManager
 
 # Module imports
 from primalscheme3.panel.minimal_scheme_classes import (
@@ -79,6 +80,7 @@ def panelcreate(
     maxamplicons: int,
     mode: PanelRunModes,
     ignore_n: bool,
+    pm: ProgressManager | None,
 ):
     ARG_MSA = argmsa
     OUTPUT_DIR = pathlib.Path(outputdir).absolute()
@@ -147,6 +149,10 @@ def panelcreate(
     ## Set up the logger
     logger = setup_loger(OUTPUT_DIR)
 
+    ## Set up the progress manager
+    if pm is None:
+        pm = ProgressManager()
+
     # Create the mismatch db
     logger.info(
         "Creating the Mismatch Database",
@@ -196,6 +202,7 @@ def panelcreate(
             msa_index=msa_index,
             mapping=cfg["mapping"],
             logger=logger,
+            progress_manager=pm,
         )
         if "/" in msa._chrom_name:
             new_chromname = msa._chrom_name.split("/")[0]
