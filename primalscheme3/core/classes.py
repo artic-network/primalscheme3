@@ -253,10 +253,10 @@ class PrimerPair:
     def __str__(self):
         return self.fprimer.__str__(
             reference=f"{self.chrom_name}",
-            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number + 1}",
+            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number}",
             pool=self.pool + 1,
         ) + self.rprimer.__str__(
             reference=f"{self.chrom_name}",
-            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number + 1}",
+            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number}",
             pool=self.pool + 1,
         )

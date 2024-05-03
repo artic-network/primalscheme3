@@ -39,7 +39,7 @@ class Test_FKmer(unittest.TestCase):
         # Test asignments
         self.assertEqual(
             fkmer.__str__(reference, amplicon_prefix, pool),
-            "reference\t96\t100\tamplicon_prefix_LEFT_0\tpool\t+\tATGC\n",
+            "reference\t96\t100\tamplicon_prefix_LEFT_1\tpool\t+\tATGC\n",
         )
 
     def test_string_multiple(self):
@@ -55,7 +55,7 @@ class Test_FKmer(unittest.TestCase):
         # Test asignments
         self.assertEqual(
             fkmer.__str__(reference, amplicon_prefix, pool),
-            "reference\t96\t100\tamplicon_prefix_LEFT_0\tpool\t+\tATGC\nreference\t95\t100\tamplicon_prefix_LEFT_1\tpool\t+\tATGCA\n",
+            "reference\t96\t100\tamplicon_prefix_LEFT_1\tpool\t+\tATGC\nreference\t95\t100\tamplicon_prefix_LEFT_2\tpool\t+\tATGCA\n",
         )
 
 
@@ -105,7 +105,7 @@ class Test_RKmer(unittest.TestCase):
         # Test asignments
         self.assertEqual(
             rkmer.__str__(reference, amplicon_prefix, pool),
-            "reference\t100\t104\tamplicon_prefix_RIGHT_0\tpool\t-\tATGC\n",
+            "reference\t100\t104\tamplicon_prefix_RIGHT_1\tpool\t-\tATGC\n",
         )
 
     def test_string_multiple(self):
@@ -121,7 +121,7 @@ class Test_RKmer(unittest.TestCase):
         # Test asignments
         self.assertEqual(
             rkmer.__str__(reference, amplicon_prefix, pool),
-            "reference\t100\t104\tamplicon_prefix_RIGHT_0\tpool\t-\tATGC\nreference\t100\t105\tamplicon_prefix_RIGHT_1\tpool\t-\tATGCA\n",
+            "reference\t100\t104\tamplicon_prefix_RIGHT_1\tpool\t-\tATGC\nreference\t100\t105\tamplicon_prefix_RIGHT_2\tpool\t-\tATGCA\n",
         )
 
 
@@ -180,7 +180,7 @@ class Test_PrimerPair(unittest.TestCase):
         primerpair.chrom_name = expected_refname
         primerpair.amplicon_prefix = expected_amplicon_prefix
 
-        expected_str = f"{expected_refname}\t85\t100\t{expected_amplicon_prefix}_0_LEFT_0\t{expected_pool}\t+\tACTAGCTAGCTAGCA\n{expected_refname}\t1000\t1012\t{expected_amplicon_prefix}_0_RIGHT_0\t{expected_pool}\t-\tATCGATCGGTAC\n"
+        expected_str = f"{expected_refname}\t85\t100\t{expected_amplicon_prefix}_0_LEFT_1\t{expected_pool}\t+\tACTAGCTAGCTAGCA\n{expected_refname}\t1000\t1012\t{expected_amplicon_prefix}_0_RIGHT_1\t{expected_pool}\t-\tATCGATCGGTAC\n"
 
         self.assertEqual(primerpair.to_bed(), expected_str)
 
