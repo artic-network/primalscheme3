@@ -1,6 +1,9 @@
-from primalscheme3.core.bedfiles import BedPrimerPair
+from primalscheme3.core.bedfiles import (
+    BedPrimerPair,
+    create_amplicon_str,
+    create_bedfile_str,
+)
 from primalscheme3.core.classes import MatchDB, PrimerPair
-from primalscheme3.core.bedfiles import create_bedfile_str, create_amplicon_str
 
 
 class Multiplex:

@@ -27,14 +27,10 @@ class FKmer:
 
     def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
-        counter = 0
-        seqs = list(self.seqs)
-        seqs.sort()
-        for seq in seqs:
+        for i, seq in enumerate(sorted(self.seqs), 1):
             string_list.append(
-                f"{reference}\t{self.end-len(seq)}\t{self.end}\t{amplicon_prefix}_LEFT_{counter}\t{pool}\t+\t{seq}\n"
+                f"{reference}\t{self.end-len(seq)}\t{self.end}\t{amplicon_prefix}_LEFT_{i}\t{pool}\t+\t{seq}\n"
             )
-            counter += 1
         return "".join(string_list)
 
     def find_matches(
@@ -99,14 +95,10 @@ class RKmer:
 
     def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
-        counter = 0
-        seqs = list(self.seqs)
-        seqs.sort()
-        for seq in seqs:
+        for i, seq in enumerate(sorted(self.seqs), 1):
             string_list.append(
-                f"{reference}\t{self.start}\t{self.start+len(seq)}\t{amplicon_prefix}_RIGHT_{counter}\t{pool}\t-\t{seq}\n"
+                f"{reference}\t{self.start}\t{self.start+len(seq)}\t{amplicon_prefix}_RIGHT_{i}\t{pool}\t-\t{seq}\n"
             )
-            counter += 1
         return "".join(string_list)
 
     def reverse_complement(self) -> set[str]:
@@ -261,10 +253,10 @@ class PrimerPair:
     def __str__(self):
         return self.fprimer.__str__(
             reference=f"{self.chrom_name}",
-            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number}",
+            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number + 1}",
             pool=self.pool + 1,
         ) + self.rprimer.__str__(
             reference=f"{self.chrom_name}",
-            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number}",
+            amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number + 1}",
             pool=self.pool + 1,
         )
