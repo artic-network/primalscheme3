@@ -478,14 +478,16 @@ def schemecreate(
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():
         # Set up the pm for the MSA
-        scheme_pt = pm.create_sub_progress(iter=None, chrom=msa.name, process="Creating Scheme")
-        scheme_pt.total = msa.array.shape[1]
+        scheme_pt = pm.create_sub_progress(
+            iter=None, chrom=msa.name, process="Creating Scheme"
+        )
+        scheme_pt.manual_update(n=0, total=msa.array.shape[1])
 
         while True:
             # Update the progress tracker to the current state of the walk
             if scheme._last_pp_added:
-                scheme_pt.n = scheme._last_pp_added[-1].end
-            
+                scheme_pt.manual_update(n=scheme._last_pp_added[-1].end)
+
             match scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
                 case SchemeReturn.ADDED_OL_PRIMERPAIR:
                     logger.info(
@@ -562,7 +564,7 @@ def schemecreate(
                         msa_name=msa.name,
                     )
         # Close the progress tracker
-        scheme_pt.n = scheme_pt.total
+        scheme_pt.manual_update(n=scheme_pt.total)
         scheme_pt.close()
 
     logger.info("Writting output files")

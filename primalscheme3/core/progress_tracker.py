@@ -17,6 +17,25 @@ class ProgressTracker(tqdm):
             self.parent.signal()
             yield i
 
+    def manual_update(
+        self,
+        n: int | None = None,
+        total: int | None = None,
+        process: str | None = None,
+        chrom: str | None = None,
+    ):
+        # Update the progress bar manually
+        if n is not None:
+            self.n = n
+        if total is not None:
+            self.total = total
+        if process is not None:
+            self.process = process
+        if chrom is not None:
+            self.chrom = chrom
+
+        self.parent.signal()
+
 
 class ProgressManager:
     _subprocess: None | ProgressTracker
@@ -42,15 +61,23 @@ class ProgressManager:
         if self._subprocess:
             return self._subprocess.process
         return None
-    
+
     def chrom(self) -> str | None:
         if self._subprocess:
             return self._subprocess.chrom
         return None
 
-    def create_sub_progress(self, iter,chrom, process, *args, **kwargs) -> ProgressTracker:
+    def create_sub_progress(
+        self, iter, chrom, process, *args, **kwargs
+    ) -> ProgressTracker:
         """Create a progress tracker"""
         self._subprocess = ProgressTracker(
-            self, *args, iterable=iter,chrom=chrom, process=process, **kwargs, desc=process
+            self,
+            *args,
+            iterable=iter,
+            chrom=chrom,
+            process=process,
+            **kwargs,
+            desc=process,
         )
         return self._subprocess
