@@ -131,6 +131,7 @@ def generate_valid_primerpairs(
     msa_index: int,
     progress_manager: ProgressManager,
     disable_progress_bar: bool = False,
+    chrom: str = "",
 ) -> list[PrimerPair]:
     """Generates valid primer pairs for a given set of forward and reverse kmers.
 
@@ -150,6 +151,7 @@ def generate_valid_primerpairs(
     for fkmer in progress_manager.create_sub_progress(
         iter=fkmers,
         process="Generating PrimerPairs",
+        chrom=chrom,
     ):
         fkmer_start = min(fkmer.starts())
         # Get all rkmers that would make a valid amplicon
@@ -724,6 +726,7 @@ def digest(
     progress_manager: ProgressManager,
     indexes: tuple[list[int], list[int]] | None = None,
     logger: None = None,
+    chrom: str = "",
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
     Digest the given MSA array and return the FKmers and RKmers.
@@ -756,7 +759,7 @@ def digest(
     # Digest the findexes
     fkmers = []
     for findex in progress_manager.create_sub_progress(
-        iter=findexes, process="Creating forward primers"
+        iter=findexes, process="Creating forward primers", chrom=chrom
     ):
         fkmer = mp_f_digest((msa_array, cfg, findex, cfg["minbasefreq"]))
 
@@ -780,7 +783,7 @@ def digest(
     # Digest the rindexes
     rkmers = []
     for rindex in progress_manager.create_sub_progress(
-        iter=rindexes, process="Creating reverse primers"
+        iter=rindexes, process="Creating reverse primers", chrom=chrom
     ):
         rkmer = mp_r_digest((msa_array, cfg, rindex, cfg["minbasefreq"]))
 

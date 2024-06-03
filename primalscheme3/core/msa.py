@@ -106,6 +106,7 @@ class MSA:
             indexes=indexes,
             logger=self.logger,
             progress_manager=self.progress_manager,
+            chrom=self.name,
         )
         # remap the fkmer and rkmers if needed
         if self._mapping_array is not None:
@@ -137,6 +138,7 @@ class MSA:
             dimerscore=dimerscore,
             msa_index=self.msa_index,
             progress_manager=self.progress_manager,
+            chrom=self.name,
         )
         # Update primerpairs to include the chrom_name and amplicon_prefix
         for primerpair in self.primerpairs:

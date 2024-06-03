@@ -4,9 +4,10 @@ from tqdm import tqdm
 
 
 class ProgressTracker(tqdm):
-    def __init__(self, parent, process, iterable, *args, **kwargs):
+    def __init__(self, parent, process, iterable, chrom, *args, **kwargs):
         self.parent = parent
         self.process = process
+        self.chrom = chrom
         super().__init__(iterable, *args, **kwargs)
 
     def __iter__(self) -> Iterator:
@@ -41,10 +42,15 @@ class ProgressManager:
         if self._subprocess:
             return self._subprocess.process
         return None
+    
+    def chrom(self) -> str | None:
+        if self._subprocess:
+            return self._subprocess.chrom
+        return None
 
-    def create_sub_progress(self, iter, process, *args, **kwargs) -> ProgressTracker:
+    def create_sub_progress(self, iter,chrom, process, *args, **kwargs) -> ProgressTracker:
         """Create a progress tracker"""
         self._subprocess = ProgressTracker(
-            self, *args, iterable=iter, process=process, **kwargs, desc=process
+            self, *args, iterable=iter,chrom=chrom, process=process, **kwargs, desc=process
         )
         return self._subprocess
