@@ -203,7 +203,7 @@ def create_bedfile_str(
     for pp in primerpairs:
         primer_bed_str.append(pp.to_bed().strip())
 
-    return "\n".join(primer_bed_str)
+    return "\n".join(primer_bed_str) + "\n"
 
 
 def create_amplicon_str(
@@ -220,4 +220,4 @@ def create_amplicon_str(
             amplicon_str.append(
                 f"{pp.chrom_name}\t{pp.start}\t{pp.end}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
             )
-    return "\n".join(amplicon_str)
+    return "\n".join(amplicon_str) + "\n"

@@ -21,6 +21,7 @@ from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.progress_tracker import ProgressManager
 
 # Module imports
 from primalscheme3.panel.minimal_scheme_classes import (
@@ -31,6 +32,12 @@ from primalscheme3.panel.minimal_scheme_classes import (
 )
 
 logger = logger.opt(colors=True)
+
+def mean_gc_diff(seqs: list[str] | set[str], target_gc=0.5) -> float:
+    gc_diff = []
+    for seq in seqs:
+        gc_diff.append(abs(target_gc - ((seq.count("G") + seq.count("C")) / len(seq))))
+    return sum(gc_diff) / len(seqs)
 
 
 class PanelRunModes(Enum):
@@ -79,6 +86,7 @@ def panelcreate(
     maxamplicons: int,
     mode: PanelRunModes,
     ignore_n: bool,
+    pm: ProgressManager | None,
 ):
     ARG_MSA = argmsa
     OUTPUT_DIR = pathlib.Path(outputdir).absolute()
@@ -147,6 +155,10 @@ def panelcreate(
     ## Set up the logger
     logger = setup_loger(OUTPUT_DIR)
 
+    ## Set up the progress manager
+    if pm is None:
+        pm = ProgressManager()
+
     # Create the mismatch db
     logger.info(
         "Creating the Mismatch Database",
@@ -173,6 +185,7 @@ def panelcreate(
             ): None
             for bedline in bed_lines
         }
+        shutil.copy(regionbedfile, OUTPUT_DIR / regionbedfile.name)  # type: ignore # Copy the bedfile
 
     ## Read in the MSAs
     msa_dict: dict[int, PanelMSA] = {}
@@ -196,6 +209,7 @@ def panelcreate(
             msa_index=msa_index,
             mapping=cfg["mapping"],
             logger=logger,
+            progress_manager=pm,
         )
         if "/" in msa._chrom_name:
             new_chromname = msa._chrom_name.split("/")[0]
@@ -225,20 +239,29 @@ def panelcreate(
             # Create indexes from the regions
             indexes = set()
             for region in msa_regions:
-                indexes.update(range(region.start, region.stop))
+                msa_region_start = msa.ref_to_msa_index_array[region.start]
+                msa_region_stop = msa.ref_to_msa_index_array[region.stop]
 
-            findexes = {
+                if msa_region_start is None or msa_region_stop is None:
+                    continue
+
+                indexes.update(range(msa_region_start, msa_region_stop))
+
+            findexes = list({
                 fi
                 for fi in (range(i - cfg["amplicon_size_max"], i + 1) for i in indexes)
                 for fi in fi
                 if fi >= 0 and fi < msa.array.shape[1]
-            }
-            rindexes = {
+            })
+            findexes.sort()
+            rindexes = list({
                 ri
                 for ri in (range(i, i + cfg["amplicon_size_max"]) for i in indexes)
                 for ri in ri
                 if ri >= 0 and ri < msa.array.shape[1]
-            }
+            })
+            rindexes.sort()
+
 
         # Add some msa data to the dict
         msa_data[msa_index]["msa_name"] = msa.name
@@ -281,23 +304,35 @@ def panelcreate(
             num_pp=len(msa.primerpairs),
         )
 
-        if mode == PanelRunModes.ALL:
-            msa.primerpairs.sort(
-                key=lambda pp: msa.get_pp_entropy(pp) ** 2 / sqrt(len(pp.all_seqs())),  # type: ignore
-                reverse=True,
-            )
-        if mode == PanelRunModes.REGION_ONLY:
-            # Sort the primerpairs by the number of SNPs in the amplicon
-            msa.primerpairs.sort(
-                key=lambda pp: (
-                    msa.get_pp_score(pp),
-                    -sqrt(len(pp.all_seqs())),  # type: ignore
-                    pp.fprimer.__hash__(),
-                ),  # type: ignore # Use a HASH Prevent sequential primerpairs being added
-                reverse=True,
-            )
-            # Remove all primerpairs with a score of 0
-            msa.primerpairs = [pp for pp in msa.primerpairs if msa.get_pp_score(pp) > 0]
+        match mode:
+            case PanelRunModes.ALL:
+                msa.primerpairs.sort(
+                    key=lambda pp: msa.get_pp_entropy(pp) ** 2
+                    / sqrt(len(pp.all_seqs())),  # type: ignore
+                    reverse=True,
+                )
+            case PanelRunModes.REGION_ONLY:
+                # Sort the primerpairs by the number of SNPs in the amplicon
+                msa.primerpairs.sort(
+                    key=lambda pp: (
+                        msa.get_pp_score(pp),
+                        -sqrt(len(pp.all_seqs())),  # type: ignore
+                        -mean_gc_diff(pp.all_seqs()),
+                        pp.fprimer.__hash__(),
+                    ),  # type: ignore # Use a HASH Prevent sequential primerpairs being added
+                    reverse=True,
+                )
+                # Remove all primerpairs with a score of 0
+                # msa.primerpairs = [
+                # pp for pp in msa.primerpairs if msa.get_pp_score(pp) > 0
+                # ]
+                # for pp in msa.primerpairs:
+                # logger.debug(
+                # "start: {pp.start} end: {pp.end}",
+                # pp=pp,
+                # )
+            case _:
+                logger.error("ERROR: Unknown mode")
 
         # Add the MSA to the dict
         msa_dict[msa_index] = msa

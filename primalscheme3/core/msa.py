@@ -1,4 +1,5 @@
 import pathlib
+import sys
 from uuid import uuid4
 
 import numpy as np
@@ -44,12 +45,19 @@ class MSA:
     primerpairs: list[PrimerPair]
 
     def __init__(
-        self, name: str, path: pathlib.Path, msa_index: int, mapping: str, logger=None
+        self,
+        name: str,
+        path: pathlib.Path,
+        msa_index: int,
+        mapping: str,
+        progress_manager,
+        logger=None,
     ) -> None:
         self.name = name
         self.path = str(path)
         self.msa_index = msa_index
         self.logger = logger
+        self.progress_manager = progress_manager
 
         # Read in the MSA
         records_index = SeqIO.index(self.path, "fasta")
@@ -57,7 +65,15 @@ class MSA:
             [record.seq.upper() for record in records_index.values()], dtype="U1"
         )
         # Do some basic QC
-        msa_qc(self.array)
+        try:
+            msa_qc(self.array)
+        except ValueError as e:
+            if self.logger:
+                self.logger.error(f"MSA: {self.name} failed QC: {e}")
+            else:
+                print(f"MSA: {self.name} failed QC: {e}")
+            sys.exit(1)
+
         self.array = remove_end_insertion(self.array)
 
         # Create the mapping array
@@ -89,6 +105,8 @@ class MSA:
             cfg=cfg,
             indexes=indexes,
             logger=self.logger,
+            progress_manager=self.progress_manager,
+            chrom=self.name,
         )
         # remap the fkmer and rkmers if needed
         if self._mapping_array is not None:
@@ -119,6 +137,8 @@ class MSA:
             amplicon_size_max=amplicon_size_max,
             dimerscore=dimerscore,
             msa_index=self.msa_index,
+            progress_manager=self.progress_manager,
+            chrom=self.name,
         )
         # Update primerpairs to include the chrom_name and amplicon_prefix
         for primerpair in self.primerpairs:

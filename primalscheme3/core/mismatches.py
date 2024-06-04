@@ -325,19 +325,8 @@ def detect_products(matches: set[tuple[int, int, str]], product_size=2000) -> bo
     return False
 
 
-def main():
-    ARG_MSA = [
-        "/Users/kentcg/primal-digest/tests/test_mismatch.fasta",
-    ]
-    matchdb = MatchDB("test", ARG_MSA, 20)
-
-
-if __name__ == "__main__":
-    main()
-
-
 ## It need to find the reverse complement of the primer in the forward sequence.
-kmerrc = "GTACGTCGATAG"
-kmer = "CTATCGACGTAC"
-"ACGATCGACTATCGACGTACGACATCGGACAGCAGATGTCGTACGTGATAGCTGCATGGTACGTCGATAG"
-"TGCTAGCTGATAGCTGCATGCTGTAGCCTGTCGTCTACAGCATGCACTATCGACGTACCATGCAGCTATC"
+# kmerrc = "GTACGTCGATAG"
+# kmer = "CTATCGACGTAC"
+# "ACGATCGACTATCGACGTACGACATCGGACAGCAGATGTCGTACGTGATAGCTGCATGGTACGTCGATAG"
+# "TGCTAGCTGATAGCTGCATGCTGTAGCCTGTCGTCTACAGCATGCACTATCGACGTACCATGCAGCTATC"

@@ -1,6 +1,9 @@
-from primalscheme3.core.bedfiles import BedPrimerPair
+from primalscheme3.core.bedfiles import (
+    BedPrimerPair,
+    create_amplicon_str,
+    create_bedfile_str,
+)
 from primalscheme3.core.classes import MatchDB, PrimerPair
-from primalscheme3.core.bedfiles import create_bedfile_str, create_amplicon_str
 
 
 class Multiplex:
@@ -54,13 +57,16 @@ class Multiplex:
         """
         # Set the primerpair values
         primerpair.pool = pool
-        primerpair.amplicon_number = len(
-            [
-                pp
-                for sublist in self._pools
-                for pp in sublist
-                if pp.msa_index == primerpair.msa_index
-            ]
+        primerpair.amplicon_number = (
+            len(
+                [
+                    pp
+                    for sublist in self._pools
+                    for pp in sublist
+                    if pp.msa_index == primerpair.msa_index
+                ]
+            )
+            + 1
         )
 
         # Adds the primerpair's matches to the pools matches

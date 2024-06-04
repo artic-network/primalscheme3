@@ -17,6 +17,7 @@ from primalscheme3.core.multiplex import Multiplex
 from primalscheme3.core.seq_functions import (
     entropy_score_array,
 )
+from primalscheme3.core.progress_tracker import ProgressManager
 
 
 class PanelReturn(Enum):
@@ -99,13 +100,33 @@ class PanelMSA(MSA):
     primerpairpointer: int
 
     def __init__(
-        self, name: str, path: pathlib.Path, msa_index: int, mapping: str, logger=None
+        self,
+        name: str,
+        path: pathlib.Path,
+        msa_index: int,
+        mapping: str,
+        progress_manager: ProgressManager,
+        logger=None,
     ) -> None:
         # Call the MSA init
-        super().__init__(name, path, msa_index, mapping, logger)
+        super().__init__(
+            name=name,
+            path=path,
+            msa_index=msa_index,
+            mapping=mapping,
+            logger=logger,
+            progress_manager=progress_manager,
+        )
 
         # Create the entropy array
         self._entropy_array = np.array(entropy_score_array(self.array))
+
+        # Create the ref_to_msa_index_array
+        self.ref_to_msa_index_array: list[None | int] = [None] * self.array.shape[1]
+        if self._mapping_array is not None:
+            for msa_index, ref_index in enumerate(self._mapping_array):
+                if ref_index is not None:
+                    self.ref_to_msa_index_array[ref_index] = msa_index
 
         # Create the primerpairpointer
         self.primerpairpointer = 0
@@ -117,8 +138,13 @@ class PanelMSA(MSA):
         # Create the score array
         self._score_array = np.zeros(self.array.shape[1], dtype=int)
         for region in regions:
-            for i in range(region.start, region.stop):
-                self._score_array[i] += region.score
+            # Map the ref positions to msa positions
+            msa_region_start = self.ref_to_msa_index_array[region.start]
+            msa_region_stop = self.ref_to_msa_index_array[region.stop]
+            # Add the score to the score array
+            if msa_region_start is not None and msa_region_stop is not None:
+                for i in range(msa_region_start, msa_region_stop):
+                    self._score_array[i] += region.score
 
     def remove_kmers_that_clash_with_regions(self):
         """
@@ -162,7 +188,11 @@ class PanelMSA(MSA):
         """
         Returns number of SNPs in the primertrimmed amplicon
         """
-        return np.sum(self._score_array[pp.fprimer.end : pp.rprimer.start - 1])
+        msa_pp_fprimer_end = self.ref_to_msa_index_array[pp.fprimer.end]
+        msa_pp_rprimer_start = self.ref_to_msa_index_array[pp.rprimer.start]
+        if msa_pp_fprimer_end is None or msa_pp_rprimer_start is None:
+            return None
+        return np.sum(self._score_array[msa_pp_fprimer_end : msa_pp_rprimer_start - 1])
 
 
 class Panel(Multiplex):

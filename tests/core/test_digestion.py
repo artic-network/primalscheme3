@@ -23,6 +23,7 @@ from primalscheme3.core.errors import (
     WalksOut,
     WalksTooFar,
 )
+from primalscheme3.core.progress_tracker import ProgressManager as PM
 from primalscheme3.core.thermo import calc_tm
 
 
@@ -652,6 +653,7 @@ class TestDigest(unittest.TestCase):
         self.cfg["reducekmers"] = False
         self.cfg["dimerscore"] = -26
         cfg["minbasefreq"] = 0
+        self.pm = PM()
 
     def create_array(self, seqs) -> np.ndarray:
         array_list = []
@@ -669,7 +671,9 @@ class TestDigest(unittest.TestCase):
         ]
         msa_array = self.create_array(seqs)
 
-        results = digest(msa_array=msa_array, cfg=cfg, indexes=([60], [1]))
+        results = digest(
+            msa_array=msa_array, cfg=cfg, indexes=([60], [1]), progress_manager=PM()
+        )
         expected_fkmer = FKmer(60, {"GTCCAATGGTGCAAAAGGTATAATCATTAAT"})
 
         fkmer = results[0][0]
@@ -685,7 +689,9 @@ class TestDigest(unittest.TestCase):
         ]
         msa_array = msa_array = self.create_array(seqs)
 
-        results = digest(msa_array=msa_array, cfg=cfg, indexes=([1], [25]))
+        results = digest(
+            msa_array=msa_array, cfg=cfg, indexes=([1], [25]), progress_manager=PM()
+        )
         expected_rkmer = RKmer(25, {"TGATTATACCTTTTGCACCATTGGACATTA"})
 
         rkmer = results[1][0]

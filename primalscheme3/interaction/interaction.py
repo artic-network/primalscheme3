@@ -110,6 +110,8 @@ def visulise_interactions(bedpath: pathlib.Path, threshold: float) -> None:
         # Loop over the bedlines in the pool
         for bedline1 in pool:
             for bedline2 in pool:
-                for l in interaction(bedline1.sequence, bedline2.sequence, threshold):
+                for line in interaction(
+                    bedline1.sequence, bedline2.sequence, threshold
+                ):
                     print(bedline1.primername, bedline2.primername)
-                    print(l)
+                    print(line)

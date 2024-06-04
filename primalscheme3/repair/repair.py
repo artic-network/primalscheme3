@@ -16,6 +16,7 @@ from primalscheme3.core.digestion import (
 )
 from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.msa import MSA
+from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import reverse_complement
 from primalscheme3.core.thermo import THERMORESULT, forms_hairpin, thermo_check_kmers
 
@@ -186,6 +187,7 @@ def repair(
     output_dir: pathlib.Path,
     cores: int,
     force: bool,
+    pm: ProgressManager | None,
 ):
     OUTPUT_DIR = pathlib.Path(output_dir).absolute()  # Keep absolute path
 
@@ -210,6 +212,10 @@ def repair(
     # Set up the logger
     logger = setup_loger(OUTPUT_DIR)
 
+    ## Set up the progress manager
+    if pm is None:
+        pm = ProgressManager()
+
     # Read in the MSA file
     msa = MSA(
         name=msa_path.stem,
@@ -217,6 +223,7 @@ def repair(
         msa_index=0,
         mapping=base_cfg["mapping"],
         logger=logger,
+        progress_manager=pm,
     )
     if "/" in msa._chrom_name:
         new_chromname = msa._chrom_name.split("/")[0]
@@ -310,7 +317,6 @@ def repair(
 
         # Decide if the new seqs should be added
         for seqstatus in seqstatuss:
-
             if not report_check(
                 seqstatus=seqstatus,
                 current_primer_seqs=pp.fprimer.seqs,
@@ -346,7 +352,7 @@ def repair(
         valid_rseqs = {
             reverse_complement(seq): count
             for seq, count in rseq_counts.items()
-            if type(seq) == str
+            if isinstance(seq, str)
         }
 
         # Thermo check each sequence

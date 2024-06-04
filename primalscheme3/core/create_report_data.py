@@ -229,7 +229,7 @@ def generate_all_plotdata(
         data[msa._chrom_name] = generate_data(msa, last_pp_added)
 
     # Write the data to a json file
-    json_bytes = json.dumps(data, sort_keys=True).encode("utf-8")
+    json_bytes = json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
     with gzip.open(output_path / "plotdata.json.gz", "wb") as fout:
         fout.write(json_bytes)
 

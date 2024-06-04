@@ -9,7 +9,6 @@ from Bio import Seq, SeqIO, SeqRecord
 # Interaction checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
-
 from primalscheme3.__init__ import __version__
 from primalscheme3.core.bedfiles import (
     read_in_bedprimerpairs,
@@ -23,6 +22,7 @@ from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
+from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 
@@ -33,6 +33,7 @@ def schemereplace(
     primerbed: pathlib.Path,
     primername: str,
     msapath: pathlib.Path,
+    pm: ProgressManager | None,
 ):
     """
     List all replacements primers
@@ -40,6 +41,9 @@ def schemereplace(
     # Read in the config file
     with open(config) as file:
         cfg: dict = json.load(file)
+
+    if pm is None:
+        pm = ProgressManager()
 
     # Update the amplicon size if it is provided
     if ampliconsizemax:
@@ -85,7 +89,9 @@ def schemereplace(
         prefix, ampliconnumber = primername.split("_")[:2]
         primerstem = f"{ampliconnumber}_{prefix}"
     except ValueError:
-        raise ValueError(f"ERROR: {primername} cannot be parsed using _ as delim")
+        raise ValueError(
+            f"ERROR: {primername} cannot be parsed using _ as delim"
+        ) from None
 
     # Find primernumber from bedfile
     wanted_pp = None
@@ -110,6 +116,8 @@ def schemereplace(
         path=msapath,
         msa_index=wanted_pp.msa_index,
         mapping=cfg["mapping"],
+        logger=None,
+        progress_manager=pm,
     )
     # Check the hashes match
     with open(msa.path, "rb") as f:
@@ -244,6 +252,7 @@ def schemecreate(
     circular: bool,
     backtrack: bool,
     ignore_n: bool,
+    pm: ProgressManager | None,
     bedfile: pathlib.Path | None = None,
     force: bool = False,
     mapping: str = "first",
@@ -310,6 +319,9 @@ def schemecreate(
 
     # Set up the logger
     logger = setup_loger(OUTPUT_DIR)
+
+    if pm is None:
+        pm = ProgressManager()
 
     # Create the mismatch db
     logger.info(
@@ -385,6 +397,7 @@ def schemecreate(
             msa_index=msa_index,
             mapping=cfg["mapping"],
             logger=logger,
+            progress_manager=pm,
         )
 
         if "/" in msa._chrom_name:
@@ -464,7 +477,17 @@ def schemecreate(
 
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():
+        # Set up the pm for the MSA
+        scheme_pt = pm.create_sub_progress(
+            iter=None, chrom=msa.name, process="Creating Scheme"
+        )
+        scheme_pt.manual_update(n=0, total=msa.array.shape[1])
+
         while True:
+            # Update the progress tracker to the current state of the walk
+            if scheme._last_pp_added:
+                scheme_pt.manual_update(n=scheme._last_pp_added[-1].end)
+
             match scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
                 case SchemeReturn.ADDED_OL_PRIMERPAIR:
                     logger.info(
@@ -540,6 +563,9 @@ def schemecreate(
                         "No <red>circular</> amplicon for <blue>{msa_name}</>",
                         msa_name=msa.name,
                     )
+        # Close the progress tracker
+        scheme_pt.manual_update(n=scheme_pt.total)
+        scheme_pt.close()
 
     logger.info("Writting output files")
 

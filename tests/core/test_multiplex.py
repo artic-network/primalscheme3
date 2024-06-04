@@ -67,7 +67,7 @@ class TestMultiplex(unittest.TestCase):
         # Check that the primerpair has had its msa_index updated
         self.assertEqual(primerpair.msa_index, pp_msa_index)
         # Check amplicon number has been assigned
-        self.assertEqual(multiplex._last_pp_added[-1].amplicon_number, 0)
+        self.assertEqual(multiplex._last_pp_added[-1].amplicon_number, 1)
 
     def test_remove_last_primer_pair(self):
         self.cfg["npools"] = 2
