@@ -475,6 +475,9 @@ def schemecreate(
             pp.msa_index = msa_chrom_to_index.get(pp.chrom_name, -1)  # type: ignore
             scheme.add_primer_pair_to_pool(pp, pp.pool, pp.msa_index)
 
+    # Set up the coverage dict
+    scheme.setup_coverage(msa_dict)
+
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():
         # Set up the pm for the MSA
@@ -484,6 +487,9 @@ def schemecreate(
         scheme_pt.manual_update(n=0, total=msa.array.shape[1])
 
         while True:
+            # Provide the coverage to the progress tracker
+            coverage = scheme.get_coverage_percent(msa_index)
+            scheme_pt.manual_update(count=coverage if coverage is not None else 0)
             # Update the progress tracker to the current state of the walk
             if scheme._last_pp_added:
                 scheme_pt.manual_update(n=scheme._last_pp_added[-1].end)

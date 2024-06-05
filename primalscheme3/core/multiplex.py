@@ -1,9 +1,12 @@
+import numpy as np
+
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
     create_amplicon_str,
     create_bedfile_str,
 )
 from primalscheme3.core.classes import MatchDB, PrimerPair
+from primalscheme3.core.msa import MSA
 
 
 class Multiplex:
@@ -17,7 +20,7 @@ class Multiplex:
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
     _matches: list[set[tuple]]
-    _coverage: list[list[bool]]
+    _coverage: dict[int, np.ndarray] | None
     cfg: dict
 
     def __init__(self, cfg, matchDB: MatchDB) -> None:
@@ -29,6 +32,28 @@ class Multiplex:
         self.cfg = cfg
         self._matchDB = matchDB
         self._last_pp_added = []
+        self._coverage = None
+
+    def setup_coverage(self, msa_dict: dict[int, MSA]) -> None:
+        """
+        Sets up the coverage dict
+        :param n: int. The number of amplicons
+        :return: None
+        """
+        self._coverage = {}
+        for msa_index, msa in msa_dict.items():
+            if msa._mapping_array is None:
+                n = len(msa.array[1])
+            else:
+                n = len(msa._mapping_array)
+            self._coverage[msa_index] = np.array([False] * n)
+
+    def get_coverage_percent(self, msa_index: int) -> float | None:
+        if self._coverage is None or msa_index not in self._coverage:
+            return None
+        return round(
+            self._coverage[msa_index].sum() / len(self._coverage[msa_index]) * 100, 2
+        )
 
     def next_pool(self) -> int:
         """
@@ -84,6 +109,18 @@ class Multiplex:
         self._current_pool = pool
         self._current_pool = self.next_pool()
         self._last_pp_added.append(primerpair)
+
+        # Update the coverage
+        if self._coverage is not None and msa_index in self._coverage:
+            # Check not circular
+            if primerpair.start < primerpair.end:
+                self._coverage[msa_index][
+                    primerpair.fprimer.end : primerpair.rprimer.start
+                ] = True
+            else:
+                # Handle circular
+                self._coverage[msa_index][primerpair.fprimer.end :] = True
+                self._coverage[msa_index][: primerpair.rprimer.start] = True
 
     def remove_last_primer_pair(self) -> PrimerPair:
         """
@@ -152,12 +189,15 @@ class Multiplex:
 
     def to_bed(
         self,
-        headers: list[str] | None = ["# artic-bed-version v3.0"],
+        headers: list[str] | None,
     ) -> str:
         """
         Returns the multiplex as a bed file
         :return: str
         """
+        if headers is None:
+            headers = ["# artic-bed-version v3.0"]
+
         return create_bedfile_str(headers, self.all_primerpairs())
 
     def to_amplicons(

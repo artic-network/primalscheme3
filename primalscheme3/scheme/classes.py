@@ -45,14 +45,7 @@ class Scheme(Multiplex):
     cfg: dict
 
     def __init__(self, cfg, matchDB: MatchDB):
-        self.n_pools = cfg["npools"]
-        self._pools = [[] for _ in range(self.n_pools)]
-        self._matches: list[set[tuple]] = [set() for _ in range(self.n_pools)]
-        self._current_pool = 0
-        self._pp_number = 1
-        self.cfg = cfg
-        self._matchDB = matchDB
-        self._last_pp_added = []
+        super().__init__(cfg, matchDB)
 
     @property
     def npools(self) -> int:

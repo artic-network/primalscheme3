@@ -14,10 +14,10 @@ from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex
+from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import (
     entropy_score_array,
 )
-from primalscheme3.core.progress_tracker import ProgressManager
 
 
 class PanelReturn(Enum):
