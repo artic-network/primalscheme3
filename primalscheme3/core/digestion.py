@@ -147,12 +147,10 @@ def generate_valid_primerpairs(
     """
     ## Generate all primerpairs without checking
     checked_pp = []
-
-    for fkmer in progress_manager.create_sub_progress(
-        iter=fkmers,
-        process="Generating PrimerPairs",
-        chrom=chrom,
-    ):
+    pt = progress_manager.create_sub_progress(
+        iter=fkmers, process="Generating PrimerPairs", chrom=chrom
+    )
+    for fkmer in pt:
         fkmer_start = min(fkmer.starts())
         # Get all rkmers that would make a valid amplicon
         pos_rkmer = get_r_window_FAST2(
@@ -165,6 +163,9 @@ def generate_valid_primerpairs(
             # Check for interactions
             if not do_pools_interact_py(fmer_seqs, [*rkmer.seqs], dimerscore):
                 checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
+
+        # Update the count
+        pt.manual_update(count=len(checked_pp))
 
     checked_pp.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
     return checked_pp
@@ -618,13 +619,13 @@ def mp_f_digest(
     else:
         raise ValueError("Unknown error occured")
 
-    # DownSample the seqs if asked
-    if cfg["reducekmers"]:
-        wanted_seqs = reduce_kmers(
-            seqs={*parsed_seqs.keys()},
-            max_edit_dist=cfg["editdist_max"],
-            end_3p=cfg["editdist_end3p"],
-        )
+    # # DownSample the seqs if asked
+    # if cfg["reducekmers"]:
+    #     wanted_seqs = reduce_kmers(
+    #         seqs={*parsed_seqs.keys()},
+    #         max_edit_dist=cfg["editdist_max"],
+    #         end_3p=cfg["editdist_end3p"],
+    #     )
 
     # Thermo check the kmers
     thermo_result = thermo_check_kmers({*parsed_seqs.keys()}, cfg)
@@ -758,9 +759,10 @@ def digest(
 
     # Digest the findexes
     fkmers = []
-    for findex in progress_manager.create_sub_progress(
+    pt = progress_manager.create_sub_progress(
         iter=findexes, process="Creating forward primers", chrom=chrom
-    ):
+    )
+    for findex in pt:
         fkmer = mp_f_digest((msa_array, cfg, findex, cfg["minbasefreq"]))
 
         if logger is not None:
@@ -780,11 +782,15 @@ def digest(
         if isinstance(fkmer, FKmer) and fkmer.seqs:
             fkmers.append(fkmer)
 
+        # Update the count
+        pt.manual_update(count=len(fkmers))
+
     # Digest the rindexes
     rkmers = []
-    for rindex in progress_manager.create_sub_progress(
+    pt = progress_manager.create_sub_progress(
         iter=rindexes, process="Creating reverse primers", chrom=chrom
-    ):
+    )
+    for rindex in pt:
         rkmer = mp_r_digest((msa_array, cfg, rindex, cfg["minbasefreq"]))
 
         if logger is not None:
@@ -803,5 +809,8 @@ def digest(
         # Append valid RKmers
         if isinstance(rkmer, RKmer) and rkmer.seqs:
             rkmers.append(rkmer)
+
+        # Update the count
+        pt.manual_update(count=len(rkmers))
 
     return (fkmers, rkmers)

@@ -4,10 +4,11 @@ from tqdm import tqdm
 
 
 class ProgressTracker(tqdm):
-    def __init__(self, parent, process, iterable, chrom, *args, **kwargs):
+    def __init__(self, parent, process, iterable, chrom, count=0, *args, **kwargs):
         self.parent = parent
         self.process = process
         self.chrom = chrom
+        self.count = count
         super().__init__(iterable, *args, **kwargs)
 
     def __iter__(self) -> Iterator:
@@ -23,6 +24,7 @@ class ProgressTracker(tqdm):
         total: int | None = None,
         process: str | None = None,
         chrom: str | None = None,
+        count: int | float | None = None,
     ):
         # Update the progress bar manually
         if n is not None:
@@ -33,6 +35,8 @@ class ProgressTracker(tqdm):
             self.process = process
         if chrom is not None:
             self.chrom = chrom
+        if count is not None:
+            self.count = count
 
         self.parent.signal()
 
@@ -65,6 +69,11 @@ class ProgressManager:
     def chrom(self) -> str | None:
         if self._subprocess:
             return self._subprocess.chrom
+        return None
+
+    def count(self) -> int | None:
+        if self._subprocess:
+            return self._subprocess.count
         return None
 
     def create_sub_progress(
