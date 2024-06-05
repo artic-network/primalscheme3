@@ -89,7 +89,7 @@ def generate_uncovered_data(length, primerpairs: list[PrimerPair]) -> dict[int, 
     uncovered_indexes_list = sorted(uncovered_indexes)
     # Generate continous regions
     uncovered_regions = []
-    for k, g in groupby(enumerate(uncovered_indexes_list), lambda ix: ix[0] - ix[1]):
+    for _k, g in groupby(enumerate(uncovered_indexes_list), lambda ix: ix[0] - ix[1]):
         uncovered_regions.append(list(map(itemgetter(1), g)))
 
     data: dict[int, int] = dict()
