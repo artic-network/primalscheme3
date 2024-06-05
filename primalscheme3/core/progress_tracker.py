@@ -71,7 +71,7 @@ class ProgressManager:
             return self._subprocess.chrom
         return None
 
-    def count(self) -> int | None:
+    def count(self) -> int | float | None:
         if self._subprocess:
             return self._subprocess.count
         return None

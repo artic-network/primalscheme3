@@ -189,7 +189,7 @@ class Multiplex:
 
     def to_bed(
         self,
-        headers: list[str] | None,
+        headers: list[str] | None = None,
     ) -> str:
         """
         Returns the multiplex as a bed file
