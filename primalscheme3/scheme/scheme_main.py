@@ -573,6 +573,11 @@ def schemecreate(
         scheme_pt.manual_update(n=scheme_pt.total)
         scheme_pt.close()
 
+    # Create the progress tracker for the final steps
+    upload_pt = pm.create_sub_progress(
+        iter=[], chrom="ALL", process="Creating / Uploading Files", disable=True
+    )
+    upload_pt.manual_update(n=0, total=0, count=0)
     logger.info("Writting output files")
 
     # Write primer bed file
