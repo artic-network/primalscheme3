@@ -22,7 +22,11 @@ from primalscheme3.core.errors import (
 )
 from primalscheme3.core.get_window import get_r_window_FAST2
 from primalscheme3.core.progress_tracker import ProgressManager
-from primalscheme3.core.seq_functions import expand_ambs, get_most_common_base
+from primalscheme3.core.seq_functions import (
+    expand_ambs,
+    get_most_common_base,
+    reverse_complement,
+)
 from primalscheme3.core.thermo import (
     THERMORESULT,
     calc_tm,
@@ -169,33 +173,6 @@ def generate_valid_primerpairs(
 
     checked_pp.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
     return checked_pp
-
-    ## Interaction check all the primerpairs
-    # iter_free_primer_pairs = []
-    # if cfg["n_cores"] == 1:
-    #    for pp in tqdm(
-    #        non_checked_pp,
-    #        desc="Generating PrimerPairs",
-    #        disable=disable_progress_bar,
-    #    ):
-    #        if not pp.inter_free(cfg):
-    #            iter_free_primer_pairs.append(pp)
-    # else:
-    #    with Pool(cfg["n_cores"]) as p:
-    #        mp_pp_bool = tqdm(
-    #            p.imap_unordered(
-    #                _mp_pp_inter_free, ((pp, cfg) for pp in non_checked_pp)
-    #            ),
-    #            total=len(non_checked_pp),
-    #            desc="Generating PrimerPairs",
-    #            disable=disable_progress_bar,
-    #        )
-    #        for bool, pp in zip(mp_pp_bool, non_checked_pp):
-    #            if not bool:
-    #                iter_free_primer_pairs.append(pp)
-
-    # iter_free_primer_pairs.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
-    # return iter_free_primer_pairs
 
 
 def walk_right(
@@ -504,15 +481,9 @@ def mp_r_digest(
         raise ValueError("Unknown error occured")
 
     # Create the Kmer
-    tmp_kmer = RKmer(start=start_col, seqs={*parsed_seqs.keys()})
-    tmp_kmer.seqs = tmp_kmer.reverse_complement()
-    # Downsample the seqs if asked
-    if cfg["reducekmers"]:
-        tmp_kmer.seqs = reduce_kmers(
-            seqs=tmp_kmer.seqs,
-            max_edit_dist=cfg["editdist_max"],
-            end_3p=cfg["editdist_end3p"],
-        )
+    rc_seqs = [reverse_complement(seq) for seq in parsed_seqs.keys()]
+    tmp_kmer = RKmer(start_col, rc_seqs)
+
     # Thermo check the kmers
     thermo_result = thermo_check_kmers(tmp_kmer.seqs, cfg)
     match thermo_result:
@@ -643,7 +614,7 @@ def mp_f_digest(
     ):
         return (end_col, DIGESTION_ERROR.DIMER_FAIL)
 
-    return FKmer(end=end_col, seqs={*parsed_seqs.keys()})
+    return FKmer(end_col, list(parsed_seqs.keys()))
 
 
 def hamming_dist(s1, s2) -> int:

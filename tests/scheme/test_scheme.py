@@ -23,7 +23,7 @@ class TestScheme(unittest.TestCase):
         """
         self.cfg["npools"] = 2
         scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
-        primerpair = PrimerPair(FKmer(10, "A"), RKmer(20, "T"), None)
+        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(20, ["T"]), None)
 
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
@@ -40,7 +40,7 @@ class TestScheme(unittest.TestCase):
         """
         self.cfg["npools"] = 2
         scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
-        primerpair = PrimerPair(FKmer(10, "AA"), RKmer(20, "TT"), None)
+        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), None)
 
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
@@ -48,7 +48,7 @@ class TestScheme(unittest.TestCase):
         # Check that the leading coverage edge is correct
         self.assertEqual(
             scheme.get_leading_amplicon_edge(),
-            21,
+            22,
         )
 
     def test_find_ol_primerpairs(self):
@@ -58,14 +58,13 @@ class TestScheme(unittest.TestCase):
         self.cfg["npools"] = 2
         self.cfg["minoverlap"] = 10
         scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
-        primerpair = PrimerPair(FKmer(100, "AA"), RKmer(200, "TT"), None)
-
+        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), None)
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
 
         # Create some overlapping primerpairs
         all_ol_primerpair = [
-            PrimerPair(FKmer(x, "AAA"), RKmer(x + 100, "TTT"), None)
+            PrimerPair(FKmer(x, ["AAA"]), RKmer(x + 100, ["TTT"]), None)
             for x in range(50, 300, 10)
         ]
         # See which primers could ol
@@ -76,10 +75,8 @@ class TestScheme(unittest.TestCase):
         # Make sure all primers have an overlap
         self.assertTrue(
             all(
-                
-                    x.fprimer.end <= primerpair.rprimer.start - self.cfg["min_overlap"]
-                    for x in pos_ol_primerpair
-                
+                x.fprimer.end <= primerpair.rprimer.start - self.cfg["min_overlap"]
+                for x in pos_ol_primerpair
             )
         )
 

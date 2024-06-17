@@ -18,6 +18,7 @@ from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
+from primalscheme3.core.progress_tracker import ProgressManager
 
 ## Submodules
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
@@ -39,6 +40,8 @@ def create_flu(args):
 
     # Set up the logger
     logger = setup_loger(OUTPUT_DIR)
+    # Set up the progress manager
+    pm = ProgressManager()
 
     ## Hard code some params for now
     cfg = config_dict
@@ -86,6 +89,7 @@ def create_flu(args):
             msa_index=msa_index,
             mapping=cfg["mapping"],
             logger=logger,
+            progress_manager=pm,
         )
 
         if "/" in msa._chrom_name:
@@ -135,6 +139,7 @@ def create_flu(args):
             amplicon_size_max=cfg["amplicon_size_max"],
             amplicon_size_min=cfg["amplicon_size_min"],
             msa_index=msa.msa_index,
+            progress_manager=pm,
         )
         left_primer_pairs.sort(
             key=lambda x: len(x.all_seqs())
@@ -154,6 +159,7 @@ def create_flu(args):
             amplicon_size_max=cfg["amplicon_size_max"],
             amplicon_size_min=cfg["amplicon_size_min"],
             msa_index=msa.msa_index,
+            progress_manager=pm,
         )
         for rpp in right_primer_pairs:
             rpp.chrom_name = msa._chrom_name

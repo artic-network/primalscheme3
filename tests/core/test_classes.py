@@ -5,36 +5,37 @@ from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
 
 class Test_FKmer(unittest.TestCase):
     def test_creation(self):
-        seqs = {"ATGC", "ACACAA"}
+        seqs = ["ATGC", "ATGCA"]
+        seqs.sort()
         end = 100
 
         # Test case 1: Valid input
-        fkmer = FKmer(end=end, seqs=seqs)
+        fkmer = FKmer(end, seqs)
 
         # Test asignments
         self.assertEqual(fkmer.seqs, seqs)
         self.assertEqual(fkmer.end, end)
-        self.assertEqual(fkmer._starts, {end - 4, end - 6})
+        self.assertEqual(fkmer.starts(), {end - len(x) for x in seqs})
 
     def test_len(self):
-        seqs = {"ATGC"}
+        seqs = ["ATGC"]
         end = 100
 
         # Test case 1: Valid input
-        fkmer = FKmer(end=end, seqs=seqs)
+        fkmer = FKmer(end, seqs)
 
         # Test asignments
-        self.assertEqual(fkmer.len(), {4})
+        self.assertEqual(fkmer.len(), [4])
 
     def test_string_single(self):
-        seqs = {"ATGC"}
+        seqs = ["ATGC"]
         end = 100
         reference = "reference"
         amplicon_prefix = "amplicon_prefix"
         pool = "pool"
 
         # Test case 1: Valid input
-        fkmer = FKmer(end=end, seqs=seqs)
+        fkmer = FKmer(end, seqs)
 
         # Test asignments
         self.assertEqual(
@@ -43,14 +44,16 @@ class Test_FKmer(unittest.TestCase):
         )
 
     def test_string_multiple(self):
-        seqs = {"ATGC", "ATGCA"}
+        seqs = ["ATGC", "ATGCA"]
+        seqs.sort()
+
         end = 100
         reference = "reference"
         amplicon_prefix = "amplicon_prefix"
         pool = "pool"
 
         # Test case 1: Valid input
-        fkmer = FKmer(end=end, seqs=seqs)
+        fkmer = FKmer(end, seqs)
 
         # Test asignments
         self.assertEqual(
@@ -61,46 +64,46 @@ class Test_FKmer(unittest.TestCase):
 
 class Test_RKmer(unittest.TestCase):
     def test_create(self):
-        seqs = {"ATGC"}
+        seqs = ["ATGC"]
         start = 100
 
         # Test case 1: Valid input
-        rkmer = RKmer(start=start, seqs=seqs)
+        rkmer = RKmer(start, seqs)
 
         # Test asignments
         self.assertEqual(rkmer.seqs, seqs)
         self.assertEqual(rkmer.start, start)
-        self.assertEqual(rkmer._ends, {start + 4})
+        self.assertEqual(rkmer.ends(), {start + len(x) for x in seqs})
 
     def test_len(self):
-        seqs = {"ATGC"}
+        seqs = ["ATGC"]
         start = 100
 
         # Test case 1: Valid input
-        rkmer = RKmer(start=start, seqs=seqs)
+        rkmer = RKmer(start, seqs)
 
         # Test asignments
-        self.assertEqual(rkmer.len(), {4})
+        self.assertEqual(rkmer.len(), [4])
 
     def test_ends(self):
-        seqs = {"ATGC", "ATGCAA"}
+        seqs = ["ATGC", "ATGCAA"]
         start = 100
 
         # Test case 1: Valid input
-        rkmer = RKmer(start=start, seqs=seqs)
+        rkmer = RKmer(start, seqs)
 
         # Test asignments
-        self.assertEqual(rkmer.ends(), {104, 106})
+        self.assertEqual(rkmer.ends(), {start + len(x) for x in seqs})
 
     def test_string_single(self):
-        seqs = {"ATGC"}
+        seqs = ["ATGC"]
         start = 100
         reference = "reference"
         amplicon_prefix = "amplicon_prefix"
         pool = "pool"
 
         # Test case 1: Valid input
-        rkmer = RKmer(start=start, seqs=seqs)
+        rkmer = RKmer(start, seqs)
 
         # Test asignments
         self.assertEqual(
@@ -109,14 +112,15 @@ class Test_RKmer(unittest.TestCase):
         )
 
     def test_string_multiple(self):
-        seqs = {"ATGC", "ATGCA"}
+        seqs = ["ATGC", "ATGCA"]
+        seqs.sort()
         start = 100
         reference = "reference"
         amplicon_prefix = "amplicon_prefix"
         pool = "pool"
 
         # Test case 1: Valid input
-        rkmer = RKmer(start=start, seqs=seqs)
+        rkmer = RKmer(start, seqs)
 
         # Test asignments
         self.assertEqual(
@@ -127,8 +131,8 @@ class Test_RKmer(unittest.TestCase):
 
 class Test_PrimerPair(unittest.TestCase):
     def test_create(self):
-        fkmer = FKmer(end=100, seqs={"ATGC"})
-        rkmer = RKmer(start=1000, seqs={"ATGC"})
+        fkmer = FKmer(100, ["ATGC"])
+        rkmer = RKmer(1000, ["ATGC"])
         msa_index = 0
 
         # Test case 1: Valid input
@@ -140,8 +144,8 @@ class Test_PrimerPair(unittest.TestCase):
         self.assertEqual(primerpair.msa_index, msa_index)
 
     def test_set_amplicon_number(self):
-        fkmer = FKmer(end=100, seqs={"ATGC"})
-        rkmer = RKmer(start=1000, seqs={"ATGC"})
+        fkmer = FKmer(100, ["ATGC"])
+        rkmer = RKmer(1000, ["ATGC"])
         msa_index = 0
 
         # Test case 1: Valid input
@@ -152,8 +156,8 @@ class Test_PrimerPair(unittest.TestCase):
         self.assertEqual(primerpair.amplicon_number, 1)
 
     def test_all_seqs(self):
-        fkmer = FKmer(end=100, seqs={"ACTAGCTAGCTAGCA"})
-        rkmer = RKmer(start=1000, seqs={"ATCGATCGGTAC"})
+        fkmer = FKmer(100, ["ACTAGCTAGCTAGCA"])
+        rkmer = RKmer(1000, ["ATCGATCGGTAC"])
         msa_index = 0
 
         # Test case 1: Valid input
@@ -163,8 +167,8 @@ class Test_PrimerPair(unittest.TestCase):
         self.assertEqual(primerpair.all_seqs(), ["ACTAGCTAGCTAGCA", "ATCGATCGGTAC"])
 
     def test_to_bed(self):
-        fkmer = FKmer(end=100, seqs={"ACTAGCTAGCTAGCA"})
-        rkmer = RKmer(start=1000, seqs={"ATCGATCGGTAC"})
+        fkmer = FKmer(100, ["ACTAGCTAGCTAGCA"])
+        rkmer = RKmer(1000, ["ATCGATCGGTAC"])
         msa_index = 0
 
         # Test case 1: Valid input

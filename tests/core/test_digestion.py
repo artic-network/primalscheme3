@@ -447,7 +447,7 @@ class Test_MPRDigest(unittest.TestCase):
         result = mp_r_digest(data)
 
         # The Expected Sequence
-        expected = {"ACCTTTTGCACCATTGGACATTAATGAT"}
+        expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
@@ -478,7 +478,7 @@ class Test_MPRDigest(unittest.TestCase):
         result = mp_r_digest(data)
 
         # The Expected Sequence
-        expected = {"ACCTTTTGCACCATTGGACATTAATGAT"}
+        expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
@@ -559,7 +559,7 @@ class Test_MPFDigest(unittest.TestCase):
         result = mp_f_digest(data)
 
         # The Expected Sequence
-        expected = {"GCAAAAGGTATAATCATTAATGTCCAATGGTG"}
+        expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
@@ -589,7 +589,7 @@ class Test_MPFDigest(unittest.TestCase):
         result = mp_f_digest(data)
 
         # The Expected Sequence
-        expected = {"GCAAAAGGTATAATCATTAATGTCCAATGGTG"}
+        expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
@@ -674,7 +674,7 @@ class TestDigest(unittest.TestCase):
         results = digest(
             msa_array=msa_array, cfg=cfg, indexes=([60], [1]), progress_manager=PM()
         )
-        expected_fkmer = FKmer(60, {"GTCCAATGGTGCAAAAGGTATAATCATTAAT"})
+        expected_fkmer = FKmer(60, ["GTCCAATGGTGCAAAAGGTATAATCATTAAT"])
 
         fkmer = results[0][0]
         self.assertEqual(fkmer, expected_fkmer)
@@ -692,7 +692,7 @@ class TestDigest(unittest.TestCase):
         results = digest(
             msa_array=msa_array, cfg=cfg, indexes=([1], [25]), progress_manager=PM()
         )
-        expected_rkmer = RKmer(25, {"TGATTATACCTTTTGCACCATTGGACATTA"})
+        expected_rkmer = RKmer(25, ["TGATTATACCTTTTGCACCATTGGACATTA"])
 
         rkmer = results[1][0]
         print(rkmer.start)

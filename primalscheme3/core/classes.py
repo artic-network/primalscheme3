@@ -1,29 +1,23 @@
 # Module imports
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primaldimer_py import Kmer, do_pools_interact_py  # type: ignore
 
 from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.seq_functions import reverse_complement
 from primalscheme3.core.thermo import calc_tm
 
 
-class FKmer:
+class FKmer(Kmer):
     end: int
-    seqs: set[str]
-    _starts: set[int]
-
     # Add slots for some performance gains
-    __slots__ = ["end", "seqs", "_starts"]
+    __slots__ = ["end", "_starts"]
 
     def __init__(self, end, seqs) -> None:
         self.end = end
-        self.seqs = seqs
-        self._starts = {self.end - len(x) for x in self.seqs}
 
-    def len(self) -> set[int]:
-        return {len(x) for x in self.seqs}
+    def len(self) -> list[int]:
+        return self.lens()
 
     def starts(self) -> set[int]:
-        return self._starts
+        return {self.end - x for x in self.lens()}
 
     def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
@@ -74,24 +68,20 @@ class FKmer:
             return None
 
 
-class RKmer:
+class RKmer(Kmer):
     start: int
-    seqs: set[str]
-    _ends: set[int]
 
     # Add slots for some performance gains
-    __slots__ = ["start", "seqs", "_ends"]
+    __slots__ = ["start", "_ends"]
 
     def __init__(self, start, seqs) -> None:
         self.start = start
-        self.seqs = seqs
-        self._ends = {len(x) + self.start for x in self.seqs}
 
-    def len(self) -> set[int]:
-        return {len(x) for x in self.seqs}
+    def len(self) -> list[int]:
+        return self.lens()
 
     def ends(self) -> set[int]:
-        return self._ends
+        return {x + self.start for x in self.lens()}
 
     def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
@@ -100,9 +90,6 @@ class RKmer:
                 f"{reference}\t{self.start}\t{self.start+len(seq)}\t{amplicon_prefix}_RIGHT_{i}\t{pool}\t-\t{seq}\n"
             )
         return "".join(string_list)
-
-    def reverse_complement(self) -> set[str]:
-        return {reverse_complement(x) for x in self.seqs}
 
     def find_matches(
         self,

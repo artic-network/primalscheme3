@@ -51,7 +51,7 @@ class TestMultiplex(unittest.TestCase):
         multiplex = Multiplex(cfg=self.cfg, matchDB=self.matchdb)
         pp_msa_index = 0
 
-        primerpair = PrimerPair(FKmer(10, "A"), RKmer(20, "T"), pp_msa_index)
+        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(20, ["T"]), pp_msa_index)
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, 0, pp_msa_index)
 
@@ -73,7 +73,7 @@ class TestMultiplex(unittest.TestCase):
         self.cfg["npools"] = 2
         self.cfg["minoverlap"] = 10
         multiplex = Multiplex(cfg=self.cfg, matchDB=self.matchdb)
-        primerpair = PrimerPair(FKmer(100, "AA"), RKmer(200, "TT"), None)
+        primerpair = PrimerPair(FKmer(100, ["AA"]), RKmer(200, ["TT"]), None)
 
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, multiplex._current_pool, 0)
@@ -100,7 +100,7 @@ class TestMultiplex(unittest.TestCase):
         multiplex = Multiplex(cfg=self.cfg, matchDB=self.matchdb)
 
         # Create a primerpair
-        primerpair = PrimerPair(FKmer(10, "A"), RKmer(200, "T"), 0)
+        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(200, ["T"]), 0)
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, multiplex._current_pool, 0)
 
@@ -108,11 +108,11 @@ class TestMultiplex(unittest.TestCase):
         self.assertTrue(multiplex.does_overlap(primerpair, 0))
 
         # Check that nonoverlapping primerpair in the same msa do not does not overlap
-        primerpair = PrimerPair(FKmer(1000, "A"), RKmer(2000, "T"), 0)
+        primerpair = PrimerPair(FKmer(1000, ["A"]), RKmer(2000, ["T"]), 0)
         self.assertFalse(multiplex.does_overlap(primerpair, 0))
 
         # Check that overlapping primerpair in differnt msas do not overlap
-        primerpair_newmsa = PrimerPair(FKmer(100, "A"), RKmer(200, "T"), 1)
+        primerpair_newmsa = PrimerPair(FKmer(100, ["A"]), RKmer(200, ["T"]), 1)
         self.assertFalse(multiplex.does_overlap(primerpair_newmsa, 0))
 
         # Check that an overlapping primerpair in a different pool does not overlap
@@ -126,7 +126,7 @@ class TestMultiplex(unittest.TestCase):
         multiplex = Multiplex(cfg=self.cfg, matchDB=self.matchdb)
 
         # Create a primerpair
-        primerpair = PrimerPair(FKmer(10, "A"), RKmer(200, "T"), 0)
+        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(200, ["T"]), 0)
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, multiplex._current_pool, 0)
 

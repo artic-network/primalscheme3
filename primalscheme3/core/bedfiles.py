@@ -161,11 +161,11 @@ def read_in_bedprimerpairs(path: pathlib.Path) -> tuple[list[BedPrimerPair], lis
             # Group the ampliconlines by direction
             fkmer = FKmer(
                 [x.end for x in ampliconlines if x.direction == "+"][0],
-                {x.sequence for x in ampliconlines if x.direction == "+"},
+                [x.sequence for x in ampliconlines if x.direction == "+"],
             )
             rkmer = RKmer(
                 [x.start for x in ampliconlines if x.direction == "-"][0],
-                {x.sequence for x in ampliconlines if x.direction == "-"},
+                [x.sequence for x in ampliconlines if x.direction == "-"],
             )
             primerpairs.append(
                 BedPrimerPair(

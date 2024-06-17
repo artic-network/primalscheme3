@@ -10,7 +10,7 @@ from primalscheme3.core.get_window import (
 
 class Test_GetFWindowFAST2(unittest.TestCase):
     def test_get_f_window_FAST2(self):
-        fkmers = [FKmer(end, "AA") for end in range(20, 100)]
+        fkmers = [FKmer(end, ["AA"]) for end in range(20, 100)]
 
         # Get all kmers that start between 40 and 50
         expected_fkmers = [
@@ -22,7 +22,7 @@ class Test_GetFWindowFAST2(unittest.TestCase):
 
 class Test_GetRWindowFAST2(unittest.TestCase):
     def test_get_f_window_FAST2(self):
-        rkmers = [RKmer(start, "AA") for start in range(20, 100)]
+        rkmers = [RKmer(start, ["AA"]) for start in range(20, 100)]
 
         # Get all kmers that start between 40 and 50
         expected_rkmers = [
@@ -34,8 +34,8 @@ class Test_GetRWindowFAST2(unittest.TestCase):
 
 class Test_GetPpWindow(unittest.TestCase):
     def test_get_pp_window_ol(self):
-        fkmers = [FKmer(end, "A") for end in range(20, 110)]
-        rkmers = [RKmer(start, "A") for start in range(10, 100)]
+        fkmers = [FKmer(end, ["A"]) for end in range(20, 110)]
+        rkmers = [RKmer(start, ["A"]) for start in range(10, 100)]
 
         cfg = {"amplicon_size_min": 10, "amplicon_size_max": 70}
         msa_index = 0

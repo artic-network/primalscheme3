@@ -37,7 +37,7 @@ class Multiplex:
     def setup_coverage(self, msa_dict: dict[int, MSA]) -> None:
         """
         Sets up the coverage dict
-        :param n: int. The number of amplicons
+        :param msa_dict: dict[int, MSA]
         :return: None
         """
         self._coverage = {}
@@ -48,7 +48,30 @@ class Multiplex:
                 n = len(msa._mapping_array)
             self._coverage[msa_index] = np.array([False] * n)
 
+    def calculate_coverage(self, msa_dict: dict[int, MSA]) -> None:
+        """
+        Recalculates the coverage for all MSA indexes
+        :param msa_dict: dict[int, MSA]
+        :return: None
+        """
+        if self._coverage is None:
+            self.setup_coverage(msa_dict)
+        assert self._coverage is not None
+        for pp in self.all_primerpairs():
+            # Check not circular
+            if pp.start < pp.end:
+                self._coverage[pp.msa_index][pp.fprimer.end : pp.rprimer.start] = True
+            else:
+                # Handle circular
+                self._coverage[pp.msa_index][pp.fprimer.end :] = True
+                self._coverage[pp.msa_index][: pp.rprimer.start] = True
+
     def get_coverage_percent(self, msa_index: int) -> float | None:
+        """
+        Returns the coverage percentage for the spesified MSA index
+        :param msa_index: int
+        :return: float | None
+        """
         if self._coverage is None or msa_index not in self._coverage:
             return None
         return round(
@@ -210,3 +233,33 @@ class Multiplex:
         :return: str
         """
         return create_amplicon_str(self.all_primerpairs(), trim_primers)
+
+    def polish(
+        self,
+        msas_dict: dict[int, MSA],
+    ) -> None:
+        """
+        Stochastic optimization to improve the multiplex
+        """
+        # Set up / update coverage
+        self.calculate_coverage(msas_dict)
+        assert self._coverage is not None
+
+        # Find primerpairs that cover uncoverered regions
+        msaindex_to_primerpairs = {}
+        for msa_index, msa in msas_dict.items():
+            for pp in msa.primerpairs:
+                numuncoveredpos = (
+                    pp.rprimer.start
+                    - pp.fprimer.end
+                    - np.sum(
+                        self._coverage[msa_index][pp.fprimer.end : pp.rprimer.start],
+                        dtype=int,
+                    )
+                )
+                if numuncoveredpos > 0:
+                    if msa_index not in msaindex_to_primerpairs:
+                        msaindex_to_primerpairs[msa_index] = []
+                    msaindex_to_primerpairs[msa_index].append((pp, numuncoveredpos))
+
+        pass
