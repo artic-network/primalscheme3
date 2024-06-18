@@ -8,7 +8,10 @@ import networkx as nx
 import numpy as np
 
 # Submodules
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primaldimer_py import (
+    do_pools_interact_py,  # type: ignore
+    which_kmers_pools_interact,  # type: ignore
+)
 
 from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
 from primalscheme3.core.errors import (
@@ -162,10 +165,11 @@ def generate_valid_primerpairs(
             start=fkmer_start + amplicon_size_min,
             end=fkmer_start + amplicon_size_max,
         )
-        fmer_seqs = [*fkmer.seqs]
         for rkmer in pos_rkmer:
             # Check for interactions
-            if not do_pools_interact_py(fmer_seqs, [*rkmer.seqs], dimerscore):
+            if not which_kmers_pools_interact(
+                [fkmer], [rkmer], dimerscore, calc_all=False
+            ):
                 checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
 
         # Update the count

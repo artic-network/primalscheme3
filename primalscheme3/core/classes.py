@@ -192,6 +192,18 @@ class PrimerPair:
         )
         return matches
 
+    def kmers(self):
+        """
+        Returns the FKmer and RKmer
+        """
+        return self.fprimer, self.rprimer
+
+    def primertrimmed_region(self) -> tuple[int, int]:
+        """
+        Returns the region of the primertrimed region
+        """
+        return self.fprimer.end, self.rprimer.start - 1
+
     @property
     def start(self) -> int:
         return min(self.fprimer.starts())
