@@ -335,9 +335,6 @@ def schemecreate(
         path=f"{OUTPUT_DIR.relative_to(OUTPUT_DIR.parent)}/work/mismatch.db",
     )
 
-    # Create the scheme object early
-    scheme = Scheme(cfg=cfg, matchDB=mismatch_db)
-
     # If the bedfile flag is given add the primers into the scheme
     if bedfile is not None:
         bedprimerpairs, _headers = read_in_bedprimerpairs(bedfile)
@@ -465,6 +462,9 @@ def schemecreate(
     # Add MSA data into cfg
     cfg["msa_data"] = msa_data
 
+    # Create the scheme object early
+    scheme = Scheme(cfg=cfg, matchDB=mismatch_db, msa_dict=msa_dict)
+
     msa_chrom_to_index: dict[str, int] = {
         msa._chrom_name: msa_index for msa_index, msa in msa_dict.items()
     }
@@ -474,9 +474,6 @@ def schemecreate(
             # Map the primerpair to the msa via chromname
             pp.msa_index = msa_chrom_to_index.get(pp.chrom_name, -1)  # type: ignore
             scheme.add_primer_pair_to_pool(pp, pp.pool, pp.msa_index)
-
-    # Set up the coverage dict
-    scheme.setup_coverage(msa_dict)
 
     # Start the Scheme generation
     for msa_index, msa in msa_dict.items():

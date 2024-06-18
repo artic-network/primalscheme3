@@ -94,8 +94,8 @@ class Region:
 
 class PanelMSA(MSA):
     # Score arrays
-    _score_array: np.ndarray
-    _entropy_array: np.ndarray
+    _midx_score_array: np.ndarray | None
+    _midx_entropy_array: np.ndarray | None
 
     primerpairpointer: int
 
@@ -118,33 +118,26 @@ class PanelMSA(MSA):
             progress_manager=progress_manager,
         )
 
-        # Create the entropy array
-        self._entropy_array = np.array(entropy_score_array(self.array))
-
-        # Create the ref_to_msa_index_array
-        self.ref_to_msa_index_array: list[None | int] = [None] * self.array.shape[1]
-        if self._mapping_array is not None:
-            for msa_index, ref_index in enumerate(self._mapping_array):
-                if ref_index is not None:
-                    self.ref_to_msa_index_array[ref_index] = msa_index
-
         # Create the primerpairpointer
         self.primerpairpointer = 0
         self.regions = None
+
+    def create_entropy_array(self):
+        self._midx_entropy_array = np.array(entropy_score_array(self.array))
 
     def add_regions(self, regions: list[Region]) -> None:
         self.regions = regions
 
         # Create the score array
-        self._score_array = np.zeros(self.array.shape[1], dtype=int)
+        self._midx_score_array = np.zeros(self.array.shape[1], dtype=int)
+
         for region in regions:
             # Map the ref positions to msa positions
-            msa_region_start = self.ref_to_msa_index_array[region.start]
-            msa_region_stop = self.ref_to_msa_index_array[region.stop]
+            msa_region_start = self._ref_to_msa[region.start]
+            msa_region_stop = self._ref_to_msa[region.stop]
             # Add the score to the score array
-            if msa_region_start is not None and msa_region_stop is not None:
-                for i in range(msa_region_start, msa_region_stop):
-                    self._score_array[i] += region.score
+            for i in range(msa_region_start, msa_region_stop):
+                self._midx_score_array[i] += region.score
 
     def remove_kmers_that_clash_with_regions(self):
         """
@@ -182,17 +175,36 @@ class PanelMSA(MSA):
         """
         Returns sum of entropy in the primertrimmed amplicon
         """
-        return np.sum(self._entropy_array[pp.fprimer.end : pp.rprimer.start - 1])
+        assert self._midx_entropy_array is not None
+        ppptstart, ppptend = pp.primertrimmed_region()
+
+        return np.sum(
+            self._midx_entropy_array[
+                self._ref_to_msa[ppptstart] : self._ref_to_msa[ppptend]
+            ]
+        )
 
     def get_pp_score(self, pp: PrimerPair) -> int:
         """
         Returns number of SNPs in the primertrimmed amplicon
         """
-        msa_pp_fprimer_end = self.ref_to_msa_index_array[pp.fprimer.end]
-        msa_pp_rprimer_start = self.ref_to_msa_index_array[pp.rprimer.start]
-        if msa_pp_fprimer_end is None or msa_pp_rprimer_start is None:
-            return None
-        return np.sum(self._score_array[msa_pp_fprimer_end : msa_pp_rprimer_start - 1])
+        assert self._midx_score_array is not None
+        ppptstart, ppptend = pp.primertrimmed_region()
+        return np.sum(
+            self._midx_score_array[
+                self._ref_to_msa[ppptstart] : self._ref_to_msa[ppptend]
+            ]
+        )
+
+    def update_score_array(self, addedpp: PrimerPair) -> None:
+        """
+        Updates the score array with the added primerpair
+        """
+        assert self._midx_score_array is not None
+        ppptstart, ppptend = addedpp.primertrimmed_region()
+        self._midx_score_array[
+            self._ref_to_msa[ppptstart] : self._ref_to_msa[ppptend]
+        ] = 0
 
 
 class Panel(Multiplex):
@@ -202,17 +214,19 @@ class Panel(Multiplex):
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
     cfg: dict
+    _msa_dict: dict[int, PanelMSA]
 
     # New attributes
-    msas: list[PanelMSA]
     _current_msa_index: int
 
     # for keep adding
     _workingmsasbool: list[bool] | None = None
 
-    def __init__(self, msas: list[PanelMSA], cfg: dict, matchdb: MatchDB) -> None:
-        super().__init__(cfg, matchdb)
-        self.msas = msas
+    def __init__(
+        self, msa_dict: dict[int, PanelMSA], cfg: dict, matchdb: MatchDB
+    ) -> None:
+        super().__init__(cfg, matchdb, msa_dict)  # type: ignore
+
         self._current_msa_index = 0
         self._failed_primerpairs = [set() for _ in range(self.n_pools)]
 
@@ -221,7 +235,7 @@ class Panel(Multiplex):
         Updates the current msa index to the next msa. Returns the new msa index.
         :return: The new msa index.
         """
-        self._current_msa_index = (self._current_msa_index + 1) % len(self.msas)
+        self._current_msa_index = (self._current_msa_index + 1) % len(self._msa_dict)
         return self._current_msa_index
 
     def _add_primerpair(
@@ -229,6 +243,10 @@ class Panel(Multiplex):
     ) -> None:
         # Add the primerpair to the pool
         super().add_primer_pair_to_pool(primerpair, pool, msa_index)
+
+        # Update the msa Score array
+        self._msa_dict[msa_index].update_score_array(primerpair)
+
         # Update the current MSA
         self._next_msa()
 
@@ -244,7 +262,7 @@ class Panel(Multiplex):
         :return: PanelReturn.
         """
         # Get the current MSA
-        current_msa = self.msas[self._current_msa_index]
+        current_msa = self._msa_dict[self._current_msa_index]
         current_pool = self._current_pool
 
         # Get the current pool
@@ -306,7 +324,7 @@ class Panel(Multiplex):
     def keep_adding(self) -> PanelReturn:
         # Create a list of which msa still have posible primerpairs
         if self._workingmsasbool is None:
-            self._workingmsasbool = [True] * len(self.msas)
+            self._workingmsasbool = [True] * len(self._msa_dict)
 
         # All seqs in each pool
         all_seqs_in_pools: dict[int, list[str]] = {
@@ -322,7 +340,7 @@ class Panel(Multiplex):
             self._next_msa()
             return PanelReturn.MOVING_TO_NEW_MSA
         else:
-            msa = self.msas[self._current_msa_index]
+            msa = self._msa_dict[self._current_msa_index]
 
         # For each primerpair
         for new_pointer, pos_primerpair in enumerate(

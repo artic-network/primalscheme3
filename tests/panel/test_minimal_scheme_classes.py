@@ -1,7 +1,8 @@
 import pathlib
 import unittest
 
-from primalscheme3.panel.minimal_scheme_classes import PanelMSA, does_overlap
+from primalscheme3.core.progress_tracker import ProgressManager
+from primalscheme3.panel.panel_classes import PanelMSA, does_overlap
 
 
 class TestPanelMSA(unittest.TestCase):
@@ -10,7 +11,11 @@ class TestPanelMSA(unittest.TestCase):
         Test case to check if the pointer is set correctly.
         """
         msa = PanelMSA(
-            "test", pathlib.Path("tests/core/test_mismatch.fasta"), 0, "first", None
+            "test",
+            pathlib.Path("tests/core/test_mismatch.fasta"),
+            0,
+            "first",
+            ProgressManager(),
         )
         # Add fake primerpairs to the MSA
         msa.primerpairs = [(x, 10, 0) for x in range(10)]  # type: ignore

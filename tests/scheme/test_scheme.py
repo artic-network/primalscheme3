@@ -3,12 +3,15 @@ import unittest
 
 import primalscheme3.core.config as config
 from primalscheme3.core.classes import FKmer, MatchDB, PrimerPair, RKmer
+from primalscheme3.core.msa import MSA
 from primalscheme3.scheme.classes import Scheme
 
 
 class TestScheme(unittest.TestCase):
     db_path = pathlib.Path("./tests/core/mulitplex").absolute()
     matchdb = MatchDB(db_path, [], 30)  # Create an empty matchdb
+    inputfile_path = pathlib.Path("./tests/core/test_mismatch.fasta").absolute()
+    msa = MSA("test", inputfile_path, 0, "first", None)
 
     # Create a config dict
     cfg = config.config_dict
@@ -22,8 +25,8 @@ class TestScheme(unittest.TestCase):
         Test the method get_leading_coverage_edge
         """
         self.cfg["npools"] = 2
-        scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
-        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(20, ["T"]), None)
+        scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa})
+        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(20, ["T"]), 0)
 
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
@@ -39,8 +42,8 @@ class TestScheme(unittest.TestCase):
         Test the method get_leading_coverage_edge
         """
         self.cfg["npools"] = 2
-        scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
-        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), None)
+        scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa})
+        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), 0)
 
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
@@ -57,14 +60,14 @@ class TestScheme(unittest.TestCase):
         """
         self.cfg["npools"] = 2
         self.cfg["minoverlap"] = 10
-        scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb)
-        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), None)
+        scheme = Scheme(cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa})
+        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), 0)
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
 
         # Create some overlapping primerpairs
         all_ol_primerpair = [
-            PrimerPair(FKmer(x, ["AAA"]), RKmer(x + 100, ["TTT"]), None)
+            PrimerPair(FKmer(x, ["AAA"]), RKmer(x + 100, ["TTT"]), 0)
             for x in range(50, 300, 10)
         ]
         # See which primers could ol

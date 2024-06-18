@@ -24,7 +24,7 @@ from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.progress_tracker import ProgressManager
 
 # Module imports
-from primalscheme3.panel.minimal_scheme_classes import (
+from primalscheme3.panel.panel_classes import (
     Panel,
     PanelMSA,
     PanelReturn,
@@ -32,6 +32,7 @@ from primalscheme3.panel.minimal_scheme_classes import (
 )
 
 logger = logger.opt(colors=True)
+
 
 def mean_gc_diff(seqs: list[str] | set[str], target_gc=0.5) -> float:
     gc_diff = []
@@ -140,6 +141,10 @@ def panelcreate(
     if npools != 1:
         sys.exit("ERROR: primalpanel only supports one pool")
 
+    # Enforce mapping
+    if mapping == "first":
+        sys.exit("ERROR: mapping must be 'first'")
+
     # Enforce region only has a region bedfile
     if mode == PanelRunModes.REGION_ONLY and regionbedfile is None:
         sys.exit("ERROR: region-only mode requires a region bedfile")
@@ -239,29 +244,34 @@ def panelcreate(
             # Create indexes from the regions
             indexes = set()
             for region in msa_regions:
-                msa_region_start = msa.ref_to_msa_index_array[region.start]
-                msa_region_stop = msa.ref_to_msa_index_array[region.stop]
+                msa_region_start = msa._ref_to_msa[region.start]
+                msa_region_stop = msa._ref_to_msa[region.stop]
 
                 if msa_region_start is None or msa_region_stop is None:
                     continue
 
                 indexes.update(range(msa_region_start, msa_region_stop))
 
-            findexes = list({
-                fi
-                for fi in (range(i - cfg["amplicon_size_max"], i + 1) for i in indexes)
-                for fi in fi
-                if fi >= 0 and fi < msa.array.shape[1]
-            })
+            findexes = list(
+                {
+                    fi
+                    for fi in (
+                        range(i - cfg["amplicon_size_max"], i + 1) for i in indexes
+                    )
+                    for fi in fi
+                    if fi >= 0 and fi < msa.array.shape[1]
+                }
+            )
             findexes.sort()
-            rindexes = list({
-                ri
-                for ri in (range(i, i + cfg["amplicon_size_max"]) for i in indexes)
-                for ri in ri
-                if ri >= 0 and ri < msa.array.shape[1]
-            })
+            rindexes = list(
+                {
+                    ri
+                    for ri in (range(i, i + cfg["amplicon_size_max"]) for i in indexes)
+                    for ri in ri
+                    if ri >= 0 and ri < msa.array.shape[1]
+                }
+            )
             rindexes.sort()
-
 
         # Add some msa data to the dict
         msa_data[msa_index]["msa_name"] = msa.name
@@ -349,7 +359,7 @@ def panelcreate(
     msa_index_to_amplicon_count = {k: 0 for k in msa_index_to_name.keys()}
 
     # Create the panel object
-    panel: Panel = Panel([x for x in msa_dict.values()], cfg, mismatch_db)
+    panel: Panel = Panel(msa_data, cfg, mismatch_db)
 
     # MSA_INDEX_TO_CHROMNAME =
     msa_chromname_to_index = {
@@ -446,7 +456,7 @@ def panelcreate(
 
     # If region bedfile given, check that all regions have been covered
     if cfg["regionbedfile"] is not None:
-        for msa in panel.msas:
+        for msa in panel._msa_dict.values():
             regions_covered = []
             regions_not_covered = []
             # Find all primerpairs in this msa

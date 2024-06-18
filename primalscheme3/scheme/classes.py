@@ -10,6 +10,7 @@ from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.digestion import _mp_pp_inter_free
 from primalscheme3.core.get_window import get_pp_window
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex
 
 # Scheme imports
@@ -44,8 +45,8 @@ class Scheme(Multiplex):
     _matchDB: MatchDB
     cfg: dict
 
-    def __init__(self, cfg, matchDB: MatchDB):
-        super().__init__(cfg, matchDB)
+    def __init__(self, cfg, matchDB: MatchDB, msa_dict: dict[int, MSA]):
+        super().__init__(cfg, matchDB, msa_dict)
 
     @property
     def npools(self) -> int:
