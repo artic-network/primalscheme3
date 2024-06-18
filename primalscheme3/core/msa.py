@@ -37,7 +37,8 @@ class MSA:
     array: np.ndarray
     _uuid: str
     _chrom_name: str  # only used in the primer.bed file and html report
-    _mapping_array: np.ndarray | None
+    _mapping_array: np.ndarray
+    _ref_to_msa: dict[int, int]
 
     # Calculated on evaluation
     fkmers: list[FKmer]
@@ -62,7 +63,9 @@ class MSA:
         # Read in the MSA
         records_index = SeqIO.index(self.path, "fasta")
         self.array = np.array(
-            [record.seq.upper() for record in records_index.values()], dtype="U1"
+            [record.seq.upper() for record in records_index.values()],
+            dtype="U1",
+            ndmin=2,  # Enforce 2D array even if one genome
         )
         # Do some basic QC
         try:
@@ -77,12 +80,21 @@ class MSA:
         self.array = remove_end_insertion(self.array)
 
         # Create the mapping array
+        # Goes from msa idx -> ref idx
         if mapping == "consensus":
-            self._mapping_array = None
             self._chrom_name = self.name + "_consensus"
+            self._mapping_array = np.array([*range(len(self.array[0]))])
         elif mapping == "first":
             self._mapping_array, self.array = create_mapping(self.array, 0)
             self._chrom_name = list(records_index)[0]
+        else:
+            raise ValueError(f"Mapping method: {mapping} not recognised")
+
+        # Create the Unmapping array
+        # Goes from ref idx -> msa idx
+        self._ref_to_msa = {
+            x: i for i, x in enumerate(list(self._mapping_array)) if x is not None
+        }
 
         # Asign a UUID
         self._uuid = str(uuid4())[:8]
