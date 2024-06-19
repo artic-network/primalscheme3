@@ -70,23 +70,10 @@ def reduce_data(results: list[tuple[int, float]]) -> list[tuple[int, float]]:
     return reduced_results
 
 
-def generate_uncovered_data(length, primerpairs: list[PrimerPair]) -> dict[int, int]:
-    # Set all indexes to uncovered
-    uncovered_indexes = {x for x in range(0, length)}
+def generate_uncovered_data(coverage: np.ndarray) -> dict[int, int]:
+    # get indexes with False in the coverage array
+    uncovered_indexes_list = np.flatnonzero(coverage == 0).tolist()
 
-    for primerpair in primerpairs:
-        # Handle circular primerpairs
-        if primerpair.fprimer.end > primerpair.rprimer.start:
-            uncovered_indexes -= set(range(primerpair.fprimer.end, length))
-            uncovered_indexes -= set(range(0, primerpair.rprimer.start))
-        # Handle linear primerpairs
-        else:
-            uncovered_indexes -= set(
-                range(primerpair.fprimer.end, primerpair.rprimer.start)
-            )
-
-    # Plot the uncovered regions
-    uncovered_indexes_list = sorted(uncovered_indexes)
     # Generate continous regions
     uncovered_regions = []
     for _k, g in groupby(enumerate(uncovered_indexes_list), lambda ix: ix[0] - ix[1]):
@@ -173,7 +160,11 @@ def generate_amplicon_data(
     return amplicon_data
 
 
-def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
+def generate_data(
+    msa: MSA | PanelMSA,
+    last_pp_added: list[PrimerPair],
+    coverage: np.ndarray,
+) -> dict:
     """
     Generate all the plot data for a single MSA
     :param msa: MSA object
@@ -186,13 +177,16 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     ]
 
     # Remap the included primers to the MSA if they have been mapped to an genome
+    # This is done to ensure the primers are plotted correctly
     if msa._mapping_array is not None:
         for fkmer in msa.fkmers:
             fkmer.end = msa._ref_to_msa[fkmer.end]
             fkmer._starts = {fkmer.end - len(x) for x in fkmer.seqs}
+            fkmer._region = (fkmer.end - max(fkmer.lens()), fkmer.end)
         for rkmer in msa.rkmers:
             rkmer.start = msa._ref_to_msa[rkmer.start]
             rkmer._ends = {rkmer.start + len(x) for x in rkmer.seqs}
+            rkmer._region = (rkmer.start, rkmer.start + max(rkmer.lens()))
 
     # Write all data to a single json file
     data = dict()
@@ -202,7 +196,7 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     data["thermo_pass"] = generate_thermo_pass_primer_data(msa)
     data["amplicons"] = generate_amplicon_data(msa_pp)
     data["dims"] = [x for x in msa.array.shape]
-    data["uncovered"] = generate_uncovered_data(msa.array.shape[1], msa_pp)
+    data["uncovered"] = generate_uncovered_data(coverage)
 
     return data
 
@@ -211,18 +205,22 @@ def generate_all_plotdata(
     msas: list[MSA] | list[PanelMSA],
     output_path: pathlib.Path,
     last_pp_added: list[PrimerPair],
+    coverage_dict: dict[int, np.ndarray],
 ) -> dict:
     """
     Generate all the plot data for all MSAs to plotdata.json.gz
     :param msa: list of MSA objects
     :param last_pp_added: list of PrimerPair objects added to the multiplex
     :param output_path: pathlib.Path to write the plotdata.json to
+    :param coverage_dict: dict of coverage arrays. Found in Multiplex._coverage
     :return: None
     """
     # Write all data to a single json file
     data = dict()
     for msa in msas:
-        data[msa._chrom_name] = generate_data(msa, last_pp_added)
+        data[msa._chrom_name] = generate_data(
+            msa, last_pp_added, coverage_dict[msa.msa_index]
+        )
 
     # Write the data to a json file
     json_bytes = json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
