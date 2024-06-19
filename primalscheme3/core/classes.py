@@ -6,18 +6,27 @@ from primalscheme3.core.thermo import calc_tm
 
 
 class FKmer(Kmer):
+    """Due to the bedfile format, the end is non-inclusive"""
+
     end: int
+    _starts: set[int]
+    _region: tuple[int, int]
     # Add slots for some performance gains
-    __slots__ = ["end", "_starts"]
+    __slots__ = ["end", "_starts", "_region"]
 
     def __init__(self, end, seqs) -> None:
         self.end = end
+        self._starts = {self.end - x for x in self.lens()}
+        self._region = (self.end - min(self.lens()), self.end)
+
+    def region(self) -> tuple[int, int]:
+        return self._region
 
     def len(self) -> list[int]:
         return self.lens()
 
     def starts(self) -> set[int]:
-        return {self.end - x for x in self.lens()}
+        return self._starts
 
     def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
@@ -63,6 +72,7 @@ class FKmer(Kmer):
         if mapping_array[self.end] is not None:
             self.end = mapping_array[self.end]
             self._starts = {self.end - len(x) for x in self.seqs}
+            self._region = (self.end - min(self.lens()), self.end)
             return self
         else:
             return None
@@ -72,16 +82,23 @@ class RKmer(Kmer):
     start: int
 
     # Add slots for some performance gains
-    __slots__ = ["start", "_ends"]
+    __slots__ = ["start", "_ends", "_region"]
+    _ends: set[int]
+    _region: tuple[int, int]
 
     def __init__(self, start, seqs) -> None:
         self.start = start
+        self._ends = {len(x) + self.start for x in self.seqs}
+        self._region = (self.start, self.start + max(self.lens()))
+
+    def region(self) -> tuple[int, int]:
+        return self._region
 
     def len(self) -> list[int]:
         return self.lens()
 
     def ends(self) -> set[int]:
-        return {x + self.start for x in self.lens()}
+        return self._ends
 
     def __str__(self, reference, amplicon_prefix, pool) -> str:
         string_list = []
@@ -127,6 +144,7 @@ class RKmer(Kmer):
         if mapping_array[self.start] is not None:
             self.start = mapping_array[self.start]
             self._ends = {len(x) + self.start for x in self.seqs}
+            self._region = (self.start, self.start + max(self.lens()))
             return self
         else:
             return None
@@ -167,6 +185,9 @@ class PrimerPair:
         self.chrom_name = None
         self.amplicon_prefix = None
 
+    def regions(self) -> tuple[tuple[int, int], tuple[int, int]]:
+        return self.fprimer.region(), self.rprimer.region()
+
     def set_amplicon_number(self, amplicon_number) -> None:
         self.amplicon_number = amplicon_number
 
@@ -204,14 +225,6 @@ class PrimerPair:
         """
         return self.fprimer.end, self.rprimer.start - 1
 
-    @property
-    def start(self) -> int:
-        return min(self.fprimer.starts())
-
-    @property
-    def end(self) -> int:
-        return max(self.rprimer.ends())
-
     def inter_free(self, cfg) -> bool:
         """
         True means interaction
@@ -232,7 +245,7 @@ class PrimerPair:
         return [calc_tm(seq, cfg) for seq in self.all_seqs()]
 
     def __hash__(self) -> int:
-        return hash(f"{self.start}{self.end}{self.all_seqs()}")
+        return hash(f"{self.regions()}{self.all_seqs()}")
 
     def __eq__(self, other):
         if isinstance(other, PrimerPair):

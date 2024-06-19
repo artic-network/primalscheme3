@@ -142,32 +142,32 @@ def schemereplace(
     # Find the primers on either side of the wanted primer
     if wanted_pp.amplicon_number == 0:
         left_pp = None
-        cov_start = wanted_pp.rprimer.start
+        cov_start = wanted_pp.rprimer.region()[0]
     else:
         left_pp = [
             x
             for x in bedprimerpairs
             if x.amplicon_number == wanted_pp.amplicon_number - 1
         ][0]
-        cov_start = left_pp.rprimer.start
+        cov_start = left_pp.rprimer.region()[0]
 
     if wanted_pp.amplicon_number == max([x.amplicon_number for x in msa.primerpairs]):
         right_pp = None
-        cov_end = wanted_pp.fprimer.end
+        cov_end = wanted_pp.fprimer.region()[1]
     else:
         right_pp = [
             x
             for x in bedprimerpairs
             if x.amplicon_number == wanted_pp.amplicon_number + 1
         ][0]
-        cov_end = right_pp.fprimer.end
+        cov_end = right_pp.fprimer.region()[1]
 
     # Find primerpairs that span the gap
     spanning_primerpairs = [
         x
         for x in msa.primerpairs
-        if x.fprimer.end < cov_start - cfg["min_overlap"]
-        and x.rprimer.start > cov_end + cfg["min_overlap"]
+        if x.fprimer.region()[1] < cov_start - cfg["min_overlap"]
+        and x.rprimer.region()[0] > cov_end + cfg["min_overlap"]
     ]
 
     if len(spanning_primerpairs) > 0:
@@ -206,8 +206,9 @@ def schemereplace(
         for current_pp in spanning_pool_primerpairs:
             # If clash with any skip
             if range(
-                max(pos_primerpair.start, current_pp.start),
-                min(pos_primerpair.end, current_pp.end) + 1,
+                max(pos_primerpair.fprimer.region()[0], current_pp.fprimer.region()[0]),
+                min(pos_primerpair.rprimer.region()[1], current_pp.rprimer.region()[1])
+                + 1,
             ):
                 clash = True
                 break
@@ -489,14 +490,14 @@ def schemecreate(
             scheme_pt.manual_update(count=coverage if coverage is not None else 0)
             # Update the progress tracker to the current state of the walk
             if scheme._last_pp_added:
-                scheme_pt.manual_update(n=scheme._last_pp_added[-1].end)
+                scheme_pt.manual_update(n=scheme._last_pp_added[-1].rprimer.region()[1])
 
             match scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
                 case SchemeReturn.ADDED_OL_PRIMERPAIR:
                     logger.info(
                         "Added <green>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                        primer_start=scheme._last_pp_added[-1].start,
-                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
+                        primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
                         msa_name=msa.name,
                     )
@@ -504,8 +505,8 @@ def schemecreate(
                 case SchemeReturn.ADDED_FIRST_PRIMERPAIR:
                     logger.info(
                         "Added <green>first</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                        primer_start=scheme._last_pp_added[-1].start,
-                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
+                        primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
                         msa_name=msa.name,
                     )
@@ -526,8 +527,8 @@ def schemecreate(
                     case SchemeReturn.ADDED_BACKTRACKED:
                         logger.info(
                             "Backtracking allowed <green>overlapping</> amplicon to be added for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                            primer_start=scheme._last_pp_added[-1].start,
-                            primer_end=scheme._last_pp_added[-1].end,
+                            primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
+                            primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                             primer_pool=scheme._last_pp_added[-1].pool + 1,
                             msa_name=msa.name,
                         )
@@ -543,8 +544,8 @@ def schemecreate(
                 case SchemeReturn.ADDED_WALK_PRIMERPAIR:
                     logger.info(
                         "Added <yellow>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                        primer_start=scheme._last_pp_added[-1].start,
-                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
+                        primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
                         msa_name=msa.name,
                     )
@@ -556,8 +557,8 @@ def schemecreate(
                 case SchemeReturn.ADDED_CIRULAR:
                     logger.info(
                         "Added <green>circular</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
-                        primer_start=scheme._last_pp_added[-1].start,
-                        primer_end=scheme._last_pp_added[-1].end,
+                        primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
+                        primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
                         msa_name=msa.name,
                     )

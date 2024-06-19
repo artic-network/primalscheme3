@@ -254,7 +254,10 @@ class Panel(Multiplex):
         """
         Returns all regions covered in the pool
         """
-        return [(pp.start, pp.end, pp.msa_index) for pp in self._pools[pool]]
+        return [
+            (pp.fprimer.region()[0], pp.rprimer.region()[1], pp.msa_index)
+            for pp in self._pools[pool]
+        ]
 
     def try_add_primerpair(self) -> PanelReturn:
         """
@@ -383,5 +386,66 @@ class Panel(Multiplex):
         # If there are still working msas, return that we are moving to a new msa
         if any(self._workingmsasbool):
             return PanelReturn.NO_MORE_PRIMERPAIRS_IN_MSA
+        else:
+            return PanelReturn.NO_PRIMERPAIRS
+
+    def try_add_overlap(self):
+        """
+        This will try and find an overlap primerpair and add it to a pool.
+        """
+        # Get the current MSA
+        current_msa = self._msa_dict[self._current_msa_index]
+        current_pool = self._current_pool
+
+        # All seqs in each pool
+        seqs_in_pool = [
+            seq
+            for seq in (pp.all_seqs() for pp in self._pools[current_pool])
+            for seq in seq
+        ]
+        # For each primerpair in the current msa
+        for new_pointer, pos_primerpair in enumerate(
+            current_msa.iter_unchecked_primerpairs(), current_msa.primerpairpointer
+        ):
+            # Guard if the primerpair is in the failed primerpairs
+            if pos_primerpair in self._failed_primerpairs[current_pool]:
+                continue
+
+            # Guard if there is overlap
+            if not self.does_overlap(pos_primerpair, current_pool):
+                continue
+
+            # Guard if there is an interaction
+            if do_pools_interact_py(
+                pos_primerpair.all_seqs(),
+                seqs_in_pool,
+                self.cfg["dimerscore"],
+            ):
+                self._failed_primerpairs[current_pool].add(pos_primerpair)
+                continue
+
+            # Guard if there is a match
+            if detect_new_products(
+                pos_primerpair.find_matches(
+                    self._matchDB,
+                    remove_expected=False,
+                    kmersize=self.cfg["mismatch_kmersize"],
+                    fuzzy=self.cfg["mismatch_fuzzy"],
+                ),
+                self._matches[current_pool],
+            ):
+                self._failed_primerpairs[current_pool].add(pos_primerpair)
+                continue
+
+            # If primerpair passes all checks add it to the pool
+            self._add_primerpair(pos_primerpair, current_pool, self._current_msa_index)
+            added = True
+            # Update the pointer
+            current_msa.primerpairpointer = new_pointer
+            break
+
+        # Return if a primerpair was added
+        if added:
+            return PanelReturn.ADDED_PRIMERPAIR
         else:
             return PanelReturn.NO_PRIMERPAIRS

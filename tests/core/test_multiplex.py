@@ -7,13 +7,15 @@ import primalscheme3.core.config as config
 from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import FKmer, MatchDB, PrimerPair, RKmer
 from primalscheme3.core.msa import MSA
-from primalscheme3.core.multiplex import Multiplex
+from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 
 
 class TestMultiplex(unittest.TestCase):
     db_path = pathlib.Path("./tests/core/mulitplex").absolute()
     matchdb = MatchDB(db_path, [], 30)  # Create an empty matchdb
     inputfile_path = pathlib.Path("./tests/core/test_mismatch.fasta").absolute()
+    nCoV_2019_76_RIGHT_0 = "ACACCTGTGCCTGTTAAACCAT"
+    nCoV_2019_18_LEFT_0 = "TGGAAATACCCACAAGTTAATGGTTTAAC"
 
     # Create a config dict
     cfg = config.config_dict
@@ -118,23 +120,49 @@ class TestMultiplex(unittest.TestCase):
         )
 
         # Create a primerpair
-        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(200, ["T"]), 0)
+        primerpair = PrimerPair(FKmer(100, ["A"]), RKmer(200, ["T"]), 0)
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, multiplex._current_pool, 0)
 
         # Check that the primerpair does overlap itself
         self.assertTrue(multiplex.does_overlap(primerpair, 0))
 
-        # Check that nonoverlapping primerpair in the same msa do not does not overlap
-        primerpair = PrimerPair(FKmer(1000, ["A"]), RKmer(2000, ["T"]), 0)
-        self.assertFalse(multiplex.does_overlap(primerpair, 0))
+        # Check that very non-overlapping primerpair in the same msa do not does not overlap
+        self.assertFalse(
+            multiplex.does_overlap(
+                PrimerPair(FKmer(300, ["A"]), RKmer(400, ["T"]), 0), 0
+            )
+        )
 
         # Check that overlapping primerpair in differnt msas do not overlap
-        primerpair_newmsa = PrimerPair(FKmer(100, ["A"]), RKmer(200, ["T"]), 1)
-        self.assertFalse(multiplex.does_overlap(primerpair_newmsa, 0))
+        self.assertFalse(
+            multiplex.does_overlap(
+                PrimerPair(FKmer(100, ["A"]), RKmer(200, ["T"]), 1), 0
+            )
+        )
 
         # Check that an overlapping primerpair in a different pool does not overlap
         self.assertFalse(multiplex.does_overlap(primerpair, 1))
+
+        # Check that circular overlapping primerpair overlap
+        self.assertTrue(
+            multiplex.does_overlap(
+                PrimerPair(FKmer(900, ["A"]), RKmer(200, ["T"]), 0), 0
+            )
+        )
+
+        # Check that circular non-overlapping primerpair doesn't overlap
+        primerpair_circular = PrimerPair(FKmer(900, ["A"]), RKmer(50, ["T"]), 0)
+        self.assertFalse(multiplex.does_overlap(primerpair_circular, 0))
+
+        # Check for off-by-one error with linear overlapping primerpair
+        #      100  200
+        #       A    T
+        self.assertFalse(
+            multiplex.does_overlap(
+                PrimerPair(FKmer(202, ["A"]), RKmer(300, ["T"]), 0), 0
+            )
+        )
 
     def test_all_primerpairs(self):
         """
@@ -170,13 +198,13 @@ class TestMultiplex(unittest.TestCase):
         self.assertEqual(multiplex._coverage[0].sum(), 0)
 
         # Add a primerpair
-        multiplex.update_coverage(0, primerpair, add=True)
+        multiplex.update_coverage(primerpair, add=True)
 
         # Check that the primerpair coverage has been added
         self.assertEqual(multiplex._coverage[0].sum(), 190)
 
         # Remove the primerpair
-        multiplex.update_coverage(0, primerpair, add=False)
+        multiplex.update_coverage(primerpair, add=False)
 
         # Check that the primerpair coverage has been removed
         self.assertEqual(multiplex._coverage[0].sum(), 0)
@@ -200,13 +228,13 @@ class TestMultiplex(unittest.TestCase):
         self.assertEqual(multiplex._coverage[0].sum(), 0)
 
         # Add a primerpair
-        multiplex.update_coverage(0, primerpair, add=True)
+        multiplex.update_coverage(primerpair, add=True)
 
         # Check that the primerpair coverage has been added
         self.assertEqual(multiplex._coverage[0].sum(), 110)
 
         # Remove the primerpair
-        multiplex.update_coverage(0, primerpair, add=False)
+        multiplex.update_coverage(primerpair, add=False)
 
         # Check that the primerpair coverage has been removed
         self.assertEqual(multiplex._coverage[0].sum(), 0)
@@ -322,6 +350,53 @@ class TestMultiplex(unittest.TestCase):
         # Check primerpair can be removed
         multiplex.remove_last_primer_pair()
         self.assertEqual(len(multiplex._last_pp_added), 0)
+
+    def test_check_add_primer(self):
+        self.cfg["npools"] = 2
+        multiplex = Multiplex(
+            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa, 1: self.msa}
+        )
+
+        msa_index = 0
+        pool = 0
+        # Create a primerpair
+        primerpair = PrimerPair(
+            FKmer(50, [self.nCoV_2019_18_LEFT_0]), RKmer(100, ["TA"]), 0
+        )
+        primerpair.pool = pool
+
+        # Add the primerpair
+        multiplex.add_primer_pair_to_pool(primerpair, msa_index, pool)
+
+        # Check the same primerpair cannot be added again  due to overlap
+        self.assertEqual(
+            multiplex.check_primerpair_can_be_added(primerpair, pool),
+            PrimerPairCheck.OVERLAP,
+        )
+
+        # Check a primerpair with a different msa_index can be added
+        primerpair2 = PrimerPair(
+            FKmer(50, [self.nCoV_2019_18_LEFT_0]), RKmer(100, ["TA"]), 1
+        )
+        self.assertEqual(
+            multiplex.check_primerpair_can_be_added(primerpair2, pool),
+            PrimerPairCheck.OK,
+        )
+
+        # Check a primerpair with a different pool can be added
+        self.assertEqual(
+            multiplex.check_primerpair_can_be_added(primerpair, pool + 1),
+            PrimerPairCheck.OK,
+        )
+
+        # Check an interacting primerpair cannot be added
+        interacting_primerpair = PrimerPair(
+            FKmer(150, [self.nCoV_2019_76_RIGHT_0]), RKmer(200, ["TA"]), 0
+        )
+        self.assertEqual(
+            multiplex.check_primerpair_can_be_added(interacting_primerpair, pool),
+            PrimerPairCheck.INTERACTING,
+        )
 
 
 if __name__ == "__main__":

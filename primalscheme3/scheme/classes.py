@@ -11,7 +11,7 @@ from primalscheme3.core.digestion import _mp_pp_inter_free
 from primalscheme3.core.get_window import get_pp_window
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.msa import MSA
-from primalscheme3.core.multiplex import Multiplex
+from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 
 # Scheme imports
 from primalscheme3.scheme.primer_pair_score import (
@@ -68,37 +68,20 @@ class Scheme(Multiplex):
 
         # Create a hashmap of what seqs are in each pool for quicklook up
         pool_seqs_map: dict[int, list[str]] = {
-            index: [
-                y
-                for sublist in (x.all_seqs() for x in self._pools[index])
-                for y in sublist
-            ]
-            for index in range(self.n_pools)
+            index: self.get_seqs_in_pool(index) for index in range(self.n_pools)
         }
 
         # Adds the first valid primerpair
         for primerpair in primerpairs:
             for pool_index in range(self.n_pools):
-                if do_pools_interact_py(
-                    list(primerpair.all_seqs()),
-                    pool_seqs_map[pool_index],
-                    self.cfg["dimerscore"],
+                match self.check_primerpair_can_be_added(
+                    primerpair, pool_index, pool_seqs_map[pool_index]
                 ):
-                    continue
-                if detect_new_products(
-                    primerpair.find_matches(
-                        self._matchDB,
-                        remove_expected=False,
-                        kmersize=self.cfg["mismatch_kmersize"],
-                        fuzzy=self.cfg["mismatch_fuzzy"],
-                    ),
-                    self._matches[pool_index],
-                    self.cfg["mismatch_product_size"],
-                ):
-                    continue
-
-                self.add_primer_pair_to_pool(primerpair, pool_index, msa_index)
-                return SchemeReturn.ADDED_FIRST_PRIMERPAIR
+                    case PrimerPairCheck.OK:
+                        self.add_primer_pair_to_pool(primerpair, pool_index, msa_index)
+                        return SchemeReturn.ADDED_FIRST_PRIMERPAIR
+                    case _:
+                        continue
 
         # If not primerpair can be added return false
         return SchemeReturn.NO_FIRST_PRIMERPAIR
@@ -151,12 +134,7 @@ class Scheme(Multiplex):
 
         # Create a hashmap of all sequences in each pool for quick look up
         index_to_seqs: dict[int, list[str]] = {
-            index: [
-                y
-                for sublist in (x.all_seqs() for x in self._pools[index])
-                for y in sublist
-            ]
-            for index in pos_pools_indexes
+            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
         }
 
         # Find pp that could ol, depending on which pool
@@ -177,38 +155,15 @@ class Scheme(Multiplex):
         for ol_pp in pos_ol_pp:
             # For each pool
             for pool_index in pos_pools_indexes:
-                # If the pool is empty
-                if not self._pools[pool_index]:
-                    self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
-                    return SchemeReturn.ADDED_OL_PRIMERPAIR
-
-                # Guard for overlap
-                if self.does_overlap(ol_pp, pool_index):
-                    continue
-
-                # Guard for Primer-Primer Interactions
-                if do_pools_interact_py(
-                    ol_pp.all_seqs(),
-                    index_to_seqs.get(pool_index),
-                    self.cfg["dimerscore"],
+                match self.check_primerpair_can_be_added(
+                    ol_pp, pool_index, index_to_seqs.get(pool_index)
                 ):
-                    continue
-                # Guard for Primer-Mispriming Products
-                if detect_new_products(
-                    ol_pp.find_matches(
-                        self._matchDB,
-                        remove_expected=False,
-                        kmersize=self.cfg["mismatch_kmersize"],
-                        fuzzy=self.cfg["mismatch_fuzzy"],
-                    ),
-                    self._matches[pool_index],
-                    self.cfg["mismatch_product_size"],
-                ):
-                    continue
-
-                # If the primer passes all the checks, add it to the pool
-                self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
-                return SchemeReturn.ADDED_OL_PRIMERPAIR
+                    case PrimerPairCheck.OK:
+                        # If the primer passes all the checks, add it to the pool
+                        self.add_primer_pair_to_pool(ol_pp, pool_index, msa_index)
+                        return SchemeReturn.ADDED_OL_PRIMERPAIR
+                    case _:
+                        continue
 
         # If non of the primers work, return false
         return SchemeReturn.NO_OL_PRIMERPAIR
@@ -229,12 +184,7 @@ class Scheme(Multiplex):
         pos_pools_indexes = [last_pp.pool]
         # Create a hashmap of all sequences in each pool for quick look up
         index_to_seqs: dict[int, list[str]] = {
-            index: [
-                y
-                for sublist in (x.all_seqs() for x in self._pools[index])
-                for y in sublist
-            ]
-            for index in pos_pools_indexes
+            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
         }
 
         is_replacement_first = False
@@ -334,12 +284,7 @@ class Scheme(Multiplex):
 
         # Create a hashmap of all sequences in each pool for quick look up
         index_to_seqs: dict[int, list[str]] = {
-            index: [
-                y
-                for sublist in (x.all_seqs() for x in self._pools[index])
-                for y in sublist
-            ]
-            for index in pos_pools_indexes
+            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
         }
         # Find the walking start index
         walking_min = self._last_pp_added[-1].rprimer.start - self.cfg["min_overlap"]
@@ -355,7 +300,9 @@ class Scheme(Multiplex):
         # Sort walking primers by score
         pos_walk_pp.sort(
             key=lambda pp: walk_pp_score(
-                pp.fprimer.end, len(pp.all_seqs()), self._last_pp_added[-1].end
+                pp.fprimer.end,
+                len(pp.all_seqs()),
+                self._last_pp_added[-1].rprimer.region()[1],
             ),
             reverse=True,
         )
@@ -363,37 +310,16 @@ class Scheme(Multiplex):
         # For each primer, try each pool
         for walk_pp in pos_walk_pp:
             for pool_index in pos_pools_indexes:
-                # If the pool is empty add the first primer
-                if not self._pools[pool_index]:
-                    self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
-                    return SchemeReturn.ADDED_WALK_PRIMERPAIR
-
-                # Guard for overlap
-                if self.does_overlap(walk_pp, pool_index):
-                    continue
-
-                # Guard for Primer-Primer Interactions
-                if do_pools_interact_py(
-                    walk_pp.all_seqs(),
-                    index_to_seqs.get(pool_index),
-                    self.cfg["dimerscore"],
+                match self.check_primerpair_can_be_added(
+                    walk_pp, pool_index, index_to_seqs.get(pool_index)
                 ):
-                    continue
-                # Guard for Primer-Mispriming Products
-                if detect_new_products(
-                    walk_pp.find_matches(
-                        self._matchDB,
-                        remove_expected=False,
-                        kmersize=self.cfg["mismatch_kmersize"],
-                        fuzzy=self.cfg["mismatch_fuzzy"],
-                    ),
-                    self._matches[pool_index],
-                    self.cfg["mismatch_product_size"],
-                ):
-                    continue
-                # If the primer passes all the checks, add it to the pool
-                self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
-                return SchemeReturn.ADDED_WALK_PRIMERPAIR
+                    case PrimerPairCheck.OK:
+                        # If the primer passes all the checks, add it to the pool
+                        self.add_primer_pair_to_pool(walk_pp, pool_index, msa_index)
+                        return SchemeReturn.ADDED_WALK_PRIMERPAIR
+                    case _:
+                        continue
+
         # If non of the primers work, return false
         return SchemeReturn.NO_WALK_PRIMERPAIR
 
@@ -470,12 +396,7 @@ class Scheme(Multiplex):
 
         # Create a hashmap of all sequences in each pool for quick look up
         index_to_seqs: dict[int, list[str]] = {
-            index: [
-                y
-                for sublist in (x.all_seqs() for x in self._pools[index])
-                for y in sublist
-            ]
-            for index in pos_pools_indexes
+            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
         }
 
         for c_pp in iter_free_primer_pairs:

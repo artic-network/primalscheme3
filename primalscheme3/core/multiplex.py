@@ -1,4 +1,7 @@
+from enum import Enum
+
 import numpy as np
+from primaldimer_py import do_pools_interact_py  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
@@ -6,7 +9,20 @@ from primalscheme3.core.bedfiles import (
     create_bedfile_str,
 )
 from primalscheme3.core.classes import MatchDB, PrimerPair
+from primalscheme3.core.mismatches import detect_new_products
 from primalscheme3.core.msa import MSA
+
+
+class PrimerPairCheck(Enum):
+    """
+    Enum for checking if a primerpair can be added to a pool
+    """
+
+    OVERLAP = 1
+    INTERACTING = 2
+    MISPRIMING = 3
+    OK = 4
+    CIRCLUAR = 5
 
 
 class Multiplex:
@@ -20,14 +36,14 @@ class Multiplex:
     - msa_dict: dict[int, MSA]. A dict of MSA objects
 
     Internal:
-    - _pools: list[list[PrimerPair | BedPrimerPair]]. List of pools with PrimerPairs
-    - _current_pool: int. The current pool number
-    - _last_pp_added: list[PrimerPair]. Stack to keep track of the last primer added
-    - _matchDB: MatchDB object
-    - _matches: list[set[tuple]]. A list of sets with matches for each pool
-    - _msa_dict: dict[int, MSA]. A dict of MSA objects
-    - _coverage: dict[int, np.ndarray]. PrimerTrimmed Coverage for each MSA index
-    - _lookup: dict[int, np.ndarray] | None. A lookup for the primerpairs in the multiplex
+    - self._pools: list[list[PrimerPair | BedPrimerPair]]. List of pools with PrimerPairs
+    - self._current_pool: int. The current pool number
+    - self._last_pp_added: list[PrimerPair]. Stack to keep track of the last primer added
+    - self._matchDB: MatchDB object
+    - self._matches: list[set[tuple]]. A list of sets with matches for each pool
+    - self._msa_dict: dict[int, MSA]. A dict of MSA objects
+    - self._coverage: dict[int, np.ndarray]. PrimerTrimmed Coverage for each MSA index
+    - self._lookup: dict[int, np.ndarray] | None. A lookup for the primerpairs in the multiplex
     """
 
     _pools: list[list[PrimerPair | BedPrimerPair]]
@@ -82,28 +98,81 @@ class Multiplex:
         :param add: bool. If True, add to the lookup. If False, remove from the lookup
         :return: None
         """
-        circular = primerpair.start >= primerpair.end
+        circular = primerpair.fprimer.end > primerpair.rprimer.start
 
         # If the msa_index is not in the lookup. Then return
         if primerpair.msa_index not in self._lookup:
             return
 
-        if add:
-            value = primerpair
-        else:
-            value = None
+        value = primerpair if add else None
 
         if circular:
-            self._lookup[primerpair.msa_index][primerpair.pool, primerpair.start :] = (
-                value
-            )
-            self._lookup[primerpair.msa_index][primerpair.pool, : primerpair.end] = (
-                value
-            )
+            self._lookup[primerpair.msa_index][
+                primerpair.pool, primerpair.fprimer.region()[0] :
+            ] = value
+            self._lookup[primerpair.msa_index][
+                primerpair.pool, : primerpair.rprimer.region()[1]  # slice non inclusive
+            ] = value
         else:
             self._lookup[primerpair.msa_index][
-                primerpair.pool, primerpair.start : primerpair.end
+                primerpair.pool,
+                primerpair.fprimer.region()[0] : primerpair.rprimer.region()[
+                    1
+                ],  # slice non inclusive
             ] = value
+
+    def get_seqs_in_pool(self, pool: int) -> list[str]:
+        """
+        Returns a list of all the sequences in the pool
+        :param pool: int
+        :return: list[str]
+        """
+        return [
+            seq
+            for ppseq in (pp.all_seqs() for pp in self._pools[pool])
+            for seq in ppseq
+        ]
+
+    def check_primerpair_can_be_added(
+        self, primerpair: PrimerPair, pool: int, otherseqs: list[str] | None = None
+    ) -> PrimerPairCheck:
+        """
+        Checks if the primerpair can be added to the multiplex
+        - Checks if the primerpair overlaps with any other primerpairs in the pool
+        - Checks if the primerpair has any matches in the MatchDB
+        :param primerpair: PrimerPair object
+        :param otherseqs: list[str] | None. A list of other sequences to check for interactions against
+        :return: bool. True if the primerpair can be added
+        """
+        # Check if the primerpair overlaps with any other primerpairs in the pool
+        if self.does_overlap(primerpair, pool):
+            return PrimerPairCheck.OVERLAP
+
+        # Check for interactions with other sequences
+        if otherseqs is None:
+            otherseqs = self.get_seqs_in_pool(pool)
+        if do_pools_interact_py(
+            primerpair.all_seqs(),
+            otherseqs,
+            self.cfg["dimerscore"],
+        ):
+            return PrimerPairCheck.INTERACTING
+
+        # Check for other PCR producrs
+        if detect_new_products(
+            primerpair.find_matches(
+                self._matchDB,
+                remove_expected=False,
+                kmersize=self.cfg["mismatch_kmersize"],
+                fuzzy=self.cfg["mismatch_fuzzy"],
+            ),
+            self._matches[pool],
+            self.cfg["mismatch_product_size"],
+        ):
+            return PrimerPairCheck.MISPRIMING
+
+        # If all checks pass, return True
+        return PrimerPairCheck.OK
 
     def setup_coverage(self) -> None:
         """
@@ -119,24 +188,16 @@ class Multiplex:
                 n = len(msa._mapping_array)
             self._coverage[msa_index] = np.array([False] * n)
 
-    def calculate_coverage(self) -> None:
+    def recalculate_coverage(self) -> None:
         """
-        Recalculates the coverage for all MSA indexes
+        Recalculates the primertrimmed coverage for all MSA indexes
         :param msa_dict: dict[int, MSA]
         :return: None
         """
+        # Create an empty coverage dict
+        self.setup_coverage()
         for pp in self.all_primerpairs():
-            # Skip PrimerPairs with no MSA index
-            if pp.msa_index not in self._coverage:
-                continue
-
-            # Check not circular
-            if pp.start < pp.end:
-                self._coverage[pp.msa_index][pp.fprimer.end : pp.rprimer.start] = True
-            else:
-                # Handle circular
-                self._coverage[pp.msa_index][pp.fprimer.end :] = True
-                self._coverage[pp.msa_index][: pp.rprimer.start] = True
+            self.update_coverage(pp, add=True)
 
     def get_coverage_percent(self, msa_index: int) -> float:
         """
@@ -148,9 +209,7 @@ class Multiplex:
             self._coverage[msa_index].sum() / len(self._coverage[msa_index]) * 100, 2
         )
 
-    def update_coverage(
-        self, msa_index: int, primerpair: PrimerPair, add: bool = True
-    ) -> None:
+    def update_coverage(self, primerpair: PrimerPair, add: bool = True) -> None:
         """
         Updates the coverage for the spesified MSA index
         :param msa_index: int
@@ -161,15 +220,17 @@ class Multiplex:
         # If the msa_index is not in the lookup. Then return
         if primerpair.msa_index not in self._coverage:
             return
-        # Check not circular
-        if primerpair.start < primerpair.end:
-            self._coverage[msa_index][
+        # Check circular
+        if primerpair.fprimer.end > primerpair.rprimer.start:
+            # Handle circular
+            self._coverage[primerpair.msa_index][primerpair.fprimer.region()[1] :] = add
+            self._coverage[primerpair.msa_index][: primerpair.rprimer.region()[0]] = (
+                add  # slice non inclusive
+            )
+        else:
+            self._coverage[primerpair.msa_index][
                 primerpair.fprimer.end : primerpair.rprimer.start
             ] = add
-        else:
-            # Handle circular
-            self._coverage[msa_index][primerpair.fprimer.end :] = add
-            self._coverage[msa_index][: primerpair.rprimer.start] = add
 
     def next_pool(self) -> int:
         """
@@ -229,7 +290,7 @@ class Multiplex:
         # Update the lookup
         self.update_lookup(primerpair, add=True)
         # Update the coverage
-        self.update_coverage(msa_index, primerpair, add=True)
+        self.update_coverage(primerpair, add=True)
 
     def remove_primerpair(self, pp):
         """
@@ -260,7 +321,7 @@ class Multiplex:
         # Update the lookup
         self.update_lookup(pp, add=False)
         # Update the coverage
-        self.update_coverage(pp.msa_index, pp, add=False)
+        self.update_coverage(pp, add=False)
 
     def remove_last_primer_pair(self) -> PrimerPair:
         """
@@ -287,11 +348,35 @@ class Multiplex:
         :param pool: int
         :return: bool. True if overlaps
         """
+        # Circular
+        if primerpair.fprimer.end > primerpair.rprimer.start:
+            return (
+                np.count_nonzero(
+                    self._lookup[primerpair.msa_index][
+                        pool, primerpair.fprimer.region()[0] :
+                    ]
+                )
+                > 0
+                or np.count_nonzero(
+                    self._lookup[primerpair.msa_index][
+                        pool, : primerpair.rprimer.region()[1]
+                    ]
+                )
+                > 0
+            )
+
         # Get the slice of the lookup
-        lookup_slice = self._lookup[primerpair.msa_index][pool][
-            primerpair.start : primerpair.end - 1
-        ]
-        return np.count_nonzero(lookup_slice) > 0
+        return (
+            np.count_nonzero(
+                self._lookup[primerpair.msa_index][
+                    pool,
+                    primerpair.fprimer.region()[0] : primerpair.rprimer.region()[
+                        1
+                    ],  # slice non inclusive
+                ]
+            )
+            > 0
+        )
 
     def all_primerpairs(self) -> list[PrimerPair]:
         """

@@ -290,7 +290,6 @@ def panelcreate(
         match mode:
             case PanelRunModes.REGION_ONLY:
                 msa.digest(cfg, indexes=(findexes, rindexes))  # type: ignore
-                msa.remove_kmers_that_clash_with_regions()
             case _:
                 msa.digest(cfg, indexes=None)
 
@@ -332,15 +331,6 @@ def panelcreate(
                     ),  # type: ignore # Use a HASH Prevent sequential primerpairs being added
                     reverse=True,
                 )
-                # Remove all primerpairs with a score of 0
-                # msa.primerpairs = [
-                # pp for pp in msa.primerpairs if msa.get_pp_score(pp) > 0
-                # ]
-                # for pp in msa.primerpairs:
-                # logger.debug(
-                # "start: {pp.start} end: {pp.end}",
-                # pp=pp,
-                # )
             case _:
                 logger.error("ERROR: Unknown mode")
 
@@ -356,10 +346,10 @@ def panelcreate(
     msa_index_to_name = {k: v for k, v in enumerate([msa.name for msa in ARG_MSA])}
 
     # Create a dict to store how many amplicons have been addded to each msa
-    msa_index_to_amplicon_count = {k: 0 for k in msa_index_to_name.keys()}
+    msa_index_to_amplicon_count = {k: 0 for k in msa_data.keys()}
 
     # Create the panel object
-    panel: Panel = Panel(msa_data, cfg, mismatch_db)
+    panel: Panel = Panel(msa_dict, cfg, mismatch_db)
 
     # MSA_INDEX_TO_CHROMNAME =
     msa_chromname_to_index = {
@@ -383,6 +373,13 @@ def panelcreate(
                 "Added primerpair from inputbedfile: {bedprimerpair}",
                 bedprimerpair=bedprimerpair,
             )
+    # if pool > 1 then should be an ol scheme
+    if npools > 1:
+        # Sort primerpairs start position
+        for msa in panel._msa_dict.values():
+            msa.primerpairs.sort(key=lambda x: x.fprimer.end)
+
+        # Add the first primerpair
 
     counter = 0
     while counter < cfg["maxamplicons"]:
@@ -392,8 +389,8 @@ def panelcreate(
                 msa_index_to_amplicon_count[panel._last_pp_added[-1].msa_index] += 1
                 logger.info(
                     "Added <blue>amplicon</> (<green>{msaampliconnumber}</>) for <blue>{msa_name}</>: {primer_start}\t{primer_end}",
-                    primer_start=panel._last_pp_added[-1].start,
-                    primer_end=panel._last_pp_added[-1].end,
+                    primer_start=panel._last_pp_added[-1].fprimer.region()[0],
+                    primer_end=panel._last_pp_added[-1].rprimer.region()[1],
                     msa_name=msa_index_to_name.get(panel._last_pp_added[-1].msa_index),
                     msaampliconnumber=msa_index_to_amplicon_count.get(
                         panel._last_pp_added[-1].msa_index
@@ -416,8 +413,8 @@ def panelcreate(
                 msa_index_to_amplicon_count[panel._last_pp_added[-1].msa_index] += 1
                 logger.info(
                     "Added <blue>amplicon</> (<green>{msaampliconnumber}</>) for <blue>{msa_name}</>: {primer_start}\t{primer_end}",
-                    primer_start=panel._last_pp_added[-1].start,
-                    primer_end=panel._last_pp_added[-1].end,
+                    primer_start=panel._last_pp_added[-1].fprimer.region()[0],
+                    primer_end=panel._last_pp_added[-1].rprimer.region()[1],
                     msa_name=msa_index_to_name.get(panel._last_pp_added[-1].msa_index),
                     msaampliconnumber=msa_index_to_amplicon_count.get(
                         panel._last_pp_added[-1].msa_index
