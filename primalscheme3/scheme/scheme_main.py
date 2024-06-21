@@ -637,7 +637,6 @@ def schemecreate(
         list(msa_dict.values()),
         OUTPUT_DIR / "work",
         last_pp_added=scheme._last_pp_added,
-        coverage_dict=scheme._coverage,
     )
     generate_all_plots(plot_data, OUTPUT_DIR)
 

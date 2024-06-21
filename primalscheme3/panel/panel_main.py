@@ -557,6 +557,5 @@ def panelcreate(
         list(msa_dict.values()),
         OUTPUT_DIR / "work",
         last_pp_added=panel._last_pp_added,
-        coverage_dict=Panel._coverage,
     )
     generate_all_plots(plot_data, OUTPUT_DIR)
