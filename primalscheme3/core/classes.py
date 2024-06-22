@@ -2,7 +2,7 @@
 from primaldimer_py import Kmer, do_pools_interact_py  # type: ignore
 
 from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.thermo import calc_tm
+from primalscheme3.core.thermo import calc_tm, gc
 
 
 class FKmer(Kmer):
@@ -158,6 +158,7 @@ class PrimerPair:
     msa_index: int
     chrom_name: str | None
     amplicon_prefix: str | None
+    _score: float | None
 
     __slots__ = [
         "fprimer",
@@ -167,6 +168,7 @@ class PrimerPair:
         "msa_index",
         "chrom_name",
         "amplicon_prefix",
+        "_score",
     ]
 
     def __init__(
@@ -184,6 +186,17 @@ class PrimerPair:
         self.msa_index = msa_index
         self.chrom_name = None
         self.amplicon_prefix = None
+        self._score = None
+
+    def get_score(self, target_gc=0.5):
+        """
+        Returns the mean gc diff of the primerpair
+        """
+        if self._score is None:
+            self._score = sum(
+                [abs(target_gc - (gc(x) / 100)) for x in self.all_seqs()]
+            ) / len(self.all_seqs())
+        return self._score
 
     def regions(self) -> tuple[tuple[int, int], tuple[int, int]]:
         return self.fprimer.region(), self.rprimer.region()
@@ -222,8 +235,9 @@ class PrimerPair:
     def primertrimmed_region(self) -> tuple[int, int]:
         """
         Returns the region of the primertrimed region
+        Right position is non-inclusive
         """
-        return self.fprimer.end, self.rprimer.start - 1
+        return self.fprimer.end, self.rprimer.start
 
     def inter_free(self, cfg) -> bool:
         """

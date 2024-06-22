@@ -7,7 +7,6 @@ import pathlib
 import shutil
 import sys
 from enum import Enum
-from math import sqrt
 
 from Bio import Seq, SeqIO, SeqRecord
 from loguru import logger
@@ -137,12 +136,8 @@ def panelcreate(
     # Add ignore_n to the cfg
     cfg["ignore_n"] = ignore_n
 
-    # Enforce only one pool
-    if npools != 1:
-        sys.exit("ERROR: primalpanel only supports one pool")
-
     # Enforce mapping
-    if mapping == "first":
+    if mapping != "first":
         sys.exit("ERROR: mapping must be 'first'")
 
     # Enforce region only has a region bedfile
@@ -244,13 +239,20 @@ def panelcreate(
             # Create indexes from the regions
             indexes = set()
             for region in msa_regions:
-                msa_region_start = msa._ref_to_msa[region.start]
-                msa_region_stop = msa._ref_to_msa[region.stop]
-
-                if msa_region_start is None or msa_region_stop is None:
-                    continue
-
-                indexes.update(range(msa_region_start, msa_region_stop))
+                if max(region.start, region.stop) > len(msa._mapping_array):
+                    logger.error(
+                        "Region {regionname} is out of bounds for {msa_name}",
+                        regionname=region.name,
+                        msa_name=msa._chrom_name,
+                    )
+                    sys.exit(1)
+                indexes.update(
+                    [
+                        msa._ref_to_msa[x]
+                        for x in range(region.start, region.stop)
+                        if msa._ref_to_msa[x] is not None
+                    ]
+                )
 
             findexes = list(
                 {
@@ -314,25 +316,15 @@ def panelcreate(
         )
 
         match mode:
-            case PanelRunModes.ALL:
-                msa.primerpairs.sort(
-                    key=lambda pp: msa.get_pp_entropy(pp) ** 2
-                    / sqrt(len(pp.all_seqs())),  # type: ignore
-                    reverse=True,
-                )
             case PanelRunModes.REGION_ONLY:
-                # Sort the primerpairs by the number of SNPs in the amplicon
-                msa.primerpairs.sort(
-                    key=lambda pp: (
-                        msa.get_pp_score(pp),
-                        -sqrt(len(pp.all_seqs())),  # type: ignore
-                        -mean_gc_diff(pp.all_seqs()),
-                        pp.fprimer.__hash__(),
-                    ),  # type: ignore # Use a HASH Prevent sequential primerpairs being added
-                    reverse=True,
-                )
+                # Filter the primerpairs to only include the ones with scores (cover regions)
+                msa.primerpairs = [
+                    x for x in msa.primerpairs if msa.get_pp_score(x) > 0
+                ]
+                msa.primerpairs.sort(key=lambda x: x.fprimer.end)
+                print("Filtered primerpairs", len(msa.primerpairs))
             case _:
-                logger.error("ERROR: Unknown mode")
+                continue
 
         # Add the MSA to the dict
         msa_dict[msa_index] = msa
@@ -383,7 +375,7 @@ def panelcreate(
 
     counter = 0
     while counter < cfg["maxamplicons"]:
-        match panel.try_add_primerpair():
+        match panel.add_next_primerpair():
             case PanelReturn.ADDED_PRIMERPAIR:
                 # Update the amplicon count
                 msa_index_to_amplicon_count[panel._last_pp_added[-1].msa_index] += 1
@@ -406,7 +398,7 @@ def panelcreate(
                 break
 
     # Try adding all remaining primerpairs
-    while counter < cfg["maxamplicons"]:
+    while counter < cfg["maxamplicons"] and False:
         match panel.keep_adding():
             case PanelReturn.ADDED_PRIMERPAIR:
                 # Update the amplicon count
@@ -451,48 +443,26 @@ def panelcreate(
             amplicon_count=amplicon_count,
         )
 
+    region_to_coverage = {}
     # If region bedfile given, check that all regions have been covered
     if cfg["regionbedfile"] is not None:
         for msa in panel._msa_dict.values():
-            regions_covered = []
-            regions_not_covered = []
-            # Find all primerpairs in this msa
-            primer_pairs = [
-                x for x in panel._last_pp_added if x.msa_index == msa.msa_index
-            ]
-            covered_positions = {
-                x
-                for x in (
-                    range(pp.fprimer.end, pp.rprimer.start) for pp in primer_pairs
-                )
-                for x in x
-            }
-            if msa.regions is None:
-                continue
-            # See which regions are completely covered by the covered_positions
+            assert msa.regions is not None
             for region in msa.regions:
-                all_regions = {x for x in range(region.start, region.stop)}
+                region_coverage = panel._coverage[msa.msa_index][
+                    region.start : region.stop
+                ]
+                region_mean_coverage = region_coverage.mean()
 
-                if all_regions.issubset(covered_positions):
-                    regions_covered.append(region)
-                else:
-                    regions_not_covered.append(region)
-
-            logger.info(
-                "<blue>{msa_name}</>: <green>{covered}</> covered regions, <red>{not_covered}</> not covered regions",
-                msa_name=msa.name,
-                covered=len(regions_covered),
-                not_covered=len(regions_not_covered),
-            )
-
-            # Write which regions are not covered to logger
-            for region in regions_not_covered:
                 logger.info(
-                    "<blue>{msa_name}</>: <red>{regionstart}:{regionstop}</> not covered",
+                    "<blue>{msa_name}</>:{regionname} <yellow>{regionstart}:{regionstop}</> {percent} covered",
                     msa_name=msa.name,
                     regionstart=region.start,
                     regionstop=region.stop,
+                    percent=f"{round(region_mean_coverage * 100, 2)}%",
+                    regionname=region.name,
                 )
+                region_to_coverage[region] = region_mean_coverage
 
     logger.info(
         "Writing outputs...",

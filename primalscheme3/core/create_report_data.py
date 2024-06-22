@@ -35,7 +35,7 @@ def calc_occupancy(align_array: np.ndarray) -> list[tuple[int, float]]:
 def calc_gc(align_array: np.ndarray, kmer_size: int = 30) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
-    for col_index in range(0, align_array.shape[1] - kmer_size, 15):
+    for col_index in range(0, align_array.shape[1] - kmer_size, kmer_size):
         slice = align_array[:, col_index : col_index + kmer_size]
         ng = np.count_nonzero(slice == "G")
         nc = np.count_nonzero(slice == "C")
@@ -173,6 +173,26 @@ def generate_amplicon_data(
     return amplicon_data
 
 
+def generate_region_data(msa: MSA | PanelMSA) -> list | None:
+    try:
+        regions = msa.regions  # type: ignore
+    except AttributeError:
+        return None
+
+    if not regions:
+        return None
+
+    return [
+        {
+            "s": msa._ref_to_msa[region.start],
+            "e": msa._ref_to_msa[region.stop - 1],  # -1 to make it inclusive
+            "n": region.name,
+            "sc": region.score,
+        }
+        for region in regions
+    ]
+
+
 def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     """
     Generate all the plot data for a single MSA
@@ -203,6 +223,10 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     data["amplicons"] = generate_amplicon_data(msa_pp)
     data["dims"] = [x for x in msa.array.shape]
     data["uncovered"] = generate_uncovered_data(msa.array.shape[1], msa_pp)
+    # Add the region data if pos
+    region_data = generate_region_data(msa)
+    if region_data is not None:
+        data["regions"] = region_data
 
     return data
 

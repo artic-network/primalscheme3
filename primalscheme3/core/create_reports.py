@@ -96,6 +96,19 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
         row=1,
         col=1,
     )
+    # If regions are present add them
+    for region in msa_data.get("regions", []):
+        fig.add_shape(
+            type="line",
+            y0=1.5,
+            y1=1.5,
+            x0=region["s"],
+            x1=region["e"],
+            fillcolor="LightSkyBlue",
+            line=dict(color="LightSkyBlue", width=5),
+            row=1,
+            col=1,
+        )
 
     # Plot the amplicons lines
     for amplicon in amplicons:

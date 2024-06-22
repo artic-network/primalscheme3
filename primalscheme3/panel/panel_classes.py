@@ -13,7 +13,7 @@ from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.msa import MSA
-from primalscheme3.core.multiplex import Multiplex
+from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import (
     entropy_score_array,
@@ -94,8 +94,9 @@ class Region:
 
 class PanelMSA(MSA):
     # Score arrays
-    _midx_score_array: np.ndarray | None
+    _score_array: np.ndarray | None
     _midx_entropy_array: np.ndarray | None
+    regions: list[Region] | None
 
     primerpairpointer: int
 
@@ -122,22 +123,19 @@ class PanelMSA(MSA):
         self.primerpairpointer = 0
         self.regions = None
 
+    def create_score_array(self, regions: list[Region]) -> None:
+        self._score_array = np.zeros(len(self._mapping_array), dtype=int)
+
+        # Add the score to the score array
+        for region in regions:
+            self._score_array[region.start : region.stop] += region.score
+
     def create_entropy_array(self):
         self._midx_entropy_array = np.array(entropy_score_array(self.array))
 
     def add_regions(self, regions: list[Region]) -> None:
         self.regions = regions
-
-        # Create the score array
-        self._midx_score_array = np.zeros(self.array.shape[1], dtype=int)
-
-        for region in regions:
-            # Map the ref positions to msa positions
-            msa_region_start = self._ref_to_msa[region.start]
-            msa_region_stop = self._ref_to_msa[region.stop]
-            # Add the score to the score array
-            for i in range(msa_region_start, msa_region_stop):
-                self._midx_score_array[i] += region.score
+        self.create_score_array(regions)
 
     def remove_kmers_that_clash_with_regions(self):
         """
@@ -188,23 +186,29 @@ class PanelMSA(MSA):
         """
         Returns number of SNPs in the primertrimmed amplicon
         """
-        assert self._midx_score_array is not None
+        assert self._score_array is not None
         ppptstart, ppptend = pp.primertrimmed_region()
-        return np.sum(
-            self._midx_score_array[
-                self._ref_to_msa[ppptstart] : self._ref_to_msa[ppptend]
-            ]
-        )
 
-    def update_score_array(self, addedpp: PrimerPair) -> None:
+        # circular
+        if pp.fprimer.end > pp.rprimer.start:
+            return np.sum(self._score_array[ppptstart:]) + np.sum(
+                self._score_array[:ppptend]
+            )
+        else:
+            return np.sum(self._score_array[ppptstart:ppptend])
+
+    def update_score_array(self, addedpp: PrimerPair, newscore: int = 0) -> None:
         """
         Updates the score array with the added primerpair
         """
-        assert self._midx_score_array is not None
+        assert self._score_array is not None
         ppptstart, ppptend = addedpp.primertrimmed_region()
-        self._midx_score_array[
-            self._ref_to_msa[ppptstart] : self._ref_to_msa[ppptend]
-        ] = 0
+        # circular
+        if addedpp.fprimer.end > addedpp.rprimer.start:
+            self._score_array[ppptstart:] = newscore
+            self._score_array[:ppptend] = newscore
+        else:
+            self._score_array[ppptstart:ppptend] = newscore
 
 
 class Panel(Multiplex):
@@ -250,14 +254,53 @@ class Panel(Multiplex):
         # Update the current MSA
         self._next_msa()
 
-    def get_covered_regions(self, pool: int) -> list[tuple[int, int, int]]:
+    def add_next_primerpair(self) -> PanelReturn:
         """
-        Returns all regions covered in the pool
+        Try and add the next primerpair
         """
-        return [
-            (pp.fprimer.region()[0], pp.rprimer.region()[1], pp.msa_index)
-            for pp in self._pools[pool]
+        # Get current MSA
+        current_msa = self._msa_dict[self._current_msa_index]
+        current_pool = self._current_pool
+
+        # Pools to try
+        pos_pools_indexes = [
+            (current_pool + i) % self.n_pools for i in range(self.n_pools)
         ]
+
+        # All seqs in each pool
+        seqs_in_each_pool = {
+            pos_pool: [
+                seq
+                for seq in (pp.all_seqs() for pp in self._pools[pos_pool])
+                for seq in seq
+            ]
+            for pos_pool in pos_pools_indexes
+        }
+
+        # Remove primerpairs with no score
+        current_msa.primerpairs = [
+            pp for pp in current_msa.primerpairs if current_msa.get_pp_score(pp) > 0
+        ]
+        # For the primerpairs in the current MSA Sort all primerpairs by score
+        current_msa.primerpairs.sort(
+            key=lambda x: (self.calc_pp_score(current_msa, x), len(x.all_seqs())),
+            reverse=True,
+        )
+        for pospp in current_msa.primerpairs:
+            for pospool in pos_pools_indexes:
+                # Check if the primerpair can be added
+                match self.check_primerpair_can_be_added(
+                    pospp, current_pool, seqs_in_each_pool[pospool]
+                ):
+                    case PrimerPairCheck.OK:
+                        self._add_primerpair(
+                            pospp, current_pool, self._current_msa_index
+                        )
+                        return PanelReturn.ADDED_PRIMERPAIR
+                    case _:
+                        continue
+
+        return PanelReturn.NO_PRIMERPAIRS
 
     def try_add_primerpair(self) -> PanelReturn:
         """
@@ -449,3 +492,23 @@ class Panel(Multiplex):
             return PanelReturn.ADDED_PRIMERPAIR
         else:
             return PanelReturn.NO_PRIMERPAIRS
+
+    def calc_pp_score(self, msa: PanelMSA, pp: PrimerPair) -> int:
+        """
+        Returns number of SNPs in the primertrimmed amplicon
+        """
+        # Get the score
+        score = msa.get_pp_score(pp)
+
+        # Apply a bonus for good gc content
+        gc_diff = pp.get_score()  # 0-0.5
+        score = score * (1 - gc_diff)
+
+        # Apply a bonus if the primerpair spans a coverage break
+        coverage_slice = self._coverage[msa.msa_index][
+            pp.fprimer.end : pp.rprimer.start
+        ]
+        if True in coverage_slice and False in coverage_slice:
+            score = score * 10
+
+        return int(score)
