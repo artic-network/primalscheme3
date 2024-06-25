@@ -69,11 +69,14 @@ class Region:
     score: int
 
     def __init__(self, chromanem: str, start: int, stop: int, name: str, score: int):
-        self.chromname = chromanem
-        self.start = start
-        self.stop = stop
-        self.name = name
-        self.score = score
+        self.chromname = str(chromanem)
+        self.start = int(start)
+        self.stop = int(stop)
+        self.name = str(name)
+        self.score = int(score)
+
+        if self.start >= self.stop:
+            raise ValueError(f"{self.name}: Circular regions are not supported.")
 
     def positions(self):
         return range(self.start, self.stop)
@@ -249,7 +252,8 @@ class Panel(Multiplex):
         super().add_primer_pair_to_pool(primerpair, pool, msa_index)
 
         # Update the msa Score array
-        self._msa_dict[msa_index].update_score_array(primerpair)
+        if msa_index in self._msa_dict:
+            self._msa_dict[msa_index].update_score_array(primerpair)
 
         # Update the current MSA
         self._next_msa()

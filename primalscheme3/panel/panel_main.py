@@ -185,7 +185,10 @@ def panelcreate(
             ): None
             for bedline in bed_lines
         }
-        shutil.copy(regionbedfile, OUTPUT_DIR / regionbedfile.name)  # type: ignore # Copy the bedfile
+        try:
+            shutil.copy(regionbedfile, OUTPUT_DIR / regionbedfile.name)  # type: ignore # Copy the bedfile
+        except shutil.SameFileError:
+            pass
 
     ## Read in the MSAs
     msa_dict: dict[int, PanelMSA] = {}
@@ -210,6 +213,13 @@ def panelcreate(
             mapping=cfg["mapping"],
             logger=logger,
             progress_manager=pm,
+        )
+        logger.info(
+            "Read in MSA: <blue>{msa_path} -> '{chromname}'</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
+            msa_path=msa_path.name,
+            chromname=msa._chrom_name,
+            msa_rows=msa.array.shape[0],
+            msa_cols=msa.array.shape[1],
         )
         if "/" in msa._chrom_name:
             new_chromname = msa._chrom_name.split("/")[0]
@@ -281,13 +291,6 @@ def panelcreate(
         msa_data[msa_index]["msa_chromname"] = msa._chrom_name
         msa_data[msa_index]["msa_uuid"] = msa._uuid
 
-        logger.info(
-            "Read in MSA: <blue>{msa_path}</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
-            msa_path=msa_path.name,
-            msa_rows=msa.array.shape[0],
-            msa_cols=msa.array.shape[1],
-        )
-
         # Split the logic for the different modes
         match mode:
             case PanelRunModes.REGION_ONLY:
@@ -298,7 +301,7 @@ def panelcreate(
         # Log the digestion
         logger.info(
             "<blue>{msa_path}</>: <green>regions</> digested to <green>{num_fkmers}</> FKmers and <green>{num_rkmers}</> RKmers",
-            msa_path=msa_path.stem,
+            msa_path=msa._chrom_name,
             num_fkmers=len(msa.fkmers),
             num_rkmers=len(msa.rkmers),
         )
@@ -311,7 +314,7 @@ def panelcreate(
         )
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
-            msa_path=msa_path.stem,
+            msa_path=msa._chrom_name,
             num_pp=len(msa.primerpairs),
         )
 
@@ -335,7 +338,7 @@ def panelcreate(
     ## Digestion finished, now create the panel
 
     # Create a lookup dict for the msa index to name
-    msa_index_to_name = {k: v for k, v in enumerate([msa.name for msa in ARG_MSA])}
+    msa_index_to_name = {k: v._chrom_name for k, v in msa_dict.items()}
 
     # Create a dict to store how many amplicons have been addded to each msa
     msa_index_to_amplicon_count = {k: 0 for k in msa_data.keys()}
@@ -361,9 +364,9 @@ def panelcreate(
                 pool=bedprimerpair.pool,
                 msa_index=bedprimerpair.msa_index,  # type: ignore
             )
-            logger.debug(
+            logger.info(
                 "Added primerpair from inputbedfile: {bedprimerpair}",
-                bedprimerpair=bedprimerpair,
+                bedprimerpair=bedprimerpair.amplicon_prefix,
             )
     # if pool > 1 then should be an ol scheme
     if npools > 1:
@@ -456,7 +459,7 @@ def panelcreate(
 
                 logger.info(
                     "<blue>{msa_name}</>:{regionname} <yellow>{regionstart}:{regionstop}</> {percent} covered",
-                    msa_name=msa.name,
+                    msa_name=msa._chrom_name,
                     regionstart=region.start,
                     regionstop=region.stop,
                     percent=f"{round(region_mean_coverage * 100, 2)}%",
