@@ -119,6 +119,7 @@ def read_in_bedlines(path: pathlib.Path) -> tuple[list[BedLine], list[str]]:
     bed_headers: list[str] = []
     with open(path) as bedfile:
         for line in bedfile.readlines():
+            line = line.strip()
             if not line:  # Skip empty lines
                 continue
             elif line.startswith("#"):  # Store header lines

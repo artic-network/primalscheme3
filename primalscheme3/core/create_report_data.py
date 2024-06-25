@@ -22,6 +22,19 @@ from primalscheme3.panel.panel_classes import PanelMSA
 # plot4: Thermo pass Fkmer and Rkmer plot
 
 
+### Data Scheme
+# {chrom_name: {
+#     amplicons: {amplicon_number: {s: start, cs: coverage_start, ce: coverage_end, e: end, p: pool, n: name}},
+#     dims: [rows, columns],
+#     entropy: {position: entropy},
+#     gc: {position: gc},
+#     occupancy: {position: occupancy},
+#     regions: [{s: start, e: end, n: name, sc: score}]
+#     thermo_pass: {F: {position: count}, R: {position: count}},
+#     uncovered: {start: end},
+#     }
+
+
 def calc_occupancy(align_array: np.ndarray) -> list[tuple[int, float]]:
     results = []
     # Calculate the base proportions
@@ -37,12 +50,13 @@ def calc_gc(align_array: np.ndarray, kmer_size: int = 30) -> list[tuple[int, flo
     # Calculate the base proportions
     for col_index in range(0, align_array.shape[1] - kmer_size, kmer_size):
         slice = align_array[:, col_index : col_index + kmer_size]
-        ng = np.count_nonzero(slice == "G")
-        nc = np.count_nonzero(slice == "C")
+        value, counts = np.unique(slice, return_counts=True)
 
-        n_invalid = np.count_nonzero(slice == "-")
-        gc_prop = round((ng + nc) / ((len(slice) * kmer_size) - n_invalid), 2)
+        score_dict = dict(zip(value, counts))
+        num_gc = score_dict.get("G", 1) + score_dict.get("C", 1)
+        num_at = score_dict.get("A", 1) + score_dict.get("T", 1)
 
+        gc_prop = round(num_gc / (num_at + num_gc), 2)
         results.append((col_index, gc_prop))
     return reduce_data(results)
 
@@ -182,15 +196,24 @@ def generate_region_data(msa: MSA | PanelMSA) -> list | None:
     if not regions:
         return None
 
-    return [
-        {
-            "s": msa._ref_to_msa[region.start],
-            "e": msa._ref_to_msa[region.stop - 1],  # -1 to make it inclusive
-            "n": region.name,
-            "sc": region.score,
-        }
-        for region in regions
-    ]
+    #
+    all_data = []
+    for region in regions:
+        if region.stop >= len(msa._mapping_array):
+            end = len(msa._mapping_array) - 1
+        else:
+            end = msa._ref_to_msa[region.stop]
+
+        all_data.append(
+            {
+                "s": msa._ref_to_msa[region.start],
+                "e": end,
+                "n": region.name,
+                "sc": region.score,
+            }
+        )
+
+    return all_data
 
 
 def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:

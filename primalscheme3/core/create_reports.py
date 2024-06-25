@@ -96,18 +96,16 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
         row=1,
         col=1,
     )
-    # If regions are present add them
-    for region in msa_data.get("regions", []):
-        fig.add_shape(
-            type="line",
-            y0=1.5,
-            y1=1.5,
-            x0=region["s"],
-            x1=region["e"],
-            fillcolor="LightSkyBlue",
-            line=dict(color="LightSkyBlue", width=5),
-            row=1,
-            col=1,
+    # Add the uncovered regions
+    for start, stop in msa_data["uncovered"].items():
+        fig.add_vrect(
+            x0=start,
+            x1=stop + 1,
+            fillcolor="#F0605D",
+            line=dict(width=0),
+            opacity=0.5,
+            row=1,  # type: ignore
+            col=1,  # type: ignore
         )
 
     # Plot the amplicons lines
@@ -129,7 +127,7 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
             x0=amplicon["s"],
             x1=amplicon["cs"],
             fillcolor="LightSalmon",
-            line=dict(color="LightSalmon", width=2),
+            line=dict(color="darksalmon", width=2),
             row=1,
             col=1,
         )
@@ -140,7 +138,7 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
             x0=amplicon["ce"],
             x1=amplicon["e"],
             fillcolor="LightSalmon",
-            line=dict(color="LightSalmon", width=2),
+            line=dict(color="darksalmon", width=2),
             row=1,
             col=1,
         )
@@ -190,18 +188,6 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
             line=dict(color="LightSalmon", width=2),
             row=1,
             col=1,
-        )
-
-    # Add the uncovered regions
-    for start, stop in msa_data["uncovered"].items():
-        fig.add_vrect(
-            x0=start,
-            x1=stop + 1,
-            fillcolor="#F0605D",
-            line=dict(width=0),
-            opacity=0.5,
-            row=1,  # type: ignore
-            col=1,  # type: ignore
         )
 
     # Add the base occupancy
@@ -283,6 +269,35 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
         row=4,
         col=1,
     )
+
+    # Add the regions
+    # If regions are present add them
+    if "regions" in msa_data:
+        data = msa_data.get("regions", [])
+        for region in data:
+            fig.add_shape(
+                type="line",
+                y0=1.5,
+                y1=1.5,
+                x0=region["s"],
+                x1=region["e"],
+                fillcolor="Green",
+                line=dict(color="Green", width=5),
+                row=1,
+                col=1,
+            )
+        fig.add_trace(
+            go.Scatter(  # doesn't need WebGL
+                x=[x["s"] + ((x["e"] - x["s"]) // 2) for x in data],
+                y=[1.5 for _ in data],
+                name="Regions",
+                mode="markers",
+                text=[x["n"] for x in data],
+                hovertemplate="%{text}",
+                opacity=0,  # Make the markers invisible
+            ),
+        )
+
     # Add the base plot settings
     fig.update_xaxes(
         showline=True,
