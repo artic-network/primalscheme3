@@ -1,0 +1,5 @@
+site_name: PrimalScheme3
+
+site_url: https://chrisgkent.github.io/primalscheme3/
+theme:
+  name: material
