@@ -26,6 +26,7 @@ config_dict = {
     "ignore_n": False,
 }
 
+SIMPLE_BASES = {"A", "C", "G", "T"}
 
 AMBIGUOUS_DNA = {
     "M": "AC",
