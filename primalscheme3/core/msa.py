@@ -17,10 +17,12 @@ def msa_qc(array: np.ndarray):
     """
     empty_set = {"", "-"}
 
+    # Check rows are same length
     for row_index in range(0, array.shape[0]):
-        if len(array[row_index]) != len(array[0]):
+        if len(array[row_index, :]) != len(array[0]):
             raise ValueError("MSA contains sequences of different lengths")
 
+    # Check for empty columns
     for col_index in range(0, array.shape[1]):
         slice: set[str] = set(array[:, col_index])
         if slice.issubset(empty_set):
