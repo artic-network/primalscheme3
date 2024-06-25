@@ -11,6 +11,7 @@ from primalscheme3.core.config import (
     ALL_DNA,
     AMB_BASES,
     AMBIGUOUS_DNA_COMPLEMENT,
+    SIMPLE_BASES,
 )
 
 
@@ -98,6 +99,21 @@ def entropy_score_array(msa: np.ndarray) -> list[float]:
     score_array: list[float] = [0] * msa.shape[1]
     # Iterate over colums
     for col in range(msa.shape[1]):
-        proportions = calc_probs(list(msa[:, col]))
+        value, counts = np.unique(msa[:, col], return_counts=True)
+        count_dict = dict(zip(value, counts))
+
+        # Expand ambiguous bases
+        for base in count_dict:
+            if base in AMB_BASES:
+                amb_count = count_dict.pop(base)  # Remove the ambiguous base
+                for expanded_base in extend_ambiguous_base(base):
+                    if expanded_base != "N":
+                        count_dict[expanded_base] += amb_count
+        # Remove Invalid bases
+        parsed_counts = {k: v for k, v in count_dict.items() if k in SIMPLE_BASES}
+
+        # Calculate the proportions (probabilities) of each base
+        proportions = [v / sum(parsed_counts.values()) for v in parsed_counts.values()]
+
         score_array[col] = calc_entropy(proportions)
     return score_array
