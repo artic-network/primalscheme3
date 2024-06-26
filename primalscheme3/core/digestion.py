@@ -14,6 +14,7 @@ from primaldimer_py import (
 )
 
 from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+from primalscheme3.core.config import Config
 from primalscheme3.core.errors import (
     ERROR_SET,
     ContainsInvalidBase,
@@ -117,18 +118,6 @@ def parse_error_list(
     return return_list
 
 
-def _mp_pp_inter_free(data: tuple[PrimerPair, dict]) -> bool:
-    """
-    True means interaction
-    """
-    pp = data[0]
-    cfg = data[1]
-    # If they do interact return None
-    return do_pools_interact_py(
-        [*pp.fprimer.seqs], [*pp.rprimer.seqs], cfg["dimerscore"]
-    )
-
-
 def generate_valid_primerpairs(
     fkmers: list[FKmer],
     rkmers: list[RKmer],
@@ -137,7 +126,6 @@ def generate_valid_primerpairs(
     dimerscore: float,
     msa_index: int,
     progress_manager: ProgressManager,
-    disable_progress_bar: bool = False,
     chrom: str = "",
 ) -> list[PrimerPair]:
     """Generates valid primer pairs for a given set of forward and reverse kmers.
@@ -185,7 +173,7 @@ def walk_right(
     col_index_left: int,
     row_index: int,
     seq_str: str,
-    cfg: dict,
+    config: Config,
 ) -> Union[set[str], Exception]:
     """
     Walks to the right of the array and returns a set of valid sequences.
@@ -196,7 +184,7 @@ def walk_right(
         col_index_left: The current column index to the left.
         row_index: The current row index.
         seq_str: The current sequence string.
-        cfg: A dictionary of configuration parameters.
+        config: The configuration object.
 
     Returns:
         A set of valid DNA sequences or an exception if an error occurs.
@@ -206,7 +194,16 @@ def walk_right(
         ContainsInvalidBase: If the sequence contains an invalid base.
     """
     # Guard for correct tm
-    if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
+    if (
+        calc_tm(
+            seq_str,
+            mv_conc=config.mv_conc,
+            dv_conc=config.dv_conc,
+            dna_conc=config.dna_conc,
+            dntp_conc=config.dntp_conc,
+        )
+        >= config.primer_tm_min
+    ):
         return {seq_str}
 
     # Guard prevents walking out of array size
@@ -214,7 +211,7 @@ def walk_right(
         raise WalksOut()
 
     # Guard for walking too far
-    if col_index_right - col_index_left >= cfg["primer_max_walk"]:
+    if col_index_right - col_index_left >= config.primer_max_walk:
         raise WalksTooFar()
 
     new_base = array[row_index, col_index_right]
@@ -242,7 +239,7 @@ def walk_right(
             col_index_left,
             row_index,
             exp_str,
-            cfg,
+            config,
         )
         passing_str.extend(results)
 
@@ -255,7 +252,7 @@ def walk_left(
     col_index_left: int,
     row_index: int,
     seq_str: str,
-    cfg: dict,
+    config: Config,
 ) -> set[str] | Exception:
     """
     Recursively walks left from a given starting position in a 2D numpy array of DNA bases,
@@ -282,11 +279,20 @@ def walk_left(
         raise WalksOut()
 
     # Guard for correct tm
-    if calc_tm(seq_str, cfg) >= cfg["primer_tm_min"]:
+    if (
+        calc_tm(
+            seq_str,
+            mv_conc=config.mv_conc,
+            dv_conc=config.dv_conc,
+            dna_conc=config.dna_conc,
+            dntp_conc=config.dntp_conc,
+        )
+        >= config.primer_tm_min
+    ):
         return {seq_str}
 
     # Guard for walking too far
-    if col_index_right - col_index_left >= cfg["primer_max_walk"]:
+    if col_index_right - col_index_left >= config.primer_max_walk:
         raise WalksTooFar()
 
     new_base = array[row_index, col_index_left - 1]
@@ -314,7 +320,7 @@ def walk_left(
             col_index_left=col_index_left - 1,
             row_index=row_index,
             seq_str=exp_str,
-            cfg=cfg,
+            config=config,
         )
         passing_str.extend(results)
 
@@ -328,7 +334,7 @@ def wrap_walk(
     col_index_left: int,
     row_index: int,
     seq_str: str,
-    cfg: dict,
+    config: Config,
 ) -> list[str | CustomErrors]:
     return_list = []
     try:
@@ -338,7 +344,7 @@ def wrap_walk(
             col_index_left=col_index_left,
             row_index=row_index,
             seq_str=seq_str,
-            cfg=cfg,
+            config=config,
         )
     except CustomErrors as e:
         return_list.append(e)
@@ -351,7 +357,7 @@ def wrap_walk(
 
 
 def r_digest_to_count(
-    data: tuple[np.ndarray, dict, int, float],
+    data: tuple[np.ndarray, Config, int, float],
 ) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
     Returns the count of each sequence / error at a given index
@@ -359,13 +365,13 @@ def r_digest_to_count(
     A value of -1 in the return dict means the function returned early, and not all seqs were counted. Only used for WALKS_OUT and GAP_ON_SET_BASE
     """
     align_array: np.ndarray = data[0]
-    cfg: dict = data[1]
+    config: Config = data[1]
     start_col: int = data[2]
     min_freq: float = data[3]
 
     ### Process early return conditions
     # If the initial slice is outside the range of the array
-    if start_col + cfg["primer_size_min"] >= align_array.shape[1]:
+    if start_col + config.primer_size_min >= align_array.shape[1]:
         return (start_col, {DIGESTION_ERROR.WALKS_OUT: -1})
 
     # Check for gap frequency on first base
@@ -388,7 +394,7 @@ def r_digest_to_count(
             continue
 
         start_array = align_array[
-            row_index, start_col : start_col + cfg["primer_size_min"]
+            row_index, start_col : start_col + config.primer_size_min
         ]
         start_seq = "".join(start_array).replace("-", "")
 
@@ -404,11 +410,11 @@ def r_digest_to_count(
         results = wrap_walk(
             walk_right,
             array=align_array,
-            col_index_right=start_col + cfg["primer_size_min"],
+            col_index_right=start_col + config.primer_size_min,
             col_index_left=start_col,
             row_index=row_index,
             seq_str=start_seq,
-            cfg=cfg,
+            config=config,
         )
         # If all mutations matter, return on any Error
         if min_freq == 0 and set(results) & ERROR_SET:
@@ -462,7 +468,7 @@ def process_seqs(
 
 
 def mp_r_digest(
-    data: tuple[np.ndarray, dict, int, float],
+    data: tuple[np.ndarray, Config, int, float],
 ) -> RKmer | tuple[int, DIGESTION_ERROR]:
     """
     This will try and create a RKmer started at the given index
@@ -470,13 +476,15 @@ def mp_r_digest(
     :return: A RKmer object or a tuple of (start_col, error)
     """
     align_array: np.ndarray = data[0]
-    cfg: dict = data[1]
+    config: Config = data[1]
     start_col: int = data[2]
     min_freq: float = data[3]
 
     # Count how many times each sequence / error occurs
-    _start_col, seq_counts = r_digest_to_count((align_array, cfg, start_col, min_freq))
-    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=cfg["ignore_n"])
+    _start_col, seq_counts = r_digest_to_count(
+        (align_array, config, start_col, min_freq)
+    )
+    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=config.ignore_n)
     if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
         return (start_col, tmp_parsed_seqs)
     elif isinstance(tmp_parsed_seqs, dict):
@@ -489,7 +497,7 @@ def mp_r_digest(
     tmp_kmer = RKmer(start_col, rc_seqs)
 
     # Thermo check the kmers
-    thermo_result = thermo_check_kmers(tmp_kmer.seqs, cfg)
+    thermo_result = thermo_check_kmers(tmp_kmer.seqs, config)
     match thermo_result:
         case THERMORESULT.PASS:
             pass
@@ -497,17 +505,17 @@ def mp_r_digest(
             return (start_col, parse_thermo_error(thermo_result))
 
     # Check for hairpins
-    if forms_hairpin(tmp_kmer.seqs, cfg=cfg):
+    if forms_hairpin(tmp_kmer.seqs, config=config):
         return (start_col, DIGESTION_ERROR.HAIRPIN_FAIL)
     # Check for dimer
-    if do_pools_interact_py([*tmp_kmer.seqs], [*tmp_kmer.seqs], cfg["dimerscore"]):
+    if do_pools_interact_py([*tmp_kmer.seqs], [*tmp_kmer.seqs], config.dimer_score):
         return (start_col, DIGESTION_ERROR.DIMER_FAIL)
     # All checks pass return the kmer
     return tmp_kmer
 
 
 def f_digest_to_count(
-    data: tuple[np.ndarray, dict, int, float],
+    data: tuple[np.ndarray, Config, int, float],
 ) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
     This will try and create a FKmer ended at the given index
@@ -515,7 +523,7 @@ def f_digest_to_count(
     :return: A FKmer object or a tuple of (end_col, error)
     """
     align_array: np.ndarray = data[0]
-    cfg: dict = data[1]
+    config: Config = data[1]
     end_col: int = data[2]
     min_freq: float = data[3]
 
@@ -530,7 +538,7 @@ def f_digest_to_count(
         return (end_col, {DIGESTION_ERROR.GAP_ON_SET_BASE: -1})
 
     # If the initial slice is outside the range of the array
-    if end_col - cfg["primer_size_min"] < 0:
+    if end_col - config.primer_size_min < 0:
         return (end_col, {DIGESTION_ERROR.WALKS_OUT: -1})
 
     total_col_seqs: Counter[str | DIGESTION_ERROR] = Counter()
@@ -542,7 +550,7 @@ def f_digest_to_count(
             continue
 
         start_seq = "".join(
-            align_array[row_index, end_col - cfg["primer_size_min"] : end_col]
+            align_array[row_index, end_col - config.primer_size_min : end_col]
         ).replace("-", "")
 
         # Prevent Ns from being added
@@ -557,10 +565,10 @@ def f_digest_to_count(
             walk_left,
             array=align_array,
             col_index_right=end_col,
-            col_index_left=end_col - cfg["primer_size_min"],
+            col_index_left=end_col - config.primer_size_min,
             row_index=row_index,
             seq_str=start_seq,
-            cfg=cfg,
+            config=config,
         )
         if min_freq == 0 and set(results) & ERROR_SET:
             return (end_col, {parse_error(set(results)): -1})
@@ -572,7 +580,7 @@ def f_digest_to_count(
 
 
 def mp_f_digest(
-    data: tuple[np.ndarray, dict, int, float],
+    data: tuple[np.ndarray, Config, int, float],
 ) -> FKmer | tuple[int, DIGESTION_ERROR]:
     """
     This will try and create a FKmer ended at the given index
@@ -580,13 +588,13 @@ def mp_f_digest(
     :return: A FKmer object or a tuple of (end_col, error)
     """
     align_array: np.ndarray = data[0]
-    cfg: dict = data[1]
+    config: Config = data[1]
     end_col: int = data[2]
     min_freq: float = data[3]
 
     # Count how many times each sequence / error occurs
-    _end_col, seq_counts = f_digest_to_count((align_array, cfg, end_col, min_freq))
-    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=cfg["ignore_n"])
+    _end_col, seq_counts = f_digest_to_count((align_array, config, end_col, min_freq))
+    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=config.ignore_n)
     if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
         return (end_col, tmp_parsed_seqs)
     elif isinstance(tmp_parsed_seqs, dict):
@@ -603,18 +611,18 @@ def mp_f_digest(
     #     )
 
     # Thermo check the kmers
-    thermo_result = thermo_check_kmers({*parsed_seqs.keys()}, cfg)
+    thermo_result = thermo_check_kmers({*parsed_seqs.keys()}, config)
     match thermo_result:
         case THERMORESULT.PASS:
             pass
         case _:
             return (end_col, parse_thermo_error(thermo_result))
 
-    if forms_hairpin({*parsed_seqs.keys()}, cfg=cfg):
+    if forms_hairpin({*parsed_seqs.keys()}, config=config):
         return (end_col, DIGESTION_ERROR.HAIRPIN_FAIL)
 
     if do_pools_interact_py(
-        [*parsed_seqs.keys()], [*parsed_seqs.keys()], cfg["dimerscore"]
+        [*parsed_seqs.keys()], [*parsed_seqs.keys()], config.dimer_score
     ):
         return (end_col, DIGESTION_ERROR.DIMER_FAIL)
 
@@ -698,7 +706,7 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
 
 def digest(
     msa_array: np.ndarray,
-    cfg: dict,
+    config: Config,
     progress_manager: ProgressManager,
     indexes: tuple[list[int], list[int]] | None = None,
     logger: None = None,
@@ -724,12 +732,12 @@ def digest(
     findexes = (
         indexes[0]
         if indexes is not None
-        else range(cfg["primer_size_min"], msa_array.shape[1])
+        else range(config.primer_size_min, msa_array.shape[1])
     )
     rindexes = (
         indexes[1]
         if indexes is not None
-        else range(msa_array.shape[1] - cfg["primer_size_min"])
+        else range(msa_array.shape[1] - config.primer_size_min)
     )
 
     # Digest the findexes
@@ -738,7 +746,7 @@ def digest(
         iter=findexes, process="Creating forward primers", chrom=chrom
     )
     for findex in pt:
-        fkmer = mp_f_digest((msa_array, cfg, findex, cfg["minbasefreq"]))
+        fkmer = mp_f_digest((msa_array, config, findex, config.min_base_freq))
 
         if logger is not None:
             if isinstance(fkmer, tuple):
@@ -766,7 +774,7 @@ def digest(
         iter=rindexes, process="Creating reverse primers", chrom=chrom
     )
     for rindex in pt:
-        rkmer = mp_r_digest((msa_array, cfg, rindex, cfg["minbasefreq"]))
+        rkmer = mp_r_digest((msa_array, config, rindex, config.min_base_freq))
 
         if logger is not None:
             if isinstance(rkmer, tuple):

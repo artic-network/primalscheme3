@@ -9,6 +9,7 @@ from primalscheme3.core.bedfiles import (
     create_bedfile_str,
 )
 from primalscheme3.core.classes import MatchDB, PrimerPair
+from primalscheme3.core.config import Config
 from primalscheme3.core.mismatches import detect_new_products
 from primalscheme3.core.msa import MSA
 
@@ -54,15 +55,17 @@ class Multiplex:
     _msa_dict: dict[int, MSA]
     _coverage: dict[int, np.ndarray]  # PrimerTrimmed Coverage for each MSA index
     _lookup: dict[int, np.ndarray]
-    cfg: dict
+    config: Config
 
-    def __init__(self, cfg, matchDB: MatchDB, msa_dict: dict[int, MSA]) -> None:
-        self.n_pools = cfg["npools"]
+    def __init__(
+        self, config: Config, matchDB: MatchDB, msa_dict: dict[int, MSA]
+    ) -> None:
+        self.n_pools = config.n_pools
         self._pools = [[] for _ in range(self.n_pools)]
         self._matches: list[set[tuple]] = [set() for _ in range(self.n_pools)]
         self._current_pool = 0
         self._pp_number = 1
-        self.cfg = cfg
+        self.config = config
         self._matchDB = matchDB
         self._last_pp_added = []
         self._msa_dict = msa_dict
@@ -154,7 +157,7 @@ class Multiplex:
         if do_pools_interact_py(
             primerpair.all_seqs(),
             otherseqs,
-            self.cfg["dimerscore"],
+            self.config.dimer_score,
         ):
             return PrimerPairCheck.INTERACTING
 
@@ -163,11 +166,11 @@ class Multiplex:
             primerpair.find_matches(
                 self._matchDB,
                 remove_expected=False,
-                kmersize=self.cfg["mismatch_kmersize"],
-                fuzzy=self.cfg["mismatch_fuzzy"],
+                kmersize=self.config.mismatch_kmersize,
+                fuzzy=self.config.mismatch_fuzzy,
             ),
             self._matches[pool],
-            self.cfg["mismatch_product_size"],
+            self.config.mismatch_product_size,
         ):
             return PrimerPairCheck.MISPRIMING
 
@@ -275,9 +278,9 @@ class Multiplex:
         self._matches[pool].update(
             primerpair.find_matches(
                 self._matchDB,
-                fuzzy=self.cfg["mismatch_fuzzy"],
+                fuzzy=self.config.mismatch_fuzzy,
                 remove_expected=True,
-                kmersize=self.cfg["mismatch_kmersize"],
+                kmersize=self.config.mismatch_kmersize,
             )
         )
 
@@ -312,9 +315,9 @@ class Multiplex:
         self._matches[pp.pool].difference_update(
             pp.find_matches(
                 self._matchDB,
-                fuzzy=self.cfg["mismatch_fuzzy"],
+                fuzzy=self.config.mismatch_fuzzy,
                 remove_expected=False,
-                kmersize=self.cfg["mismatch_kmersize"],
+                kmersize=self.config.mismatch_kmersize,
             )
         )
 
@@ -388,6 +391,7 @@ class Multiplex:
         all_pp.sort(key=lambda pp: (str(pp.msa_index), pp.amplicon_number))
         return all_pp
 
+    # Output methods
     def to_bed(
         self,
         headers: list[str] | None = None,

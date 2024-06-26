@@ -1,6 +1,7 @@
 # Module imports
 from primaldimer_py import Kmer, do_pools_interact_py  # type: ignore
 
+from primalscheme3.core.config import Config
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.thermo import calc_tm, gc
 
@@ -250,13 +251,22 @@ class PrimerPair:
     def all_seqs(self) -> list[str]:
         return [x for x in self.fprimer.seqs] + [x for x in self.rprimer.seqs]
 
-    def calc_tm(self, cfg) -> list[float]:
+    def calc_tm(self, config: Config) -> list[float]:
         """
         Calculates the tm for all primers in the PrimerPair
         :param cfg: config dict
         :return: list of tm values
         """
-        return [calc_tm(seq, cfg) for seq in self.all_seqs()]
+        return [
+            calc_tm(
+                seq,
+                mv_conc=config.mv_conc,
+                dv_conc=config.dv_conc,
+                dna_conc=config.dna_conc,
+                dntp_conc=config.dna_conc,
+            )
+            for seq in self.all_seqs()
+        ]
 
     def __hash__(self) -> int:
         return hash(f"{self.regions()}{self.all_seqs()}")

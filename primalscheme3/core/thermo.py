@@ -5,6 +5,8 @@ from typing import Iterable
 from primer3 import calc_hairpin as p3_calc_hairpin
 from primer3 import calc_tm as p3_calc_tm
 
+from primalscheme3.core.config import Config
+
 
 class THERMORESULT(Enum):
     # THERMORESULT.value == 0 is a pass
@@ -16,54 +18,63 @@ class THERMORESULT(Enum):
     MAX_HOMOPOLY = 5
 
 
-def calc_tm(kmer_seq, cfg: dict) -> float:
+def calc_tm(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
     """Return Tm for the kmer sequence."""
     return p3_calc_tm(
         kmer_seq,
-        mv_conc=cfg["mv_conc"],
-        dv_conc=cfg["dv_conc"],
-        dntp_conc=cfg["dntp_conc"],
-        dna_conc=cfg["dna_conc"],
+        mv_conc=mv_conc,
+        dv_conc=dv_conc,
+        dntp_conc=dntp_conc,
+        dna_conc=dna_conc,
     )
 
 
-def calc_hairpin_tm(seq: str, config: dict) -> float:
+def calc_hairpin_tm(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
     """
     Calculate the hairpin formation thermodynamics of a DNA sequence.
     Returns tm.
     """
     return p3_calc_hairpin(
         seq,
-        mv_conc=config["mv_conc"],
-        dv_conc=config["dv_conc"],
-        dntp_conc=config["dntp_conc"],
-        dna_conc=config["dna_conc"],
+        mv_conc=mv_conc,
+        dv_conc=dv_conc,
+        dntp_conc=dntp_conc,
+        dna_conc=dna_conc,
     ).tm
 
 
-def calc_hairpin_struct(seq: str, config: dict) -> float:
+def calc_hairpin_struct(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
     """
     Calculate the hairpin formation thermodynamics of a DNA sequence.
     Returns tm.
     """
     return p3_calc_hairpin(
         seq,
-        mv_conc=config["mv_conc"],
-        dv_conc=config["dv_conc"],
-        dntp_conc=config["dntp_conc"],
-        dna_conc=config["dna_conc"],
+        mv_conc=mv_conc,
+        dv_conc=dv_conc,
+        dntp_conc=dntp_conc,
+        dna_conc=dna_conc,
         output_structure=True,
     ).ascii_structure_lines
 
 
-def forms_hairpin(seqs: Iterable[str], cfg: dict) -> bool:
+def forms_hairpin(seqs: Iterable[str], config: Config) -> bool:
     """
     Given a iterable of strings it will check the hairpin tm of all seqs
     If any form haripins it will return True
     If all clear it will return False
     """
     for seq in seqs:
-        if calc_hairpin_tm(seq, cfg) > cfg["primer_hairpin_th_max"]:
+        if (
+            calc_hairpin_tm(
+                seq,
+                mv_conc=config.mv_conc,
+                dv_conc=config.dv_conc,
+                dntp_conc=config.dntp_conc,
+                dna_conc=config.dna_conc,
+            )
+            > config.primer_hairpin_th_max
+        ):
             return True
     return False
 
@@ -79,7 +90,7 @@ def max_homo(kmer_seq) -> int:
     return max(sum(1 for _ in group) for _, group in groupby(kmer_seq))
 
 
-def passes_thermo_checks(kmer_seq: str, cfg: dict) -> THERMORESULT:
+def passes_thermo_checks(kmer_seq: str, config: Config) -> THERMORESULT:
     """Are all kmer thermo values below threshold?.
 
     Evaluation order.
@@ -95,29 +106,34 @@ def passes_thermo_checks(kmer_seq: str, cfg: dict) -> THERMORESULT:
     Returns:
         THERMORESULT: The result of the thermo checks.
     """
-
     # Check for gc in range
     kmer_gc = gc(kmer_seq)
-    if kmer_gc > cfg["primer_gc_max"]:
+    if kmer_gc > config.primer_gc_max:
         return THERMORESULT.HIGH_GC
-    elif kmer_gc < cfg["primer_gc_min"]:
+    elif kmer_gc < config.primer_gc_min:
         return THERMORESULT.LOW_GC
 
     # Check for tm in range
-    kmer_tm = calc_tm(kmer_seq, cfg)
-    if kmer_tm > cfg["primer_tm_max"]:
+    kmer_tm = calc_tm(
+        kmer_seq,
+        mv_conc=config.mv_conc,
+        dv_conc=config.dv_conc,
+        dna_conc=config.dna_conc,
+        dntp_conc=config.dntp_conc,
+    )
+    if kmer_tm > config.primer_tm_max:
         return THERMORESULT.HIGH_TM
-    elif kmer_tm < cfg["primer_tm_min"]:
+    elif kmer_tm < config.primer_tm_min:
         return THERMORESULT.LOW_TM
 
     # Check for maxhomopolymer
-    if max_homo(kmer_seq) > cfg["primer_homopolymer_max"]:
+    if max_homo(kmer_seq) > config.primer_homopolymer_max:
         return THERMORESULT.MAX_HOMOPOLY
 
     return THERMORESULT.PASS
 
 
-def thermo_check_kmers(kmers: Iterable[str], cfg: dict) -> THERMORESULT:
+def thermo_check_kmers(kmers: Iterable[str], config: Config) -> THERMORESULT:
     """
     Will call passes_thermo_checks on each kmer sequence in the kmers list
     Will stop evaluating on first error
@@ -131,7 +147,7 @@ def thermo_check_kmers(kmers: Iterable[str], cfg: dict) -> THERMORESULT:
 
     """
     for kmer in kmers:
-        result = passes_thermo_checks(kmer, cfg)
+        result = passes_thermo_checks(kmer, config)
         if result == THERMORESULT.PASS:
             continue
         else:

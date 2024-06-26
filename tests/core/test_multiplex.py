@@ -3,9 +3,9 @@ import unittest
 
 import numpy as np
 
-import primalscheme3.core.config as config
 from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import FKmer, MatchDB, PrimerPair, RKmer
+from primalscheme3.core.config import Config
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 
@@ -16,13 +16,11 @@ class TestMultiplex(unittest.TestCase):
     inputfile_path = pathlib.Path("./tests/core/test_mismatch.fasta").absolute()
     nCoV_2019_76_RIGHT_0 = "ACACCTGTGCCTGTTAAACCAT"
     nCoV_2019_18_LEFT_0 = "TGGAAATACCCACAAGTTAATGGTTTAAC"
+    config = Config()
 
     # Create a config dict
-    cfg = config.config_dict
-    cfg["npools"] = 2
-    cfg["mismatch_fuzzy"] = True
-    cfg["mismatch_kmersize"] = 20
-    cfg["mismatch_product_size"] = 200
+    config = Config()
+    config.n_pools = 2
 
     # Create an MSA object
     msa = MSA("test", inputfile_path, 0, "first", None)
@@ -31,9 +29,9 @@ class TestMultiplex(unittest.TestCase):
         """
         Test if calling the next_pool method returns the correct pool
         """
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
         current_pool = multiplex._current_pool
         next_pool = multiplex.next_pool()
@@ -46,9 +44,9 @@ class TestMultiplex(unittest.TestCase):
         """
         Test if calling the next_pool method returns the correct pool
         """
-        self.cfg["npools"] = 1
+        self.config.n_pools = 1
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
         current_pool = multiplex._current_pool
         next_pool = multiplex.next_pool()
@@ -61,9 +59,9 @@ class TestMultiplex(unittest.TestCase):
         """
         Test if method add_primer_pair_to_pool does whats expected
         """
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
         pp_msa_index = 0
 
@@ -86,10 +84,9 @@ class TestMultiplex(unittest.TestCase):
         self.assertEqual(multiplex._last_pp_added[-1].amplicon_number, 1)
 
     def test_remove_last_primer_pair(self):
-        self.cfg["npools"] = 2
-        self.cfg["minoverlap"] = 10
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
         primerpair = PrimerPair(FKmer(100, ["AA"]), RKmer(200, ["TT"]), 0)
 
@@ -114,9 +111,11 @@ class TestMultiplex(unittest.TestCase):
         """
         Test if method does_overlap does whats expected
         """
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa, 1: self.msa}
+            config=self.config,
+            matchDB=self.matchdb,
+            msa_dict={0: self.msa, 1: self.msa},
         )
 
         # Create a primerpair
@@ -168,9 +167,9 @@ class TestMultiplex(unittest.TestCase):
         """
         Test if method all_primerpairs does whats expected
         """
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
 
         # Create a primerpair
@@ -186,9 +185,9 @@ class TestMultiplex(unittest.TestCase):
         Test if method coverage does whats expected
         """
 
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
 
         # Create a primerpair
@@ -214,9 +213,9 @@ class TestMultiplex(unittest.TestCase):
         Test if method coverage does whats expected
         """
 
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
 
         # Create a primerpair
@@ -244,9 +243,9 @@ class TestMultiplex(unittest.TestCase):
         Test if method lookup does whats expected
         """
 
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
 
         msa_index = 0
@@ -256,7 +255,7 @@ class TestMultiplex(unittest.TestCase):
         primerpair.pool = pool
 
         # Check lookup is created empty, in the correct shape
-        for p in range(0, self.cfg["npools"]):
+        for p in range(0, self.config.n_pools):
             self.assertEqual(np.count_nonzero(multiplex._lookup[msa_index][p, :]), 0)
 
         # Add a primerpair
@@ -279,9 +278,9 @@ class TestMultiplex(unittest.TestCase):
         Test if method lookup does whats expected
         """
 
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
 
         msa_index = 0
@@ -293,7 +292,7 @@ class TestMultiplex(unittest.TestCase):
         primerpair.pool = pool
 
         # Check lookup is created empty, in the correct shape
-        for p in range(0, self.cfg["npools"]):
+        for p in range(0, self.config.n_pools):
             self.assertEqual(np.count_nonzero(multiplex._lookup[msa_index][p, :]), 0)
 
         # Add a primerpair
@@ -312,9 +311,9 @@ class TestMultiplex(unittest.TestCase):
         )
 
     def test_bedprimer(self):
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa}
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
         # Create a primerpair
         bedprimerpair = BedPrimerPair(
@@ -352,9 +351,11 @@ class TestMultiplex(unittest.TestCase):
         self.assertEqual(len(multiplex._last_pp_added), 0)
 
     def test_check_add_primer(self):
-        self.cfg["npools"] = 2
+        self.config.n_pools = 2
         multiplex = Multiplex(
-            cfg=self.cfg, matchDB=self.matchdb, msa_dict={0: self.msa, 1: self.msa}
+            config=self.config,
+            matchDB=self.matchdb,
+            msa_dict={0: self.msa, 1: self.msa},
         )
 
         msa_index = 0

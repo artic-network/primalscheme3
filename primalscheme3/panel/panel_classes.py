@@ -11,6 +11,7 @@ from primalscheme3.core.bedfiles import BedPrimerPair
 
 # Core Module imports
 from primalscheme3.core.classes import PrimerPair
+from primalscheme3.core.config import Config
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
@@ -220,7 +221,7 @@ class Panel(Multiplex):
     _current_pool: int
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
-    cfg: dict
+    config: Config
     _msa_dict: dict[int, PanelMSA]
 
     # New attributes
@@ -230,9 +231,9 @@ class Panel(Multiplex):
     _workingmsasbool: list[bool] | None = None
 
     def __init__(
-        self, msa_dict: dict[int, PanelMSA], cfg: dict, matchdb: MatchDB
+        self, msa_dict: dict[int, PanelMSA], config: Config, matchdb: MatchDB
     ) -> None:
-        super().__init__(cfg, matchdb, msa_dict)  # type: ignore
+        super().__init__(config, matchdb, msa_dict)  # type: ignore
 
         self._current_msa_index = 0
         self._failed_primerpairs = [set() for _ in range(self.n_pools)]
@@ -340,7 +341,7 @@ class Panel(Multiplex):
             if do_pools_interact_py(
                 pos_primerpair.all_seqs(),
                 seqs_in_pool,
-                self.cfg["dimerscore"],
+                self.config.dimer_score,
             ):
                 self._failed_primerpairs[current_pool].add(pos_primerpair)
                 continue
@@ -350,8 +351,8 @@ class Panel(Multiplex):
                 pos_primerpair.find_matches(
                     self._matchDB,
                     remove_expected=False,
-                    kmersize=self.cfg["mismatch_kmersize"],
-                    fuzzy=self.cfg["mismatch_fuzzy"],
+                    kmersize=self.config.mismatch_kmersize,
+                    fuzzy=self.config.mismatch_fuzzy,
                 ),
                 self._matches[current_pool],
             ):
@@ -406,7 +407,7 @@ class Panel(Multiplex):
                 if do_pools_interact_py(
                     pos_primerpair.all_seqs(),
                     all_seqs_in_pools[pool],
-                    self.cfg["dimerscore"],
+                    self.config.dimer_score,
                 ):
                     continue
 
@@ -415,8 +416,8 @@ class Panel(Multiplex):
                     pos_primerpair.find_matches(
                         self._matchDB,
                         remove_expected=False,
-                        kmersize=self.cfg["mismatch_kmersize"],
-                        fuzzy=self.cfg["mismatch_fuzzy"],
+                        kmersize=self.config.mismatch_kmersize,
+                        fuzzy=self.config.mismatch_fuzzy,
                     ),
                     self._matches[pool],
                 ):
@@ -466,7 +467,7 @@ class Panel(Multiplex):
             if do_pools_interact_py(
                 pos_primerpair.all_seqs(),
                 seqs_in_pool,
-                self.cfg["dimerscore"],
+                self.config.dimer_score,
             ):
                 self._failed_primerpairs[current_pool].add(pos_primerpair)
                 continue
@@ -476,8 +477,8 @@ class Panel(Multiplex):
                 pos_primerpair.find_matches(
                     self._matchDB,
                     remove_expected=False,
-                    kmersize=self.cfg["mismatch_kmersize"],
-                    fuzzy=self.cfg["mismatch_fuzzy"],
+                    kmersize=self.config.mismatch_kmersize,
+                    fuzzy=self.config.mismatch_fuzzy,
                 ),
                 self._matches[current_pool],
             ):

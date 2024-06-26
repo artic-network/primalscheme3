@@ -19,7 +19,6 @@ def remap(
     id_to_remap_to: str,
     output_dir: pathlib.Path,
 ):
-
     OUTPUT_DIR = pathlib.Path(output_dir).absolute()  # Keep absolute path
 
     # Create the output dir and a work subdir

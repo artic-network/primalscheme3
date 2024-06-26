@@ -1,13 +1,13 @@
 from enum import Enum
-from multiprocessing import Pool
 
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primaldimer_py import (
+    do_pools_interact_py,  # type: ignore
+    which_kmers_pools_interact,  # type: ignore
+)
 
 from primalscheme3.core.bedfiles import BedPrimerPair
-
-# Module imports
 from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.digestion import _mp_pp_inter_free
+from primalscheme3.core.config import Config
 from primalscheme3.core.get_window import get_pp_window
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.msa import MSA
@@ -43,10 +43,10 @@ class Scheme(Multiplex):
     _current_pool: int
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
-    cfg: dict
+    config: Config
 
-    def __init__(self, cfg, matchDB: MatchDB, msa_dict: dict[int, MSA]):
-        super().__init__(cfg, matchDB, msa_dict)
+    def __init__(self, config, matchDB: MatchDB, msa_dict: dict[int, MSA]):
+        super().__init__(config, matchDB, msa_dict)
 
     @property
     def npools(self) -> int:
@@ -138,15 +138,15 @@ class Scheme(Multiplex):
         }
 
         # Find pp that could ol, depending on which pool
-        pos_ol_pp = self.find_ol_primerpairs(all_pp_list, self.cfg["min_overlap"])
+        pos_ol_pp = self.find_ol_primerpairs(all_pp_list, self.config.min_overlap)
 
         # Sort the primerpairs depending on overlap score
         pos_ol_pp.sort(
             key=lambda pp: ol_pp_score(
                 pp.rprimer.start,
                 len(pp.all_seqs()),
-                self.get_leading_coverage_edge() - self.cfg["min_overlap"],
-                self.cfg,
+                self.get_leading_coverage_edge() - self.config.min_overlap,
+                self.config,
             ),
             reverse=True,
         )
@@ -211,7 +211,7 @@ class Scheme(Multiplex):
                     pp.rprimer.start,
                     len(pp.all_seqs()),
                     self.get_leading_coverage_edge() - 1,
-                    self.cfg,
+                    self.config,
                 ),
                 reverse=True,
             )
@@ -237,7 +237,7 @@ class Scheme(Multiplex):
                 if do_pools_interact_py(
                     pp.all_seqs(),
                     index_to_seqs.get(pool_index),
-                    self.cfg["dimerscore"],
+                    self.config.dimer_score,
                 ):
                     continue
 
@@ -246,11 +246,11 @@ class Scheme(Multiplex):
                     pp.find_matches(
                         self._matchDB,
                         remove_expected=False,
-                        kmersize=self.cfg["mismatch_kmersize"],
-                        fuzzy=self.cfg["mismatch_fuzzy"],
+                        kmersize=self.config.mismatch_kmersize,
+                        fuzzy=self.config.mismatch_fuzzy,
                     ),
                     self._matches[pool_index],
-                    self.cfg["mismatch_product_size"],
+                    self.config.mismatch_product_size,
                 ):
                     continue
 
@@ -287,7 +287,7 @@ class Scheme(Multiplex):
             index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
         }
         # Find the walking start index
-        walking_min = self._last_pp_added[-1].rprimer.start - self.cfg["min_overlap"]
+        walking_min = self._last_pp_added[-1].rprimer.start - self.config.min_overlap
 
         # Find the first primer that could walk
         ## Use that index to slice the list
@@ -340,13 +340,13 @@ class Scheme(Multiplex):
             fkmer
             for fkmer in msa.fkmers
             if fkmer.end < last_pp.rprimer.start
-            and fkmer.end > last_pp.rprimer.start - self.cfg["amplicon_size_max"]
+            and fkmer.end > last_pp.rprimer.start - self.config.amplicon_size_max
         ]
         pos_rkmers = [
             rkmer
             for rkmer in msa.rkmers
             if rkmer.start > first_pp.fprimer.end
-            and rkmer.start < first_pp.fprimer.end + self.cfg["amplicon_size_max"]
+            and rkmer.start < first_pp.fprimer.end + self.config.amplicon_size_max
         ]
 
         # Get the mapping array
@@ -355,35 +355,30 @@ class Scheme(Multiplex):
         else:
             ref_size = max([x for x in msa._mapping_array if x is not None])
 
+        # Check with Kmers interact
         # Create all the primerpairs
-        non_checked_pp = []
+        checked_pp = []
         for fkmer in pos_fkmers:
             for rkmer in pos_rkmers:
                 # Check the primerpair is the correct length
                 amp_size = (ref_size - fkmer.end) + rkmer.start
 
-                if amp_size < self.cfg["amplicon_size_min"]:
+                if amp_size < self.config.amplicon_size_min:
                     continue
-                if amp_size > self.cfg["amplicon_size_max"]:
+                if amp_size > self.config.amplicon_size_max:
                     continue
 
-                pp = PrimerPair(fkmer, rkmer, msa.msa_index)
-                pp.chrom_name = msa._chrom_name
-                pp.amplicon_prefix = msa._uuid
-                non_checked_pp.append(pp)
-
-        ## Interaction check all the primerpairs
-        iter_free_primer_pairs = []
-        with Pool(self.cfg["n_cores"]) as p:
-            mp_pp_bool = p.imap_unordered(
-                _mp_pp_inter_free, ((pp, self.cfg) for pp in non_checked_pp)
-            )
-            for bool, pp in zip(mp_pp_bool, non_checked_pp):
-                if not bool:
-                    iter_free_primer_pairs.append(pp)
+                # Check for interactions
+                if not which_kmers_pools_interact(
+                    [fkmer], [rkmer], self.config.dimer_score, calc_all=False
+                ):
+                    pp = PrimerPair(fkmer, rkmer, msa.msa_index)
+                    pp.chrom_name = msa._chrom_name
+                    pp.amplicon_prefix = msa._uuid
+                    checked_pp.append(pp)
 
         # Sort the primerpairs by number of primers
-        iter_free_primer_pairs.sort(
+        checked_pp.sort(
             key=lambda pp: (
                 len(pp.all_seqs()),
                 (ref_size - pp.fprimer.end) + pp.rprimer.start,
@@ -399,7 +394,7 @@ class Scheme(Multiplex):
             index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
         }
 
-        for c_pp in iter_free_primer_pairs:
+        for c_pp in checked_pp:
             for pool_index in pos_pools_indexes:
                 # Guard for clash between the last primer in the same pool
                 if self._pools[pool_index][-1].msa_index == msa.msa_index and max(
@@ -417,7 +412,7 @@ class Scheme(Multiplex):
                 if do_pools_interact_py(
                     c_pp.all_seqs(),
                     index_to_seqs.get(pool_index),
-                    self.cfg["dimerscore"],
+                    self.config.dimer_score,
                 ):
                     continue
 

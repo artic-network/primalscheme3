@@ -9,17 +9,20 @@ from Bio import Seq, SeqIO, SeqRecord
 # Interaction checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
-from primalscheme3.__init__ import __version__
 from primalscheme3.core.bedfiles import (
     read_in_bedprimerpairs,
 )
-from primalscheme3.core.config import config_dict
+from primalscheme3.core.config import Config
 from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.logger import setup_loger
-from primalscheme3.core.mapping import generate_consensus, generate_reference
+from primalscheme3.core.mapping import (
+    MappingType,
+    generate_consensus,
+    generate_reference,
+)
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.progress_tracker import ProgressManager
@@ -27,7 +30,7 @@ from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 
 def schemereplace(
-    config: pathlib.Path,
+    config_path: pathlib.Path,
     ampliconsizemax: int,
     ampliconsizemin: int,
     primerbed: pathlib.Path,
@@ -39,8 +42,9 @@ def schemereplace(
     List all replacements primers
     """
     # Read in the config file
-    with open(config) as file:
-        cfg: dict = json.load(file)
+    with open(config_path) as file:
+        _cfg: dict = json.load(file)
+    config = Config(**_cfg)
 
     if pm is None:
         pm = ProgressManager()
@@ -51,21 +55,17 @@ def schemereplace(
             f"Updating amplicon size max to {ampliconsizemax} and min to {ampliconsizemin}"
         )
 
-        cfg["amplicon_size_max"] = ampliconsizemax
-        cfg["amplicon_size_min"] = ampliconsizemin
-
-    # Add the newer primer_max_walk to the config if not already there
-    if "primer_max_walk" not in cfg:
-        cfg["primer_max_walk"] = 100
+        config.amplicon_size_max = ampliconsizemax
+        config.amplicon_size_min = ampliconsizemin
 
     # If more than two pools are given throw error
-    if cfg["npools"] > 2:
+    if config.n_pools > 2:
         raise ValueError("ERROR: repair is only surported with two pools")
 
     # Create a mapping of chromname/referance to msa_index
     msa_chrom_to_index: dict[str, int] = {
         msa_data["msa_chromname"]: msa_index
-        for msa_index, msa_data in cfg["msa_data"].items()
+        for msa_index, msa_data in _cfg["msa_data"].items()
     }
 
     # Read in the bedfile
@@ -75,7 +75,7 @@ def schemereplace(
         msa_index = msa_chrom_to_index.get(str(primerpair.chrom_name), None)
         if msa_index is not None:
             primerpair.msa_index = msa_index
-        elif cfg["bedfile"]:
+        elif _cfg["bedfile"]:
             # This case can happen when primers are added to the scheme via --bedfile.
             # Set the msa index to -1
             primerpair.msa_index = -1
@@ -104,7 +104,7 @@ def schemereplace(
         print(wanted_pp.__str__())
 
     # Read in the MSAs from config["msa_data"]
-    msa_data = cfg["msa_data"].get(wanted_pp.msa_index)
+    msa_data = _cfg["msa_data"].get(wanted_pp.msa_index)
     if msa_data is None:
         if wanted_pp.msa_index == -1:
             raise ValueError(f"ERROR: The Primer {primername} was added via --bedfile")
@@ -115,7 +115,7 @@ def schemereplace(
         name=msa_data["msa_name"],
         path=msapath,
         msa_index=wanted_pp.msa_index,
-        mapping=cfg["mapping"],
+        mapping=config.mapping.value,
         logger=None,
         progress_manager=pm,
     )
@@ -129,14 +129,14 @@ def schemereplace(
 
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
-    msa.digest(cfg)  ## Primer are remapped at this point.
+    msa.digest(config)  ## Primer are remapped at this point.
     print(f"Found {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
     msa.generate_primerpairs(
-        amplicon_size_max=cfg["amplicon_size_max"],
-        amplicon_size_min=cfg["amplicon_size_min"],
-        dimerscore=cfg["dimerscore"],
+        amplicon_size_max=config.amplicon_size_max,
+        amplicon_size_min=config.amplicon_size_min,
+        dimerscore=config.dimer_score,
     )
 
     # Find the primers on either side of the wanted primer
@@ -166,8 +166,8 @@ def schemereplace(
     spanning_primerpairs = [
         x
         for x in msa.primerpairs
-        if x.fprimer.region()[1] < cov_start - cfg["min_overlap"]
-        and x.rprimer.region()[0] > cov_end + cfg["min_overlap"]
+        if x.fprimer.region()[1] < cov_start - config.min_overlap
+        and x.rprimer.region()[0] > cov_end + config.min_overlap
     ]
 
     if len(spanning_primerpairs) > 0:
@@ -218,7 +218,7 @@ def schemereplace(
         # If they dont overlap
         # Check for interactions
         if do_pools_interact_py(
-            list(pos_primerpair.all_seqs()), seqs_in_same_pool, cfg["dimerscore"]
+            list(pos_primerpair.all_seqs()), seqs_in_same_pool, config.dimer_score
         ):
             continue
 
@@ -236,81 +236,34 @@ def schemereplace(
 
 
 def schemecreate(
-    argmsa: list[pathlib.Path],
-    primer_gc_min: float,
-    primer_gc_max: float,
-    primer_tm_min: float,
-    primer_tm_max: float,
-    dimerscore: float,
-    ncores: int,
+    msa: list[pathlib.Path],
     output_dir: pathlib.Path,
-    ampliconsizemax: int,
-    ampliconsizemin: int,
-    minoverlap: int,
-    npools: int,
-    reducekmers: bool,
-    minbasefreq: int,
-    circular: bool,
-    backtrack: bool,
-    ignore_n: bool,
+    config: Config,
     pm: ProgressManager | None,
-    bedfile: pathlib.Path | None = None,
     force: bool = False,
-    mapping: str = "first",
-    no_plot: bool = False,
+    inputbedfile: pathlib.Path | None = None,
 ):
-    ARG_MSA = argmsa
+    """
+    Creates a scheme based on multiple sequence alignments (MSA).
+
+    Args:
+        msa (list[pathlib.Path]): A list of paths to MSA files.
+        output_dir (pathlib.Path): The directory where the scheme will be saved.
+        config (Config): Configuration settings for scheme creation.
+        pm (ProgressManager | None): Optional. A progress manager instance for UI feedback.
+        force (bool): If True, existing output directories will be overwritten.
+        inputbedfile (pathlib.Path | None): Optional. A path to an input BED file for incorporating specific primer pairs.
+
+    Raises:
+        SystemExit: If the output directory already exists and the force flag is not set.
+    """
+    ARG_MSA = msa
     OUTPUT_DIR = pathlib.Path(output_dir).absolute()  # Keep absolute path
 
-    cfg = config_dict
+    # Create the Config_dict
+    cfg_dict = config.to_json()
 
-    # Add version to config
-    cfg["algorithmversion"] = f"primalscheme3:{__version__}"
-    cfg["primerclass"] = "primerschemes"
-    # Primer Digestion settings
-    cfg["primer_gc_min"] = primer_gc_min
-    cfg["primer_gc_max"] = primer_gc_max
-    cfg["primer_tm_min"] = primer_tm_min
-    cfg["primer_tm_max"] = primer_tm_max
-    cfg["dimerscore"] = dimerscore
-    cfg["n_cores"] = ncores
-    cfg["output_dir"] = str(OUTPUT_DIR)  # Write localpath
-    cfg["amplicon_size_max"] = ampliconsizemax
-    cfg["amplicon_size_min"] = ampliconsizemin
-    cfg["min_overlap"] = minoverlap
-    cfg["force"] = force
-    cfg["npools"] = npools
-    cfg["reducekmers"] = reducekmers
-    cfg["minbasefreq"] = minbasefreq
-
-    # Add the mismatch params to the cfg
-    cfg["mismatch_fuzzy"] = True
-    cfg["mismatch_kmersize"] = cfg["primer_size_min"]
-    cfg["mismatch_product_size"] = ampliconsizemax
-
-    # Add plots to the cfg
-    cfg["plot"] = no_plot
-    cfg["disable_progress_bar"] = False
-
-    # Add the mapping to the cfg
-    cfg["mapping"] = mapping
-
-    # Add circular to the cfg
-    cfg["circular"] = circular
-
-    # Add the backtrack to the cfg
-    cfg["backtrack"] = backtrack
-
-    # Add the bedfile path if given
-    if bedfile is not None:
-        cfg["bedfile"] = str(bedfile)
-    else:
-        cfg["bedfile"] = False
-
-    # Add ignore_n to the cfg
-    cfg["ignore_n"] = ignore_n
-
-    # See if the output dir already exsits
+    # See if the output dir already exists.
     if OUTPUT_DIR.is_dir() and not force:
         sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
 
@@ -329,7 +282,9 @@ def schemecreate(
         "Creating the Mismatch Database",
     )
     mismatch_db = MatchDB(
-        OUTPUT_DIR / "work/mismatch", [str(x) for x in ARG_MSA], cfg["primer_size_min"]
+        OUTPUT_DIR / "work/mismatch",
+        [str(x) for x in ARG_MSA],
+        config.mismatch_kmersize,
     )
     logger.info(
         "<green>Created:</> {path}",
@@ -337,37 +292,37 @@ def schemecreate(
     )
 
     # If the bedfile flag is given add the primers into the scheme
-    if bedfile is not None:
-        bedprimerpairs, _headers = read_in_bedprimerpairs(bedfile)
+    if inputbedfile is not None:
+        bedprimerpairs, _headers = read_in_bedprimerpairs(inputbedfile)
         # Check the number of pools in the given bedfile, is less or equal to npools arg
         pools_in_bed = {primer.pool for primer in bedprimerpairs}
-        if max(pools_in_bed) > cfg["npools"]:
+        if max(pools_in_bed) > config.n_pools:
             sys.exit(
-                f"ERROR: The number of pools in the bedfile is greater than --npools: {max(pools_in_bed)} > {cfg['npools']}"
+                f"ERROR: The number of pools in the bedfile is greater than --npools: {max(pools_in_bed)} > {config.n_pools}"
             )
 
         # Calculate the bedfile tm
         primer_tms = [
-            tm for tm in (pp.calc_tm(cfg) for pp in bedprimerpairs) for tm in tm
+            tm for tm in (pp.calc_tm(config) for pp in bedprimerpairs) for tm in tm
         ]
         logger.info(
             "Read in bedfile: <blue>{msa_path}</>: <green>{num_pp}</> PrimersPairs with mean Tm of <green>{tm}</>",
-            msa_path=bedfile.name,
+            msa_path=inputbedfile.name,
             num_pp=len(bedprimerpairs),
             tm=round(sum(primer_tms) / len(primer_tms), 2),
         )
         # If the bedfile tm is dif to the config Throw error
         if (
-            primer_tms[0] < cfg["primer_tm_min"] - 5
-            or primer_tms[2] > cfg["primer_tm_max"] + 5
+            primer_tms[0] < config.primer_tm_min - 5
+            or primer_tms[2] > config.primer_tm_max + 5
         ):
             logger.warning(
                 "Tm in bedfile <green>{tm_min}</>:<green>{tm_median}</>:<green>{tm_max}</> (min, median, max) fall outside range of <green>{conf_tm_min}</> to <green>{conf_tm_max}</>)",
                 tm_min=round(primer_tms[0], 1),
                 tm_median=round(primer_tms[1], 1),
                 tm_max=round(primer_tms[2], 1),
-                conf_tm_min=cfg["primer_tm_min"],
-                conf_tm_max=cfg["primer_tm_max"],
+                conf_tm_min=config.primer_tm_min,
+                conf_tm_max=config.primer_tm_max,
             )
 
     # Create a dict full of msa data
@@ -389,100 +344,100 @@ def schemecreate(
             ).hexdigest()
 
         # Read in the MSA
-        msa = MSA(
+        msa_obj = MSA(
             name=local_msa_path.stem,
             path=msa_path,
             msa_index=msa_index,
-            mapping=cfg["mapping"],
+            mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
         )
 
-        if "/" in msa._chrom_name:
-            new_chromname = msa._chrom_name.split("/")[0]
+        if "/" in msa_obj._chrom_name:
+            new_chromname = msa_obj._chrom_name.split("/")[0]
             logger.warning(
                 "<red>WARNING</>: Having a '/' in the chromname {msachromname} will cause issues with figure generation bedfile output. Parsing chromname <yellow>{msachromname}</> -> <green>{new_chromname}</>",
-                msachromname=msa._chrom_name,
+                msachromname=msa_obj._chrom_name,
                 new_chromname=new_chromname,
             )
-            msa._chrom_name = new_chromname
+            msa_obj._chrom_name = new_chromname
 
         # Add some msa data to the dict
-        msa_data[msa_index]["msa_name"] = msa.name
+        msa_data[msa_index]["msa_name"] = msa_obj.name
         msa_data[msa_index]["msa_path"] = str(
             "work/" + msa_path.name
         )  # Write localpath
-        msa_data[msa_index]["msa_chromname"] = msa._chrom_name
-        msa_data[msa_index]["msa_uuid"] = msa._uuid
+        msa_data[msa_index]["msa_chromname"] = msa_obj._chrom_name
+        msa_data[msa_index]["msa_uuid"] = msa_obj._uuid
 
         logger.info(
             "Read in MSA: <blue>{msa_path}</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
-            msa_path=msa.name,
-            msa_rows=msa.array.shape[0],
-            msa_cols=msa.array.shape[1],
+            msa_path=msa_obj.name,
+            msa_rows=msa_obj.array.shape[0],
+            msa_cols=msa_obj.array.shape[1],
         )
 
         # Digest the MSA into FKmers and RKmers
-        msa.digest(cfg)
+        msa_obj.digest(config)
         logger.info(
             "<blue>{msa_path}</>: digested to <green>{num_fkmers}</> FKmers and <green>{num_rkmers}</> RKmers",
-            msa_path=msa.name,
-            num_fkmers=len(msa.fkmers),
-            num_rkmers=len(msa.rkmers),
+            msa_path=msa_obj.name,
+            num_fkmers=len(msa_obj.fkmers),
+            num_rkmers=len(msa_obj.rkmers),
         )
 
-        if len(msa.fkmers) == 0 or len(msa.rkmers) == 0:
+        if len(msa_obj.fkmers) == 0 or len(msa_obj.rkmers) == 0:
             logger.critical(
                 "No valid FKmers or RKmers found for <blue>{msa_name}</>",
-                msa_name=msa.name,
+                msa_name=msa_obj.name,
             )
             sys.exit(1)
 
         # Generate all primerpairs then interaction check
-        msa.generate_primerpairs(
-            amplicon_size_max=cfg["amplicon_size_max"],
-            amplicon_size_min=cfg["amplicon_size_min"],
-            dimerscore=cfg["dimerscore"],
+        msa_obj.generate_primerpairs(
+            amplicon_size_max=config.amplicon_size_max,
+            amplicon_size_min=config.amplicon_size_min,
+            dimerscore=config.dimer_score,
         )
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
-            msa_path=msa.name,
-            num_pp=len(msa.primerpairs),
+            msa_path=msa_obj.name,
+            num_pp=len(msa_obj.primerpairs),
         )
 
-        if len(msa.primerpairs) == 0:
+        if len(msa_obj.primerpairs) == 0:
             logger.critical(
                 "No valid primers found for <blue>{msa_name}</>",
-                msa_name=msa.name,
+                msa_name=msa_obj.name,
             )
             sys.exit(1)
 
         # Add the msa to the scheme
-        msa_dict[msa_index] = msa
+        msa_dict[msa_index] = msa_obj
 
     # Add MSA data into cfg
-    cfg["msa_data"] = msa_data
+    cfg_dict["msa_data"] = msa_data
 
     # Create the scheme object early
-    scheme = Scheme(cfg=cfg, matchDB=mismatch_db, msa_dict=msa_dict)
+    scheme = Scheme(config=config, matchDB=mismatch_db, msa_dict=msa_dict)
 
     msa_chrom_to_index: dict[str, int] = {
         msa._chrom_name: msa_index for msa_index, msa in msa_dict.items()
     }
     # Add the bedprimerpairs into the scheme
-    if bedfile is not None and bedprimerpairs:
+    if inputbedfile is not None and bedprimerpairs:
         for pp in bedprimerpairs:
             # Map the primerpair to the msa via chromname
             pp.msa_index = msa_chrom_to_index.get(pp.chrom_name, -1)  # type: ignore
             scheme.add_primer_pair_to_pool(pp, pp.pool, pp.msa_index)
 
     # Start the Scheme generation
-    for msa_index, msa in msa_dict.items():
+    for msa_index, msa_obj in msa_dict.items():
         # Set up the pm for the MSA
         scheme_pt = pm.create_sub_progress(
-            iter=None, chrom=msa.name, process="Creating Scheme"
+            iter=None, chrom=msa_obj.name, process="Creating Scheme"
         )
-        scheme_pt.manual_update(n=0, total=msa.array.shape[1])
+        scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
 
         while True:
             # Provide the coverage to the progress tracker
@@ -492,14 +447,14 @@ def schemecreate(
             if scheme._last_pp_added:
                 scheme_pt.manual_update(n=scheme._last_pp_added[-1].rprimer.region()[1])
 
-            match scheme.try_ol_primerpairs(msa.primerpairs, msa_index):
+            match scheme.try_ol_primerpairs(msa_obj.primerpairs, msa_index):
                 case SchemeReturn.ADDED_OL_PRIMERPAIR:
                     logger.info(
                         "Added <green>overlapping</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                         primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
                         primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
-                        msa_name=msa.name,
+                        msa_name=msa_obj.name,
                     )
                     continue
                 case SchemeReturn.ADDED_FIRST_PRIMERPAIR:
@@ -508,7 +463,7 @@ def schemecreate(
                         primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
                         primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
-                        msa_name=msa.name,
+                        msa_name=msa_obj.name,
                     )
                     continue
                 case SchemeReturn.NO_OL_PRIMERPAIR:
@@ -516,43 +471,43 @@ def schemecreate(
                 case SchemeReturn.NO_FIRST_PRIMERPAIR:
                     logger.warning(
                         "No valid primers found for <blue>{msa_name}</>",
-                        msa_name=msa.name,
+                        msa_name=msa_obj.name,
                     )
                     break
 
             # Try to backtrack
-            if cfg["backtrack"]:
+            if config.backtrack:
                 logger.info("Backtracking...")
-                match scheme.try_backtrack(msa.primerpairs, msa_index):
+                match scheme.try_backtrack(msa_obj.primerpairs, msa_index):
                     case SchemeReturn.ADDED_BACKTRACKED:
                         logger.info(
                             "Backtracking allowed <green>overlapping</> amplicon to be added for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                             primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
                             primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                             primer_pool=scheme._last_pp_added[-1].pool + 1,
-                            msa_name=msa.name,
+                            msa_name=msa_obj.name,
                         )
                     case SchemeReturn.NO_BACKTRACK:
                         logger.info(
                             "Could not backtrack for <blue>{msa_name}</>",
-                            msa_name=msa.name,
+                            msa_name=msa_obj.name,
                         )
                         pass  # Do nothing move on to next step
 
             # Try and add a walking primer
-            match scheme.try_walk_primerpair(msa.primerpairs, msa_index):
+            match scheme.try_walk_primerpair(msa_obj.primerpairs, msa_index):
                 case SchemeReturn.ADDED_WALK_PRIMERPAIR:
                     logger.info(
                         "Added <yellow>walking</> amplicon for <blue>{msa_name}</>: {primer_start}\t{primer_end}\t{primer_pool}",
                         primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
                         primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
-                        msa_name=msa.name,
+                        msa_name=msa_obj.name,
                     )
                 case _:
                     break
 
-        if cfg["circular"]:
+        if config.circular:
             match scheme.try_circular(msa):
                 case SchemeReturn.ADDED_CIRULAR:
                     logger.info(
@@ -560,12 +515,12 @@ def schemecreate(
                         primer_start=scheme._last_pp_added[-1].fprimer.region()[0],
                         primer_end=scheme._last_pp_added[-1].rprimer.region()[1],
                         primer_pool=scheme._last_pp_added[-1].pool + 1,
-                        msa_name=msa.name,
+                        msa_name=msa_obj.name,
                     )
                 case SchemeReturn.NO_CIRCULAR:
                     logger.info(
                         "No <red>circular</> amplicon for <blue>{msa_name}</>",
-                        msa_name=msa.name,
+                        msa_name=msa_obj.name,
                     )
         # Close the progress tracker
         scheme_pt.manual_update(n=scheme_pt.total)
@@ -593,43 +548,40 @@ def schemecreate(
     # Write all the consensus sequences to a single file
     with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
         reference_records = []
-        if cfg["mapping"] == "first":
-            for msa in msa_dict.values():
-                reference_records.append(
-                    SeqRecord.SeqRecord(
-                        seq=Seq.Seq(generate_reference(msa.array)),
-                        id=msa._chrom_name,
-                        description="",
-                    )
+        for msa_obj in msa_dict.values():
+            if config.mapping == MappingType.FIRST:
+                seq_str = generate_reference(msa_obj.array)
+            elif config.mapping == MappingType.CONSENSUS:
+                seq_str = generate_consensus(msa_obj.array)
+            else:
+                raise ValueError("Mapping must be 'first' or 'consensus'")
+
+            reference_records.append(
+                SeqRecord.SeqRecord(
+                    seq=Seq.Seq(seq_str),
+                    id=msa_obj._chrom_name,
                 )
-        elif cfg["mapping"] == "consensus":
-            for msa in msa_dict.values():
-                reference_records.append(
-                    SeqRecord.SeqRecord(
-                        seq=Seq.Seq(generate_consensus(msa.array)),
-                        id=msa._chrom_name,
-                        description="",
-                    )
-                )
+            )
+
         SeqIO.write(reference_records, reference_outfile, "fasta")
 
     # Create all hashes
     ## Generate the bedfile hash, and add it into the config
     primer_md5 = hashlib.md5("\n".join(primer_bed_str).encode()).hexdigest()
-    cfg["primer.bed.md5"] = primer_md5
+    cfg_dict["primer.bed.md5"] = primer_md5
 
     ## Generate the amplicon hash, and add it into the config
     amp_md5 = hashlib.md5(amp_bed_str.encode()).hexdigest()
-    cfg["amplicon.bed.md5"] = amp_md5
+    cfg_dict["amplicon.bed.md5"] = amp_md5
 
     ## Read in the reference file and generate the hash
     with open(OUTPUT_DIR / "reference.fasta") as reference_outfile:
         ref_md5 = hashlib.md5(reference_outfile.read().encode()).hexdigest()
-    cfg["reference.fasta.md5"] = ref_md5
+    cfg_dict["reference.fasta.md5"] = ref_md5
 
     # Write the config dict to file
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
-        outfile.write(json.dumps(cfg, sort_keys=True))
+        outfile.write(json.dumps(cfg_dict, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data

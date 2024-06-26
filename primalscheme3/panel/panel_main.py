@@ -12,9 +12,8 @@ from Bio import Seq, SeqIO, SeqRecord
 from loguru import logger
 
 # version import
-from primalscheme3 import __version__
 from primalscheme3.core.bedfiles import read_in_bedprimerpairs
-from primalscheme3.core.config import config_dict
+from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import generate_all_plotdata
 from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.logger import setup_loger
@@ -66,78 +65,26 @@ def read_region_bedfile(path) -> list[list[str]]:
 
 
 def panelcreate(
-    argmsa: list[pathlib.Path],
-    outputdir: pathlib.Path,
-    primer_gc_max: float,
-    primer_gc_min: float,
-    primer_tm_max: float,
-    primer_tm_min: float,
-    dimerscore: float,
-    cores: int,
-    ampliconsizemax: int,
-    ampliconsizemin: int,
-    force: bool,
-    npools: int,
-    reducekmers: bool,
-    minbasefreq: float,
-    regionbedfile: pathlib.Path | None,
-    inputbedfile: pathlib.Path,
-    mapping: str,
-    maxamplicons: int,
-    mode: PanelRunModes,
-    ignore_n: bool,
+    msa: list[pathlib.Path],
+    output_dir: pathlib.Path,
+    config: Config,
     pm: ProgressManager | None,
+    force: bool = False,
+    inputbedfile: pathlib.Path | None = None,
+    regionbedfile: pathlib.Path | None = None,
+    mode: PanelRunModes = PanelRunModes.ALL,
+    max_amplicons: int | None = None,
 ):
-    ARG_MSA = argmsa
-    OUTPUT_DIR = pathlib.Path(outputdir).absolute()
+    ARG_MSA = msa
+    OUTPUT_DIR = pathlib.Path(output_dir).absolute()
 
-    cfg = config_dict
-    # Primer Digestion settings
-    cfg["primer_gc_min"] = primer_gc_min
-    cfg["primer_gc_max"] = primer_gc_max
-    cfg["primer_tm_min"] = primer_tm_min
-    cfg["primer_tm_max"] = primer_tm_max
-    cfg["dimerscore"] = dimerscore
-    cfg["n_cores"] = cores
-    cfg["output_dir"] = str(OUTPUT_DIR)
-    cfg["amplicon_size_max"] = ampliconsizemax
-    cfg["amplicon_size_min"] = ampliconsizemin
-    cfg["force"] = force
-    cfg["npools"] = npools
-    cfg["reducekmers"] = reducekmers
-    cfg["minbasefreq"] = minbasefreq
-    cfg["mode"] = mode.value
-
-    # Add the mismatch params to the cfg
-    cfg["mismatch_fuzzy"] = True
-    cfg["mismatch_kmersize"] = 14
-    cfg["mismatch_product_size"] = ampliconsizemax
-
-    # Add plots to the cfg
-    cfg["plot"] = True
-    cfg["disable_progress_bar"] = False
-
-    # Add the bedfile to the cfg
-    cfg["regionbedfile"] = str(regionbedfile) if regionbedfile is not None else None
-    cfg["inputbedfile"] = str(inputbedfile)
-
-    # Set the mapping
-    cfg["mapping"] = mapping
-
-    # Set the max amount of amplicons
-    cfg["maxamplicons"] = maxamplicons
-
-    # Add the version
-    cfg["algorithmversion"] = f"primalscheme3:{__version__}"
-    cfg["primerclass"] = "primerpanels"
-
-    cfg["primer_size_min"] = 14
-
-    # Add ignore_n to the cfg
-    cfg["ignore_n"] = ignore_n
+    # Config Dicts
+    config_dict = config.to_json()
+    config_dict["max_amplicons"] = max_amplicons
+    config_dict["mode"] = mode.value
 
     # Enforce mapping
-    if mapping != "first":
+    if config.mapping != MappingType.FIRST:
         sys.exit("ERROR: mapping must be 'first'")
 
     # Enforce region only has a region bedfile
@@ -164,7 +111,9 @@ def panelcreate(
         "Creating the Mismatch Database",
     )
     mismatch_db = MatchDB(
-        OUTPUT_DIR / "work/mismatch", [str(x) for x in ARG_MSA], cfg["primer_size_min"]
+        OUTPUT_DIR / "work/mismatch",
+        [str(x) for x in ARG_MSA],
+        config.mismatch_kmersize,
     )
     logger.info(
         "<green>Created:</> {path}",
@@ -173,7 +122,7 @@ def panelcreate(
 
     regions_mapping: dict[Region, str | None] | None = None
     # Read in the regionbedfile if given
-    if cfg["regionbedfile"] is not None:
+    if regionbedfile is not None:
         bed_lines = read_region_bedfile(regionbedfile)
         regions_mapping = {
             Region(
@@ -206,61 +155,61 @@ def panelcreate(
             ).hexdigest()
 
         # Read in the MSA
-        msa = PanelMSA(
+        msa_obj = PanelMSA(
             name=local_msa_path.stem,
             path=local_msa_path,
             msa_index=msa_index,
-            mapping=cfg["mapping"],
+            mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
         )
         logger.info(
             "Read in MSA: <blue>{msa_path} -> '{chromname}'</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
             msa_path=msa_path.name,
-            chromname=msa._chrom_name,
-            msa_rows=msa.array.shape[0],
-            msa_cols=msa.array.shape[1],
+            chromname=msa_obj._chrom_name,
+            msa_rows=msa_obj.array.shape[0],
+            msa_cols=msa_obj.array.shape[1],
         )
-        if "/" in msa._chrom_name:
-            new_chromname = msa._chrom_name.split("/")[0]
+        if "/" in msa_obj._chrom_name:
+            new_chromname = msa_obj._chrom_name.split("/")[0]
             logger.warning(
                 "<red>WARNING</>: Having a '/' in the chromname {msachromname} will cause issues with figure generation bedfile output. Parsing chromname <yellow>{msachromname}</> -> <green>{new_chromname}</>",
-                msachromname=msa._chrom_name,
+                msachromname=msa_obj._chrom_name,
                 new_chromname=new_chromname,
             )
-            msa._chrom_name = new_chromname
+            msa_obj._chrom_name = new_chromname
 
         # Add the regions
         if regions_mapping is not None:
             msa_regions = []
             for region in regions_mapping.keys():
-                if region.chromname == msa._chrom_name:
+                if region.chromname == msa_obj._chrom_name:
                     msa_regions.append(region)
-                    regions_mapping[region] = msa._chrom_name
-            msa.add_regions(msa_regions)
+                    regions_mapping[region] = msa_obj._chrom_name
+            msa_obj.add_regions(msa_regions)
 
             # Print Number mapped
             logger.info(
                 "<blue>{msa_name}</>: <green>{mapped}</> regions mapped",
-                msa_name=msa._chrom_name,
+                msa_name=msa_obj._chrom_name,
                 mapped=len(msa_regions),
             )
 
             # Create indexes from the regions
             indexes = set()
             for region in msa_regions:
-                if max(region.start, region.stop) > len(msa._mapping_array):
+                if max(region.start, region.stop) > len(msa_obj._mapping_array):
                     logger.error(
                         "Region {regionname} is out of bounds for {msa_name}",
                         regionname=region.name,
-                        msa_name=msa._chrom_name,
+                        msa_name=msa_obj._chrom_name,
                     )
                     sys.exit(1)
                 indexes.update(
                     [
-                        msa._ref_to_msa[x]
+                        msa_obj._ref_to_msa[x]
                         for x in range(region.start, region.stop)
-                        if msa._ref_to_msa[x] is not None
+                        if msa_obj._ref_to_msa[x] is not None
                     ]
                 )
 
@@ -268,72 +217,79 @@ def panelcreate(
                 {
                     fi
                     for fi in (
-                        range(i - cfg["amplicon_size_max"], i + 1) for i in indexes
+                        range(i - config.amplicon_size_max, i + 1) for i in indexes
                     )
                     for fi in fi
-                    if fi >= 0 and fi < msa.array.shape[1]
+                    if fi >= 0 and fi < msa_obj.array.shape[1]
                 }
             )
             findexes.sort()
             rindexes = list(
                 {
                     ri
-                    for ri in (range(i, i + cfg["amplicon_size_max"]) for i in indexes)
+                    for ri in (range(i, i + config.amplicon_size_max) for i in indexes)
                     for ri in ri
-                    if ri >= 0 and ri < msa.array.shape[1]
+                    if ri >= 0 and ri < msa_obj.array.shape[1]
                 }
             )
             rindexes.sort()
 
         # Add some msa data to the dict
-        msa_data[msa_index]["msa_name"] = msa.name
+        msa_data[msa_index]["msa_name"] = msa_obj.name
         msa_data[msa_index]["msa_path"] = str(local_msa_path.absolute())
-        msa_data[msa_index]["msa_chromname"] = msa._chrom_name
-        msa_data[msa_index]["msa_uuid"] = msa._uuid
+        msa_data[msa_index]["msa_chromname"] = msa_obj._chrom_name
+        msa_data[msa_index]["msa_uuid"] = msa_obj._uuid
+
+        logger.info(
+            "Read in MSA: <blue>{msa_path}</>\tseqs:<green>{msa_rows}</>\tcols:<green>{msa_cols}</>",
+            msa_path=msa_obj.name,
+            msa_rows=msa_obj.array.shape[0],
+            msa_cols=msa_obj.array.shape[1],
+        )
 
         # Split the logic for the different modes
         match mode:
             case PanelRunModes.REGION_ONLY:
-                msa.digest(cfg, indexes=(findexes, rindexes))  # type: ignore
+                msa_obj.digest(config=config, indexes=(findexes, rindexes))  # type: ignore
             case _:
-                msa.digest(cfg, indexes=None)
+                msa_obj.digest(config=config, indexes=None)
 
         # Log the digestion
         logger.info(
             "<blue>{msa_path}</>: <green>regions</> digested to <green>{num_fkmers}</> FKmers and <green>{num_rkmers}</> RKmers",
-            msa_path=msa._chrom_name,
-            num_fkmers=len(msa.fkmers),
-            num_rkmers=len(msa.rkmers),
+            msa_path=msa_obj._chrom_name,
+            num_fkmers=len(msa_obj.fkmers),
+            num_rkmers=len(msa_obj.rkmers),
         )
 
         # Generate all primerpairs
-        msa.generate_primerpairs(
-            amplicon_size_max=cfg["amplicon_size_max"],
-            amplicon_size_min=cfg["amplicon_size_min"],
-            dimerscore=cfg["dimerscore"],
+        msa_obj.generate_primerpairs(
+            amplicon_size_max=config.amplicon_size_max,
+            amplicon_size_min=config.amplicon_size_max,
+            dimerscore=config.dimer_score,
         )
         logger.info(
             "<blue>{msa_path}</>: Generated <green>{num_pp}</> possible amplicons",
-            msa_path=msa._chrom_name,
-            num_pp=len(msa.primerpairs),
+            msa_path=msa_obj._chrom_name,
+            num_pp=len(msa_obj.primerpairs),
         )
 
         match mode:
             case PanelRunModes.REGION_ONLY:
                 # Filter the primerpairs to only include the ones with scores (cover regions)
-                msa.primerpairs = [
-                    x for x in msa.primerpairs if msa.get_pp_score(x) > 0
+                msa_obj.primerpairs = [
+                    x for x in msa_obj.primerpairs if msa_obj.get_pp_score(x) > 0
                 ]
-                msa.primerpairs.sort(key=lambda x: x.fprimer.end)
-                print("Filtered primerpairs", len(msa.primerpairs))
+                msa_obj.primerpairs.sort(key=lambda x: x.fprimer.end)
+                print("Filtered primerpairs", len(msa_obj.primerpairs))
             case _:
                 continue
 
         # Add the MSA to the dict
-        msa_dict[msa_index] = msa
+        msa_dict[msa_index] = msa_obj
 
     # Add all the msa_data to the cfg
-    cfg["msa_data"] = msa_data
+    config_dict["msa_data"] = msa_data
 
     ## Digestion finished, now create the panel
 
@@ -344,7 +300,7 @@ def panelcreate(
     msa_index_to_amplicon_count = {k: 0 for k in msa_data.keys()}
 
     # Create the panel object
-    panel: Panel = Panel(msa_dict, cfg, mismatch_db)
+    panel: Panel = Panel(msa_dict, config=config, matchdb=mismatch_db)
 
     # MSA_INDEX_TO_CHROMNAME =
     msa_chromname_to_index = {
@@ -369,15 +325,15 @@ def panelcreate(
                 bedprimerpair=bedprimerpair.amplicon_prefix,
             )
     # if pool > 1 then should be an ol scheme
-    if npools > 1:
+    if config.n_pools > 1:
         # Sort primerpairs start position
-        for msa in panel._msa_dict.values():
-            msa.primerpairs.sort(key=lambda x: x.fprimer.end)
+        for msa_obj in panel._msa_dict.values():
+            msa_obj.primerpairs.sort(key=lambda x: x.fprimer.end)
 
         # Add the first primerpair
 
     counter = 0
-    while counter < cfg["maxamplicons"]:
+    while max_amplicons is None or counter < max_amplicons:
         match panel.add_next_primerpair():
             case PanelReturn.ADDED_PRIMERPAIR:
                 # Update the amplicon count
@@ -401,7 +357,7 @@ def panelcreate(
                 break
 
     # Try adding all remaining primerpairs
-    while counter < cfg["maxamplicons"] and False:
+    while max_amplicons is None or counter < max_amplicons:
         match panel.keep_adding():
             case PanelReturn.ADDED_PRIMERPAIR:
                 # Update the amplicon count
@@ -448,18 +404,18 @@ def panelcreate(
 
     region_to_coverage = {}
     # If region bedfile given, check that all regions have been covered
-    if cfg["regionbedfile"] is not None:
-        for msa in panel._msa_dict.values():
-            assert msa.regions is not None
-            for region in msa.regions:
-                region_coverage = panel._coverage[msa.msa_index][
+    if regionbedfile is not None:
+        for msa_obj in panel._msa_dict.values():
+            assert msa_obj.regions is not None
+            for region in msa_obj.regions:
+                region_coverage = panel._coverage[msa_obj.msa_index][
                     region.start : region.stop
                 ]
                 region_mean_coverage = region_coverage.mean()
 
                 logger.info(
                     "<blue>{msa_name}</>:{regionname} <yellow>{regionstart}:{regionstop}</> {percent} covered",
-                    msa_name=msa._chrom_name,
+                    msa_name=msa_obj._chrom_name,
                     regionstart=region.start,
                     regionstop=region.stop,
                     percent=f"{round(region_mean_coverage * 100, 2)}%",
@@ -485,44 +441,43 @@ def panelcreate(
     # Write all the consensus sequences to a single file
     with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
         reference_records = []
-        if cfg["mapping"] == "first":
-            for msa in msa_dict.values():
-                reference_records.append(
-                    SeqRecord.SeqRecord(
-                        seq=Seq.Seq(generate_reference(msa.array)),
-                        id=msa._chrom_name,
-                    )
+        for msa_obj in msa_dict.values():
+            if config.mapping == MappingType.FIRST:
+                seq_str = generate_reference(msa_obj.array)
+            elif config.mapping == MappingType.CONSENSUS:
+                seq_str = generate_consensus(msa_obj.array)
+            else:
+                raise ValueError("Mapping must be 'first' or 'consensus'")
+
+            reference_records.append(
+                SeqRecord.SeqRecord(
+                    seq=Seq.Seq(seq_str),
+                    id=msa_obj._chrom_name,
                 )
-        elif cfg["mapping"] == "consensus":
-            for msa in msa_dict.values():
-                reference_records.append(
-                    SeqRecord.SeqRecord(
-                        seq=Seq.Seq(generate_consensus(msa.array)),
-                        id=msa._chrom_name,
-                    )
-                )
+            )
+
         SeqIO.write(reference_records, reference_outfile, "fasta")
 
     # Generate all the hashes
     ## Generate the bedfile hash, and add it into the config
     primer_md5 = hashlib.md5("\n".join(primer_bed_str).encode()).hexdigest()
-    cfg["primer.bed.md5"] = primer_md5
+    config_dict["primer.bed.md5"] = primer_md5
 
     ## Generate the amplicon hash, and add it into the config
     amp_md5 = hashlib.md5(amp_bed_str.encode()).hexdigest()
-    cfg["amplicon.bed.md5"] = amp_md5
+    config_dict["amplicon.bed.md5"] = amp_md5
 
     ## Read in the reference file and generate the hash
     with open(OUTPUT_DIR / "reference.fasta") as reference_outfile:
         ref_md5 = hashlib.md5(reference_outfile.read().encode()).hexdigest()
-    cfg["reference.fasta.md5"] = ref_md5
+    config_dict["reference.fasta.md5"] = ref_md5
 
     # Write the config dict to file
     # Add the bedfile to the cfg
-    cfg["regionbedfile"] = str(regionbedfile)
-    cfg["inputbedfile"] = str(inputbedfile)
+    config_dict["regionbedfile"] = str(regionbedfile)
+    config_dict["inputbedfile"] = str(inputbedfile)
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
-        outfile.write(json.dumps(cfg, sort_keys=True))
+        outfile.write(json.dumps(config_dict, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data

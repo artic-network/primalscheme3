@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from primalscheme3.core.classes import FKmer, RKmer
-from primalscheme3.core.config import config_dict as cfg
+from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import (
     DIGESTION_ERROR,
     digest,
@@ -142,6 +142,8 @@ class Test_ReduceKmers(unittest.TestCase):
 
 
 class Test_WalkLeft(unittest.TestCase):
+    config = Config()
+
     def test_walk_left(self):
         """
         Ensure the Tm prodvided is greater than the min
@@ -164,14 +166,26 @@ class Test_WalkLeft(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = "GTCCAATGGTGCAAAAGGTATAATCATTAAT"
 
         self.assertGreaterEqual(
-            calc_tm(expected, cfg),
-            calc_tm([x for x in result][0], cfg),
+            calc_tm(
+                expected,
+                mv_conc=self.config.mv_conc,
+                dv_conc=self.config.dv_conc,
+                dna_conc=self.config.dna_conc,
+                dntp_conc=self.config.dntp_conc,
+            ),
+            calc_tm(
+                [x for x in result][0],
+                mv_conc=self.config.mv_conc,
+                dv_conc=self.config.dv_conc,
+                dna_conc=self.config.dna_conc,
+                dntp_conc=self.config.dntp_conc,
+            ),
         )
 
     def test_walk_left_expandambs(self):
@@ -194,7 +208,7 @@ class Test_WalkLeft(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = ["CCAATGGTGCAAAAGGTACAATCATTAAT", "GTCCAATGGTGCAAAAGGTATAATCATTAAT"]
@@ -227,7 +241,7 @@ class Test_WalkLeft(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = [ContainsInvalidBase()]
@@ -254,7 +268,7 @@ class Test_WalkLeft(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = [WalksOut()]
@@ -262,6 +276,8 @@ class Test_WalkLeft(unittest.TestCase):
 
 
 class Test_WalkRight(unittest.TestCase):
+    config = Config()
+
     def test_walk_right(self):
         """
         Ensure the Tm prodvided is greater than the min
@@ -284,14 +300,26 @@ class Test_WalkRight(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = "GTCCAATGGTGCAAAAGGTATAATCATTAAT"
 
         self.assertGreaterEqual(
-            calc_tm(expected, cfg),
-            calc_tm([x for x in result][0], cfg),
+            calc_tm(
+                expected,
+                mv_conc=self.config.mv_conc,
+                dv_conc=self.config.dv_conc,
+                dna_conc=self.config.dna_conc,
+                dntp_conc=self.config.dntp_conc,
+            ),
+            calc_tm(
+                [x for x in result][0],
+                mv_conc=self.config.mv_conc,
+                dv_conc=self.config.dv_conc,
+                dna_conc=self.config.dna_conc,
+                dntp_conc=self.config.dntp_conc,
+            ),
         )
 
     def test_walk_right_expandambs(self):
@@ -316,7 +344,7 @@ class Test_WalkRight(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = ["TCCAATGGTGCAAAAGGTACAATCA", "TCCAATGGTGCAAAAGGTATAATCATTAATG"]
@@ -348,7 +376,7 @@ class Test_WalkRight(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = [ContainsInvalidBase()]
@@ -377,7 +405,7 @@ class Test_WalkRight(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         # Process the second sequence in a hacky way
@@ -389,7 +417,7 @@ class Test_WalkRight(unittest.TestCase):
                 left,
                 1,
                 "".join(msa_array[0, left:right]),
-                cfg,
+                self.config,
             )
         )
 
@@ -417,7 +445,7 @@ class Test_WalkRight(unittest.TestCase):
             left,
             0,
             "".join(msa_array[0, left:right]),
-            cfg,
+            self.config,
         )
 
         expected = [WalksOut()]
@@ -426,9 +454,7 @@ class Test_WalkRight(unittest.TestCase):
 
 class Test_MPRDigest(unittest.TestCase):
     def setUp(self):
-        self.cfg = cfg
-        self.cfg["reducekmers"] = False
-        self.cfg["dimerscore"] = -26
+        self.config: Config = Config()
 
     def create_array(self, seqs) -> np.ndarray:
         array_list = []
@@ -443,7 +469,7 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        data = (self.create_array(seqs), cfg, 20, 0)
+        data = (self.create_array(seqs), self.config, 20, 0)
         result = mp_r_digest(data)
 
         # The Expected Sequence
@@ -458,7 +484,7 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), cfg, 20, 0)
+        data = (self.create_array(seqs), self.config, 20, 0)
         result = mp_r_digest(data)
 
         # The Expected Sequence
@@ -474,7 +500,7 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        data = (self.create_array(seqs), cfg, 20, 0.5)
+        data = (self.create_array(seqs), self.config, 20, 0.5)
         result = mp_r_digest(data)
 
         # The Expected Sequence
@@ -491,7 +517,7 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.cfg, 60, 0.5)
+        data = (self.create_array(seqs), self.config, 60, 0.5)
         result = mp_r_digest(data)
 
         # The Expected Sequence
@@ -507,7 +533,7 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.cfg, 24, 0)
+        data = (self.create_array(seqs), self.config, 24, 0)
         result = mp_r_digest(data)
 
         # The Expected Sequence
@@ -525,8 +551,8 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        local_cfg = self.cfg.copy()
-        local_cfg["primer_max_walk"] = 10  # Force the primer to walk to far
+        local_cfg = Config()
+        local_cfg.primer_max_walk = 10  # Force the primer to walk to far
 
         data = (self.create_array(seqs), local_cfg, 10, 0)
         result = mp_r_digest(data)
@@ -538,9 +564,7 @@ class Test_MPRDigest(unittest.TestCase):
 
 class Test_MPFDigest(unittest.TestCase):
     def setUp(self):
-        self.cfg = cfg
-        self.cfg["reducekmers"] = False
-        self.cfg["dimerscore"] = -26
+        self.config = Config()
 
     def create_array(self, seqs) -> np.ndarray:
         array_list = []
@@ -555,7 +579,7 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        data = (self.create_array(seqs), self.cfg, 40, 0)
+        data = (self.create_array(seqs), self.config, 40, 0)
         result = mp_f_digest(data)
 
         # The Expected Sequence
@@ -570,7 +594,7 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.cfg, 40, 0)
+        data = (self.create_array(seqs), self.config, 40, 0)
         result = mp_f_digest(data)
 
         # The Expected Sequence
@@ -585,7 +609,7 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.cfg, 40, 0.5)
+        data = (self.create_array(seqs), self.config, 40, 0.5)
         result = mp_f_digest(data)
 
         # The Expected Sequence
@@ -602,7 +626,7 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.cfg, 5, 0.5)
+        data = (self.create_array(seqs), self.config, 5, 0.5)
         result = mp_f_digest(data)
 
         # The Expected Sequence
@@ -618,7 +642,7 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.cfg, 24, 0)
+        data = (self.create_array(seqs), self.config, 24, 0)
         result = mp_f_digest(data)
 
         # The Expected Sequence
@@ -636,8 +660,8 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        local_cfg = self.cfg.copy()
-        local_cfg["primer_max_walk"] = 10  # Force the primer to walk to far
+        local_cfg = Config()
+        local_cfg.primer_max_walk = 10  # Force the primer to walk to far
 
         data = (self.create_array(seqs), local_cfg, 60, 0)
         result = mp_f_digest(data)
@@ -649,10 +673,7 @@ class Test_MPFDigest(unittest.TestCase):
 
 class TestDigest(unittest.TestCase):
     def setUp(self):
-        self.cfg = cfg
-        self.cfg["reducekmers"] = False
-        self.cfg["dimerscore"] = -26
-        cfg["minbasefreq"] = 0
+        self.config = Config()
         self.pm = PM()
 
     def create_array(self, seqs) -> np.ndarray:
@@ -672,7 +693,10 @@ class TestDigest(unittest.TestCase):
         msa_array = self.create_array(seqs)
 
         results = digest(
-            msa_array=msa_array, cfg=cfg, indexes=([60], [1]), progress_manager=PM()
+            msa_array=msa_array,
+            config=self.config,
+            indexes=([60], [1]),
+            progress_manager=PM(),
         )
         expected_fkmer = FKmer(60, ["GTCCAATGGTGCAAAAGGTATAATCATTAAT"])
 
@@ -690,7 +714,10 @@ class TestDigest(unittest.TestCase):
         msa_array = msa_array = self.create_array(seqs)
 
         results = digest(
-            msa_array=msa_array, cfg=cfg, indexes=([1], [25]), progress_manager=PM()
+            msa_array=msa_array,
+            config=self.config,
+            indexes=([1], [25]),
+            progress_manager=PM(),
         )
         expected_rkmer = RKmer(25, ["TGATTATACCTTTTGCACCATTGGACATTA"])
 

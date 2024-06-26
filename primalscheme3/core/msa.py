@@ -6,6 +6,7 @@ import numpy as np
 from Bio import SeqIO
 
 from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
 from primalscheme3.core.mapping import create_mapping
 from primalscheme3.core.seq_functions import remove_end_insertion
@@ -103,7 +104,7 @@ class MSA:
 
     def digest(
         self,
-        cfg: dict,
+        config: Config,
         indexes: tuple[list[int], list[int]] | None = None,
     ) -> None:
         """
@@ -116,7 +117,7 @@ class MSA:
         # Create all the kmers
         self.fkmers, self.rkmers = digest(
             msa_array=self.array,
-            cfg=cfg,
+            config=config,
             indexes=indexes,
             logger=self.logger,
             progress_manager=self.progress_manager,
