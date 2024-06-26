@@ -12,14 +12,13 @@ from primaldimer_py import do_pools_interact_py  # type: ignore
 from primalscheme3.core.bedfiles import (
     read_in_bedprimerpairs,
 )
-from primalscheme3.core.config import Config
+from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.mapping import (
-    MappingType,
     generate_consensus,
     generate_reference,
 )

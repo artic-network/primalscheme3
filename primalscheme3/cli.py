@@ -8,8 +8,7 @@ from typing_extensions import Annotated
 
 # Module imports
 from primalscheme3.__init__ import __version__
-from primalscheme3.core.config import Config
-from primalscheme3.core.mapping import MappingType
+from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.interaction.interaction import visulise_interactions
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
