@@ -20,6 +20,7 @@ pytest = "^7.4.2"
 typer = "^0.12.3"
 
 wheel = "^0.43.0"
+setuptools = "^70.1.1"
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^4.1.0"
 ruff = "^0.3.4"
@@ -28,7 +29,7 @@ ruff = "^0.3.4"
 mkdocs-material = "^9.5.27"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
