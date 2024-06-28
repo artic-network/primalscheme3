@@ -22,11 +22,10 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Run image
-        uses: abatilo/actions-poetry@v2
-        with:
-          poetry-version: ${{ matrix.poetry-version }}
-      - name: Install with poetry
-        run: poetry install
-      - name: Poetry pytest
-        run: poetry run pytest
+      # Install and test via pip
+      - name: install via pip
+        run: pip install .
+      - name: Install pytest
+        run: pip install pytest
+      - name: Run tests
+        run: pytest .
