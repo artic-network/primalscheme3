@@ -21,10 +21,10 @@ def reverse_complement(kmer_seq: str) -> str:
 
 
 def get_most_common_base(array: np.ndarray, col_index: int) -> str:
-    col_slice = array[:, col_index]
-    counter = Counter(col_slice)
-    del counter[""]
-    return counter.most_common(1)[0][0]
+    values, counts = np.unique(array[:, col_index], return_counts=True)
+    counter = dict(zip(values, counts))
+    counter.pop("", None)
+    return max(counter, key=counter.get)  # type: ignore
 
 
 def remove_end_insertion(msa_array: np.ndarray) -> np.ndarray:
@@ -102,13 +102,19 @@ def entropy_score_array(msa: np.ndarray) -> list[float]:
         value, counts = np.unique(msa[:, col], return_counts=True)
         count_dict = dict(zip(value, counts))
 
+        # Remove non DNA bases
+        count_dict = {k: v for k, v in count_dict.items() if k in ALL_BASES}
+
+        parsed_counts = {base: 0 for base in "ACGT"}
         # Expand ambiguous bases
         for base in count_dict:
             if base in AMB_BASES:
-                amb_count = count_dict.pop(base)  # Remove the ambiguous base
+                amb_count = count_dict.get(base, 0)  # Remove the ambiguous base
                 for expanded_base in extend_ambiguous_base(base):
                     if expanded_base != "N":
-                        count_dict[expanded_base] += amb_count
+                        parsed_counts[expanded_base] += amb_count
+            else:
+                parsed_counts[base] += count_dict.get(base, 0)
         # Remove Invalid bases
         parsed_counts = {k: v for k, v in count_dict.items() if k in SIMPLE_BASES}
 
