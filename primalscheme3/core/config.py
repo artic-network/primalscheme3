@@ -118,32 +118,24 @@ class Config:
         return "\n".join(f"{key}: {val}" for key, val in self.items())
 
 
-config_dict = {
-    "n_cores": 1,
-    "amplicon_size_min": 360,
-    "amplicon_size_max": 400,
-    "min_overlap": 10,
-    "mv_conc": 100.0,
-    "dv_conc": 2.0,
-    "dntp_conc": 0.8,
-    "dna_conc": 15.0,
-    "primer_gc_min": 30,
-    "primer_gc_max": 55,
-    "primer_tm_min": 59.5,
-    "primer_tm_max": 62.5,
-    "primer_homopolymer_max": 5,
-    "primer_hairpin_th_max": 47.0,  #
-    "editdist_max": 1,
-    "editdist_end3p": 6,
-    "primer_size_max": 36,
-    "primer_size_min": 18,  # primer_size_min
-    "primer_max_walk": 80,
-    "minbasefreq": 0,
-    "reducekmers": False,
-    "dimerscore": -27,
-    "mismatch_fuzzy": True,
-    "mismatch_kmersize": 18,  # primer_size_min
-    "ignore_n": False,
+# All bases allowed in the input MSA
+IUPAC_ALL_ALLOWED_DNA = {
+    "A",
+    "G",
+    "K",
+    "Y",
+    "B",
+    "S",
+    "N",
+    "H",
+    "C",
+    "W",
+    "D",
+    "R",
+    "M",
+    "T",
+    "V",
+    "-",
 }
 
 SIMPLE_BASES = {"A", "C", "G", "T"}
