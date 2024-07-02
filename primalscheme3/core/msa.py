@@ -1,33 +1,75 @@
 import pathlib
-import sys
 from uuid import uuid4
 
 import numpy as np
 from Bio import SeqIO
 
 from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
-from primalscheme3.core.config import Config
+from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
+from primalscheme3.core.errors import (
+    MSAFileInvalid,
+    MSAFileInvalidBase,
+    MSAFileInvalidLength,
+)
 from primalscheme3.core.mapping import create_mapping
 from primalscheme3.core.seq_functions import remove_end_insertion
 
 
-def msa_qc(array: np.ndarray):
+def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
     """
-    Checks all sequences are the same length. Checks there are no empty cols
+    Parses a multiple sequence alignment (MSA) file in FASTA format.
+
+    This function reads an MSA file, validates its format and content, and returns a numpy array of the sequences
+    and a dictionary with additional information. It checks for sequences of different lengths, empty columns,
+    and non-DNA characters. It also removes end insertions from the sequences.
+
+    Args:
+        msa_path (pathlib.Path): The path to the MSA file to be parsed.
+
+    Returns:
+        tuple: A tuple containing two elements:
+            - np.ndarray: A 2D numpy array where each row represents a sequence in the MSA and each column represents a position in the alignment.
+            - dict: A dictionary with additional information about the MSA (currently not implemented, returns an empty dict).
+
+    Raises:
+        MSAFileInvalidLength: If the MSA contains sequences of different lengths.
+        MSAFileInvalid: If the MSA file is empty or not in FASTA format.
+        ValueError: If the MSA contains empty columns.
+        MSAFileInvalidBase: If the MSA contains non-DNA characters.
     """
+    try:
+        records_index = SeqIO.index(str(msa_path), "fasta")
+        array = np.array(
+            [record.seq.upper() for record in records_index.values()],
+            dtype="U1",
+            ndmin=2,  # Enforce 2D array even if one genome
+        )
+    except ValueError as e:
+        raise MSAFileInvalidLength("MSA contains sequences of different lengths") from e
+
+    # Check for empty MSA, caused by no records being parsed
+    if array.size == 0:
+        raise MSAFileInvalid(
+            "No sequences in MSA file. Please ensure the MSA uses .fasta format."
+        )
+
     empty_set = {"", "-"}
 
-    # Check rows are same length
-    for row_index in range(0, array.shape[0]):
-        if len(array[row_index, :]) != len(array[0]):
-            raise ValueError("MSA contains sequences of different lengths")
-
-    # Check for empty columns
     for col_index in range(0, array.shape[1]):
         slice: set[str] = set(array[:, col_index])
+        # Check for empty columns
         if slice.issubset(empty_set):
             raise ValueError(f"MSA contains empty column at: {col_index}")
+        # Check for non DNA characters
+        if slice.difference(IUPAC_ALL_ALLOWED_DNA):
+            raise MSAFileInvalidBase(
+                f"MSA contains non DNA characters ({str(slice.difference(IUPAC_ALL_ALLOWED_DNA))}) at column: {col_index}"
+            )
+    # Remove end insertions
+    array = remove_end_insertion(array)
+
+    return array, dict(records_index)
 
 
 class MSA:
@@ -64,23 +106,13 @@ class MSA:
         self.progress_manager = progress_manager
 
         # Read in the MSA
-        records_index = SeqIO.index(self.path, "fasta")
-        self.array = np.array(
-            [record.seq.upper() for record in records_index.values()],
-            dtype="U1",
-            ndmin=2,  # Enforce 2D array even if one genome
-        )
-        # Do some basic QC
         try:
-            msa_qc(self.array)
-        except ValueError as e:
+            self.array, records_index = parse_msa(path)
+        except Exception as e:
+            # Log the error and raise it
             if self.logger:
                 self.logger.error(f"MSA: {self.name} failed QC: {e}")
-            else:
-                print(f"MSA: {self.name} failed QC: {e}")
-            sys.exit(1)
-
-        self.array = remove_end_insertion(self.array)
+            raise e
 
         # Create the mapping array
         # Goes from msa idx -> ref idx

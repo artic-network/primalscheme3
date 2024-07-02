@@ -1,3 +1,6 @@
+from click import UsageError
+
+
 class CustomErrors(Exception):
     """Base class for custom errors"""
 
@@ -50,3 +53,42 @@ ERROR_SET = {
     GapOnSetBase(),
     WalksTooFar(),
 }
+
+
+# MSA file errors
+class MSAFileInvalid(UsageError):
+    """Error raised when the MSA file is invalid"""
+
+    pass
+
+
+class MSAFileInvalidBase(UsageError):
+    """Error raised when the MSA file contains invalid bases"""
+
+    pass
+
+
+class MSAFileInvalidLength(UsageError):
+    """Error raised when the MSA file contains sequences of different lengths"""
+
+    pass
+
+
+class MSAFileDuplicateID(UsageError):
+    """Error raised when the MSA file contains sequences of different lengths"""
+
+    pass
+
+
+# Bed file errors
+class BEDFileInvalid(UsageError):
+    """Error raised when the BED file is invalid"""
+
+    pass
+
+
+# Digestion Errors
+class DigestionNoPrimerPairs(UsageError):
+    """Error raised with no PrimerPairs are generated"""
+
+    pass
