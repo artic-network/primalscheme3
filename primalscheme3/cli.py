@@ -41,7 +41,7 @@ def check_path_is_file(value: str | pathlib.Path) -> pathlib.Path:
 
 
 # Create the main app
-app = typer.Typer(name="PrimalScheme3", no_args_is_help=True)
+app = typer.Typer(name="primalscheme3", no_args_is_help=True)
 
 
 def check_output_dir(output: pathlib.Path, force: bool):
@@ -155,7 +155,14 @@ def scheme_create(
 
     # Set up the progress manager
     pm = ProgressManager()
-    schemecreate(msa=msa, output_dir=output, config=config, pm=pm, force=force)
+    schemecreate(
+        msa=msa,
+        output_dir=output,
+        config=config,
+        pm=pm,
+        force=force,
+        inputbedfile=input_bedfile,
+    )
 
 
 @app.command(no_args_is_help=True)
