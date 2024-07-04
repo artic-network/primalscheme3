@@ -62,19 +62,19 @@ class MSAFileInvalid(UsageError):
     pass
 
 
-class MSAFileInvalidBase(UsageError):
+class MSAFileInvalidBase(MSAFileInvalid):
     """Error raised when the MSA file contains invalid bases"""
 
     pass
 
 
-class MSAFileInvalidLength(UsageError):
+class MSAFileInvalidLength(MSAFileInvalid):
     """Error raised when the MSA file contains sequences of different lengths"""
 
     pass
 
 
-class MSAFileDuplicateID(UsageError):
+class MSAFileDuplicateID(MSAFileInvalid):
     """Error raised when the MSA file contains sequences of different lengths"""
 
     pass
@@ -88,7 +88,13 @@ class BEDFileInvalid(UsageError):
 
 
 # Digestion Errors
-class DigestionNoPrimerPairs(UsageError):
-    """Error raised with no PrimerPairs are generated"""
+class DigestionFail(UsageError):
+    """Base class for digestion failures"""
+
+    pass
+
+
+class DigestionFailNoPrimerPairs(DigestionFail):
+    """Error raised when no primer pairs are found"""
 
     pass
