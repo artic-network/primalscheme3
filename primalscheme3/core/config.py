@@ -107,9 +107,7 @@ class Config:
             if isinstance(val, Enum):
                 json[key] = val.value
             elif isinstance(val, pathlib.Path):
-                json[key] = str(
-                    val.relative_to(pathlib.Path.cwd()) if val.is_absolute() else val
-                )
+                json[key] = str(val)
             else:
                 json[key] = val
         return json
