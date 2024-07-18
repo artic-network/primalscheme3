@@ -6,13 +6,6 @@ import numpy as np
 from primalscheme3.core.seq_functions import extend_ambiguous_base
 
 
-def trucnate_msa(msa: np.ndarray, mapping_index: int = 0) -> np.ndarray:
-    """
-    Removes all the bases outside the reference genome
-    """
-    return msa[:, msa[mapping_index] != ""]
-
-
 def create_mapping(
     msa: np.ndarray, mapping_index: int = 0
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -22,25 +15,22 @@ def create_mapping(
         truncated_msa: np.ndarray
 
     mapping_array: Each position in the list corrasponds to the same index in the MSA, The value in the list is the position in the reference genome
-    truncated_msa: The MSA with all the bases outside the reference genome removed
     """
     # As NP is modifited in place, returning is not nessisary but is done for clarity
-    # Truncate the msa
-    truncated_msa = trucnate_msa(msa, mapping_index)
     # Create the empty mapping array
-    mapping_list = [None] * truncated_msa.shape[1]
+    mapping_list = [None] * msa.shape[1]
     mapping_array = np.array(mapping_list)
     # Select the reference genome
-    reference_genome = truncated_msa[mapping_index]
+    reference_genome = msa[mapping_index]
     # Iterate over the msa genome
     current_ref_index = 0
-    for col_index in range(truncated_msa.shape[1]):
+    for col_index in range(msa.shape[1]):
         # If the base is not a gap, assign the mapping
         if reference_genome[col_index] not in {"", "-"}:
             mapping_array[col_index] = current_ref_index
             # increase refence index
             current_ref_index += 1
-    return (mapping_array, truncated_msa)
+    return (mapping_array, msa)
 
 
 def generate_consensus(msa: np.ndarray) -> str:

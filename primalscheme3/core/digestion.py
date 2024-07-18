@@ -6,6 +6,7 @@ from typing import Callable, Union
 
 import networkx as nx
 import numpy as np
+from loguru import Logger
 
 # Submodules
 from primaldimer_py import (
@@ -709,7 +710,7 @@ def digest(
     config: Config,
     progress_manager: ProgressManager,
     indexes: tuple[list[int], list[int]] | None = None,
-    logger: None = None,
+    logger: None | Logger = None,
     chrom: str = "",
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
@@ -751,14 +752,16 @@ def digest(
         if logger is not None:
             if isinstance(fkmer, tuple):
                 logger.debug(
-                    "FKmer: <red>{end_col}\t{error}</>",
+                    "{chrom}:FKmer: <red>{end_col}\t{error}</>",
                     end_col=fkmer[0],
                     error=fkmer[1].value,
+                    chrom=chrom,
                 )
             else:
                 logger.debug(
-                    "FKmer: <green>{end_col}</>: AllPass",
+                    "{chrom}:FKmer: <green>{end_col}</>: AllPass",
                     end_col=fkmer.end,  # type: ignore
+                    chrom=chrom,
                 )
 
         # Append valid FKmers
@@ -779,14 +782,16 @@ def digest(
         if logger is not None:
             if isinstance(rkmer, tuple):
                 logger.debug(
-                    "RKmer: <red>{start_col}\t{error}</>",
+                    "{chrom}:RKmer: <red>{start_col}\t{error}</>",
                     start_col=rkmer[0],
                     error=rkmer[1].value,
+                    chrom=chrom,
                 )
             else:
                 logger.debug(
-                    "RKmer: <green>{start_col}</>: AllPass",
+                    "{chrom}:RKmer: <green>{start_col}</>: AllPass",
                     start_col=rkmer.start,  # type: ignore
+                    chrom=chrom,
                 )
 
         # Append valid RKmers

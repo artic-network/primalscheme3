@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from primalscheme3.core.mapping import create_mapping, generate_consensus, trucnate_msa
+from primalscheme3.core.mapping import create_mapping, generate_consensus
 
 
 class Test_TruncateMsa(unittest.TestCase):
@@ -34,19 +34,6 @@ class Test_TruncateMsa(unittest.TestCase):
             [x for x in "ATTATCNATTTCAGCACTG"],
         ]
     )
-
-    def test_trucnate_msa(self):
-        """
-        Test expand_ambs correctly expands ambiguity codes
-        """
-        test_input = self.input.copy()
-        result = trucnate_msa(test_input, 0)
-
-        # Check the result is as expected
-        self.assertEqual(result.shape, (4, 12))
-
-        # Check the result is as expected
-        self.assertEqual(list(result[0, :]), [x for x in "ATCTA--TCAGC"])
 
 
 class Test_CreateMapping(unittest.TestCase):
@@ -97,7 +84,27 @@ class Test_CreateMapping(unittest.TestCase):
         # Check the result is as expected
         self.assertEqual(
             list(mapping_array),
-            [0, 1, 2, 3, 4, None, None, 5, 6, 7, 8, 9],
+            [
+                None,
+                None,
+                None,
+                0,
+                1,
+                2,
+                3,
+                4,
+                None,
+                None,
+                5,
+                6,
+                7,
+                8,
+                9,
+                None,
+                None,
+                None,
+                None,
+            ],
         )
 
 
