@@ -6,7 +6,7 @@ from typing import Callable, Union
 
 import networkx as nx
 import numpy as np
-from loguru import Logger
+from loguru._logger import Logger
 
 # Submodules
 from primaldimer_py import (
@@ -703,6 +703,91 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
         for seq in v:
             seqs.add(f"{seq}{k}")
     return seqs
+
+
+def concurrent_digest(
+    msa_array: np.ndarray,
+    config: Config,
+    findexes: list[int],
+    rindexes: list[int],
+) -> tuple[list[FKmer], list[RKmer]]:
+    """
+    Carries out the FKmer and RKmer digestion in parallel.
+    """
+    import multiprocessing as mp
+
+    q = mp.Queue()
+    jobs = (f_digest, r_digest)
+    args = (
+        (
+            msa_array.copy(),
+            config,
+            findexes,
+            None,
+        ),
+        (
+            msa_array.copy(),
+            config,
+            rindexes,
+            None,
+        ),
+    )
+    for job, arg in zip(jobs, args):
+        p = mp.Process(target=job, args=(arg, q))
+        p.start()
+
+    return q.get(), q.get()
+
+
+def f_digest(
+    msa_array: np.ndarray, config: Config, findexes: list[int], logger
+) -> list[FKmer]:
+    fkmers = []
+    for findex in findexes:
+        fkmer = mp_f_digest((msa_array, config, findex, config.min_base_freq))
+
+        # Append valid FKmers
+        if isinstance(fkmer, FKmer) and fkmer.seqs:
+            fkmers.append(fkmer)
+
+        # Log the Digestion
+        if logger is not None:
+            if isinstance(fkmer, tuple):
+                logger.debug(
+                    "FKmer: <red>{end_col}\t{error}</>",
+                    end_col=fkmer[0],
+                    error=fkmer[1].value,
+                )
+            else:
+                logger.debug("FKmer: <green>{end_col}</>: AllPass", end_col=fkmer.end)
+
+    return fkmers
+
+
+def r_digest(
+    msa_array: np.ndarray, config: Config, rindexes: list[int], logger
+) -> list[RKmer]:
+    rkmers = []
+    for rindex in rindexes:
+        rkmer = mp_r_digest((msa_array, config, rindex, config.min_base_freq))
+
+        # Append valid RKmers
+        if isinstance(rkmer, RKmer) and rkmer.seqs:
+            rkmers.append(rkmer)
+
+        # Log the Digestion
+        if logger is not None:
+            if isinstance(rkmer, tuple):
+                logger.debug(
+                    "RKmer: <red>{start_col}\t{error}</>",
+                    start_col=rkmer[0],
+                    error=rkmer[1].value,
+                )
+            else:
+                logger.debug(
+                    "RKmer: <green>{start_col}</>: AllPass", start_col=rkmer.start
+                )
+    return rkmers
 
 
 def digest(
