@@ -1,47 +1,26 @@
 import pathlib
-from collections import Counter
 
 import plotly.graph_objects as go
-from plotly.offline.offline import plot
 from plotly.subplots import make_subplots
 
-# Module imports
 
-
-def calc_base_consensus(align_array) -> list[float]:
-    results = []
-    # Calculate the base proportions
-    for index, column in enumerate(align_array.T):
-        counts = Counter(column)
-        results.append(
-            (
-                index,
-                counts.most_common()[0][0],
-                counts.most_common()[0][1] / len(column),
-            )
-        )
-    return results
-
-
-def calc_variance(align_array, kmer_size=30) -> list[float]:
-    results = []
-    # Calculate the base proportions
-    for col_index in range(0, align_array.shape[1] - kmer_size, 5):
-        slice = align_array[:, col_index : col_index + kmer_size]
-        seqs = {"".join(x) for x in slice}
-        results.append((col_index, len(seqs)))
-    return results
-
-
-def generate_all_plots(plot_data: dict, outdir: pathlib.Path) -> None:
+def generate_all_plots(
+    plot_data: dict, outdir: pathlib.Path, offline_plots: bool = True
+) -> None:
     """Generate all the plots for a scheme from the plot_data"""
     # Generate the plot for each MSA
-
     for chromname, data in plot_data.items():
-        generate_plot2(chromname, data, outdir)
+        generate_plot2(
+            chromname=chromname,
+            msa_data=data,
+            outdir=outdir,
+            offline_plots=offline_plots,
+        )
 
 
-def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
+def generate_plot2(
+    chromname: str, msa_data: dict, outdir: pathlib.Path, offline_plots=True
+) -> None:
     # Create an empty figure with the Fprimer hovers
     fig = make_subplots(
         cols=1,
@@ -371,10 +350,9 @@ def generate_plot2(chromname: str, msa_data: dict, outdir: pathlib.Path):
     fig.update_layout(height=900, title_text=chromname, showlegend=False)
     # plot_bgcolor="rgba(246, 237, 202, 0.5)",
 
-    plot(
-        fig,
-        filename=str(outdir.absolute() / (chromname + ".html")),
-        auto_open=False,
+    fig.write_html(
+        str(outdir.absolute() / (chromname + ".html")),
+        include_plotlyjs=True if offline_plots else "cdn",
     )
     fig.write_image(
         str(outdir.absolute() / (chromname + ".png")),

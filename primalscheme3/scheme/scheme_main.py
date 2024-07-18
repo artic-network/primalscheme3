@@ -24,6 +24,7 @@ from primalscheme3.core.mapping import (
 )
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
+from primalscheme3.core.primer_visual import primer_mismatch_heatmap
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
@@ -241,6 +242,7 @@ def schemecreate(
     pm: ProgressManager | None,
     force: bool = False,
     inputbedfile: pathlib.Path | None = None,
+    offline_plots: bool = True,
 ):
     """
     Creates a scheme based on multiple sequence alignments (MSA).
@@ -252,6 +254,7 @@ def schemecreate(
         pm (ProgressManager | None): Optional. A progress manager instance for UI feedback.
         force (bool): If True, existing output directories will be overwritten.
         inputbedfile (pathlib.Path | None): Optional. A path to an input BED file for incorporating specific primer pairs.
+        offline_plots (bool): If True, plots will be generated for offline use.
 
     Raises:
         SystemExit: If the output directory already exists and the force flag is not set.
@@ -589,6 +592,15 @@ def schemecreate(
         OUTPUT_DIR / "work",
         last_pp_added=scheme._last_pp_added,
     )
-    generate_all_plots(plot_data, OUTPUT_DIR)
+    generate_all_plots(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
+
+    for msa_obj in msa_dict.values():
+        primer_mismatch_heatmap(
+            array=msa_obj.array,
+            seqdict=msa_obj._seq_dict,
+            outpath=OUTPUT_DIR / "work" / f"{msa_obj._chrom_name}_primers.html",
+            bedfile=OUTPUT_DIR / "primer.bed",
+            offline_plots=offline_plots,
+        )
 
     logger.info("Completed Successfully")

@@ -19,6 +19,7 @@ from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.logger import setup_loger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.primer_visual import primer_mismatch_heatmap
 from primalscheme3.core.progress_tracker import ProgressManager
 
 # Module imports
@@ -74,6 +75,8 @@ def panelcreate(
     regionbedfile: pathlib.Path | None = None,
     mode: PanelRunModes = PanelRunModes.ALL,
     max_amplicons: int | None = None,
+    offline_plots: bool = True,
+    plot_mismatches: bool = True,
 ):
     ARG_MSA = msa
     OUTPUT_DIR = pathlib.Path(output_dir).absolute()
@@ -486,4 +489,13 @@ def panelcreate(
         OUTPUT_DIR / "work",
         last_pp_added=panel._last_pp_added,
     )
-    generate_all_plots(plot_data, OUTPUT_DIR)
+    generate_all_plots(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
+
+    for msa_obj in msa_dict.values():
+        primer_mismatch_heatmap(
+            array=msa_obj.array,
+            seqdict=msa_obj._seq_dict,
+            outpath=OUTPUT_DIR / "work" / f"{msa_obj._chrom_name}_primers.html",
+            bedfile=OUTPUT_DIR / "primer.bed",
+            offline_plots=offline_plots,
+        )

@@ -9,6 +9,8 @@ from typing_extensions import Annotated
 # Module imports
 from primalscheme3.__init__ import __version__
 from primalscheme3.core.config import Config, MappingType
+from primalscheme3.core.msa import parse_msa
+from primalscheme3.core.primer_visual import primer_mismatch_heatmap
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.interaction.interaction import visulise_interactions
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
@@ -143,6 +145,12 @@ def scheme_create(
         ),
     ] = Config.input_bedfile,
     high_gc: Annotated[bool, typer.Option(help="Use high GC primers")] = Config.high_gc,
+    offline_plots: Annotated[
+        bool,
+        typer.Option(
+            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+        ),
+    ] = True,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -162,6 +170,7 @@ def scheme_create(
         pm=pm,
         force=force,
         inputbedfile=input_bedfile,
+        offline_plots=offline_plots,
     )
 
 
@@ -279,6 +288,12 @@ def panel_create(
     ] = None,
     force: Annotated[bool, typer.Option(help="Override the output directory")] = False,
     high_gc: Annotated[bool, typer.Option(help="Use high GC primers")] = Config.high_gc,
+    offline_plots: Annotated[
+        bool,
+        typer.Option(
+            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+        ),
+    ] = True,
 ):
     """
     Creates a primerpanel
@@ -302,6 +317,7 @@ def panel_create(
         pm=pm,
         max_amplicons=maxamplicons,
         force=force,
+        offline_plots=offline_plots,
     )
 
 
@@ -416,3 +432,67 @@ def remap_mode(
         msa_path=msa,
         output_dir=output,
     )
+
+
+@app.command(no_args_is_help=True)
+def visualise_primer_mismatches(
+    msa: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The MSA used to design the scheme",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    bedfile: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The bedfile containing the primers",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    output: Annotated[
+        Optional[pathlib.Path],
+        typer.Option(
+            help="Output location of the plot. Leave blank to not save", dir_okay=True
+        ),
+    ] = None,
+    show_plot: Annotated[bool, typer.Option(help="Should the plot auto open")] = False,
+    include_seqs: Annotated[
+        bool,
+        typer.Option(help="Reduces plot filesize, by excluding primer sequences"),
+    ] = True,
+    offline_plots: Annotated[
+        bool,
+        typer.Option(
+            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+        ),
+    ] = True,
+):
+    """
+    Visulise mismatches between primers and the input genomes
+    """
+    if output is None and not show_plot:
+        raise typer.BadParameter(
+            "Either --output or --show-plot must be set to view the plot"
+        )
+    array, seqdict = parse_msa(msa)
+
+    primer_mismatch_heatmap(
+        array=array,
+        seqdict=seqdict,
+        bedfile=bedfile,
+        outpath=output,
+        show_plot=show_plot,
+        include_seqs=include_seqs,
+        offline_plots=offline_plots,
+    )
+
+
+if __name__ == "__main__":
+    app()

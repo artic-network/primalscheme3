@@ -84,6 +84,7 @@ class MSA:
     _chrom_name: str  # only used in the primer.bed file and html report
     _mapping_array: np.ndarray
     _ref_to_msa: dict[int, int]
+    _seq_dict: dict
 
     # Calculated on evaluation
     fkmers: list[FKmer]
@@ -107,7 +108,7 @@ class MSA:
 
         # Read in the MSA
         try:
-            self.array, records_index = parse_msa(path)
+            self.array, self._seq_dict = parse_msa(path)
         except Exception as e:
             # Log the error and raise it
             if self.logger:
@@ -121,7 +122,7 @@ class MSA:
             self._mapping_array = np.array([*range(len(self.array[0]))])
         elif mapping == "first":
             self._mapping_array, self.array = create_mapping(self.array, 0)
-            self._chrom_name = list(records_index)[0]
+            self._chrom_name = list(self._seq_dict)[0]
         else:
             raise ValueError(f"Mapping method: {mapping} not recognised")
 

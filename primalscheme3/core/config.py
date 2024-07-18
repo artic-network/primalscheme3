@@ -200,4 +200,5 @@ AMBIGUOUS_DNA_COMPLEMENT = {
     "B": "V",
     "X": "X",
     "N": "N",
+    "-": "-",
 }
