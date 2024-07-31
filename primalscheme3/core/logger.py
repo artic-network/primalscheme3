@@ -8,7 +8,7 @@ from loguru import logger
 log = logger.opt(colors=True)
 
 
-def setup_loger(OUTPUT_DIR: pathlib.Path | None):
+def setup_logger(OUTPUT_DIR: pathlib.Path | None):
     """
     Sets up the logger for the application
     :param OUTPUT_DIR: The output directory or None for stdout only

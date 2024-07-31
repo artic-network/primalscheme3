@@ -10,7 +10,7 @@ from primalscheme3.core.bedfiles import (
     create_bedfile_str,
     read_in_bedprimerpairs,
 )
-from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.logger import setup_logger
 
 
 def remap(
@@ -26,7 +26,7 @@ def remap(
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
     # Setup logger
-    logger = setup_loger(OUTPUT_DIR)
+    logger = setup_logger(OUTPUT_DIR)
 
     # Read in the primerpairs
     primer_pairs, _header = read_in_bedprimerpairs(bedfile_path)

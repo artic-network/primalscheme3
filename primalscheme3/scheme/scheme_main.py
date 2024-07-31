@@ -17,7 +17,7 @@ from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots
-from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.logger import setup_logger
 from primalscheme3.core.mapping import (
     generate_consensus,
     generate_reference,
@@ -60,9 +60,9 @@ def schemereplace(
 
     # If more than two pools are given throw error
     if config.n_pools > 2:
-        raise ValueError("ERROR: repair is only surported with two pools")
+        raise ValueError("ERROR: repair is only supported with two pools")
 
-    # Create a mapping of chromname/referance to msa_index
+    # Create a mapping of chromname/reference to msa_index
     msa_chrom_to_index: dict[str, int] = {
         msa_data["msa_chromname"]: msa_index
         for msa_index, msa_data in _cfg["msa_data"].items()
@@ -193,7 +193,7 @@ def schemereplace(
 
     accepted_primerpairs = []
     for pos_primerpair in spanning_primerpairs:
-        # Make sure the new primerpair doesnt contain the primers we want to replace
+        # Make sure the new primerpair doesn't contain the primers we want to replace
         if (
             pos_primerpair.fprimer == wanted_pp.fprimer
             or pos_primerpair.rprimer == wanted_pp.rprimer
@@ -274,7 +274,7 @@ def schemecreate(
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
     # Set up the logger
-    logger = setup_loger(OUTPUT_DIR)
+    logger = setup_logger(OUTPUT_DIR)
 
     if pm is None:
         pm = ProgressManager()
@@ -412,7 +412,6 @@ def schemecreate(
                 "No valid primers found for <blue>{msa_name}</>",
                 msa_name=msa_obj.name,
             )
-            sys.exit(1)
 
         # Add the msa to the scheme
         msa_dict[msa_index] = msa_obj

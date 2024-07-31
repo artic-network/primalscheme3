@@ -14,7 +14,7 @@ from primalscheme3.core.create_report_data import (
 )
 from primalscheme3.core.create_reports import generate_all_plots
 from primalscheme3.core.digestion import generate_valid_primerpairs
-from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.logger import setup_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
@@ -39,7 +39,7 @@ def create_flu(args):
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
     # Set up the logger
-    logger = setup_loger(OUTPUT_DIR)
+    logger = setup_logger(OUTPUT_DIR)
     # Set up the progress manager
     pm = ProgressManager()
 

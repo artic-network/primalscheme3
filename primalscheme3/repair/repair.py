@@ -14,7 +14,7 @@ from primalscheme3.core.digestion import (
     f_digest_to_count,
     r_digest_to_count,
 )
-from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.logger import setup_logger
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import reverse_complement
@@ -53,7 +53,7 @@ class BedPrimerPairRepair(BedPrimerPair):
             for count, x in enumerate(self.new_fkmer_seqs, start=num_fprimers)
         ]
 
-        current_rpimer_str = self.rprimer.__str__(
+        current_rprimer_str = self.rprimer.__str__(
             reference=f"{self.chrom_name}",
             amplicon_prefix=f"{self.amplicon_prefix}_{self.amplicon_number}",
             pool=self.pool + 1,
@@ -70,7 +70,7 @@ class BedPrimerPairRepair(BedPrimerPair):
                 for x in [
                     current_fprimers_str,
                     *new_fprimer_str,
-                    current_rpimer_str,
+                    current_rprimer_str,
                     *new_rprimer_str,
                 ]
             ]
@@ -103,9 +103,9 @@ def detect_early_return(seq_counts: dict[str | DIGESTION_ERROR, int]) -> bool:
 
 def thermo_check_seq(seq, base_cfg: dict) -> THERMORESULT | DIGESTION_ERROR:
     # Thermo check
-    themo_result = thermo_check_kmers([seq], base_cfg)
-    if themo_result != THERMORESULT.PASS:
-        return themo_result
+    thermo_result = thermo_check_kmers([seq], base_cfg)
+    if thermo_result != THERMORESULT.PASS:
+        return thermo_result
 
     # Check for hairpins
     elif forms_hairpin([seq], base_cfg):  # type: ignore
@@ -210,7 +210,7 @@ def repair(
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
     # Set up the logger
-    logger = setup_loger(OUTPUT_DIR)
+    logger = setup_logger(OUTPUT_DIR)
 
     ## Set up the progress manager
     if pm is None:
@@ -388,7 +388,7 @@ def repair(
 
     # Amplicon and primertrimmed files should not have changed. Can be copied from the input dir
     # Not sure how to handle the amplicon names, as the primerstem has changed?
-    ## Keep orginal names for now
+    ## Keep original names for now
 
     # Write the config dict to file
     with open(OUTPUT_DIR / "config.json", "w") as outfile:

@@ -16,7 +16,7 @@ from primalscheme3.core.bedfiles import read_in_bedprimerpairs
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import generate_all_plotdata
 from primalscheme3.core.create_reports import generate_all_plots
-from primalscheme3.core.logger import setup_loger
+from primalscheme3.core.logger import setup_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.primer_visual import primer_mismatch_heatmap
@@ -103,7 +103,7 @@ def panelcreate(
     pathlib.Path.mkdir(OUTPUT_DIR / "work", exist_ok=True)
 
     ## Set up the logger
-    logger = setup_loger(OUTPUT_DIR)
+    logger = setup_logger(OUTPUT_DIR)
 
     ## Set up the progress manager
     if pm is None:
