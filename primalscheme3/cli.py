@@ -12,7 +12,7 @@ from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.msa import parse_msa
 from primalscheme3.core.primer_visual import primer_mismatch_heatmap
 from primalscheme3.core.progress_tracker import ProgressManager
-from primalscheme3.interaction.interaction import visulise_interactions
+from primalscheme3.interaction.interaction import visualise_interactions
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
 from primalscheme3.remap.remap import remap
 from primalscheme3.repair.repair import repair
@@ -342,7 +342,7 @@ def interactions(
     """
     Shows all the primer-primer interactions within a bedfile
     """
-    visulise_interactions(bedfile, threshold)
+    visualise_interactions(bedfile, threshold)
 
 
 @app.command(no_args_is_help=True)
@@ -457,12 +457,9 @@ def visualise_primer_mismatches(
         ),
     ],
     output: Annotated[
-        Optional[pathlib.Path],
-        typer.Option(
-            help="Output location of the plot. Leave blank to not save", dir_okay=True
-        ),
-    ] = None,
-    show_plot: Annotated[bool, typer.Option(help="Should the plot auto open")] = False,
+        pathlib.Path,
+        typer.Option(help="Output location of the plot", dir_okay=False, writable=True),
+    ] = pathlib.Path("primer.html"),
     include_seqs: Annotated[
         bool,
         typer.Option(help="Reduces plot filesize, by excluding primer sequences"),
@@ -475,23 +472,21 @@ def visualise_primer_mismatches(
     ] = True,
 ):
     """
-    Visulise mismatches between primers and the input genomes
+    Visualise mismatches between primers and the input genomes
     """
-    if output is None and not show_plot:
-        raise typer.BadParameter(
-            "Either --output or --show-plot must be set to view the plot"
-        )
+
     array, seqdict = parse_msa(msa)
 
-    primer_mismatch_heatmap(
-        array=array,
-        seqdict=seqdict,
-        bedfile=bedfile,
-        outpath=output,
-        show_plot=show_plot,
-        include_seqs=include_seqs,
-        offline_plots=offline_plots,
-    )
+    with open(output, "w") as outfile:
+        outfile.write(
+            primer_mismatch_heatmap(
+                array=array,
+                seqdict=seqdict,
+                bedfile=bedfile,
+                offline_plots=offline_plots,
+                include_seqs=include_seqs,
+            )
+        )
 
 
 if __name__ == "__main__":

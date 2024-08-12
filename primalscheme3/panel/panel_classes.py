@@ -4,7 +4,7 @@ from itertools import islice
 
 import numpy as np
 
-# Interations checker
+# Iterations checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
 from primalscheme3.core.bedfiles import BedPrimerPair
@@ -69,8 +69,8 @@ class Region:
     name: str
     score: int
 
-    def __init__(self, chromanem: str, start: int, stop: int, name: str, score: int):
-        self.chromname = str(chromanem)
+    def __init__(self, chromname: str, start: int, stop: int, name: str, score: int):
+        self.chromname = str(chromname)
         self.start = int(start)
         self.stop = int(stop)
         self.name = str(name)
@@ -283,15 +283,18 @@ class Panel(Multiplex):
         }
 
         # Remove primerpairs with no score
-        current_msa.primerpairs = [
-            pp for pp in current_msa.primerpairs if current_msa.get_pp_score(pp) > 0
-        ]
+        # current_msa.primerpairs = [
+        #     pp for pp in current_msa.primerpairs if current_msa.get_pp_score(pp) > 0
+        # ]
         # For the primerpairs in the current MSA Sort all primerpairs by score
         current_msa.primerpairs.sort(
             key=lambda x: (self.calc_pp_score(current_msa, x), len(x.all_seqs())),
             reverse=True,
         )
         for pospp in current_msa.primerpairs:
+            # Check primer has score
+            if self.calc_pp_score(current_msa, pospp) <= 0:
+                continue
             for pospool in pos_pools_indexes:
                 # Check if the primerpair can be added
                 match self.check_primerpair_can_be_added(

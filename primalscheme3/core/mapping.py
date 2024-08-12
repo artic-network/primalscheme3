@@ -13,10 +13,9 @@ def create_mapping(
     This returns a tuple of two items:
         mapping_array: list[int | None]
         truncated_msa: np.ndarray
-
-    mapping_array: Each position in the list corrasponds to the same index in the MSA, The value in the list is the position in the reference genome
+    mapping_array: Each position in the list corresponds to the same index in the MSA, The value in the list is the position in the reference genome
     """
-    # As NP is modifited in place, returning is not nessisary but is done for clarity
+    # As NP is modified in place, returning is not necessary but is done for clarity
     # Create the empty mapping array
     mapping_list = [None] * msa.shape[1]
     mapping_array = np.array(mapping_list)
@@ -28,7 +27,7 @@ def create_mapping(
         # If the base is not a gap, assign the mapping
         if reference_genome[col_index] not in {"", "-"}:
             mapping_array[col_index] = current_ref_index
-            # increase refence index
+            # increase reference index
             current_ref_index += 1
     return (mapping_array, msa)
 
@@ -69,3 +68,40 @@ def generate_reference(msa: np.ndarray) -> str:
     """
 
     return "".join(msa[0]).replace("-", "")
+
+
+def ref_index_to_msa(mapping_array: np.ndarray) -> dict[int, int]:
+    """
+    Convert a reference index to an MSA index
+    """
+    return {x: i for i, x in enumerate(list(mapping_array)) if x is not None}
+
+
+def check_for_end_on_gap(ref_index_to_msa: dict[int, int], ref_index) -> bool:
+    """
+    Check if a slice of a mapping array ends on a gap
+    Returns True if the slice ends on a gap, False otherwise
+
+    # Example
+
+           5' AGAGTGTGGGGGTAGTGTTACG          > MPXV_142_LEFT_1 170931:170953
+    TTTTTTTTATAGAGTGTGGGGGTAGTGTTACG-------GAT >MT903345
+    TTTTTTTTATAGAGTGT-GGGGTAGTGTTACGGATATCTGAT >KJ642613.1
+                                           ^ 173598: MSA
+                                           ^ 170953: ref
+
+    In this example, the slice of the primer ends on a gap. So slicing the array with
+    - array[:, ref_to_msa[170931]:ref_to_msa[170953]] will return "GGGGTAGTGTTACG-------" as the non exclusive end captures the gap
+    - fix_end_on_gap() will return in indexes to slice the array without the gap ie "TGTGGGGGTAGTGTTACG"
+
+    """
+    exclusive_msa_end = ref_index_to_msa[ref_index]
+    inclusive_msa_end = ref_index_to_msa[ref_index - 1]
+    return exclusive_msa_end - inclusive_msa_end != 1
+
+
+def fix_end_on_gap(ref_index_to_msa: dict[int, int], ref_index) -> int:
+    """
+    Returns the MSA index of the non-inclusive end of a slice with the gap removed
+    """
+    return ref_index_to_msa[ref_index - 1] + 1

@@ -23,13 +23,13 @@ class PrimerPairCheck(Enum):
     INTERACTING = 2
     MISPRIMING = 3
     OK = 4
-    CIRCLUAR = 5
+    CIRCULAR = 5
 
 
 class Multiplex:
     """
     This is the baseclass for all multiplexes (Scheme / Panel)
-    - It allows mutliple pools
+    - It allows multiple pools
 
     Params:
     - cfg: dict. The configuration dict
@@ -44,7 +44,7 @@ class Multiplex:
     - self._matches: list[set[tuple]]. A list of sets with matches for each pool
     - self._msa_dict: dict[int, MSA]. A dict of MSA objects
     - self._coverage: dict[int, np.ndarray]. PrimerTrimmed Coverage for each MSA index
-    - self._lookup: dict[int, np.ndarray] | None. A lookup for the primerpairs in the multiplex
+    - self._lookup: dict[int, np.ndarray[npools, ncols]] | None. A lookup for the primerpairs in the multiplex.
     """
 
     _pools: list[list[PrimerPair | BedPrimerPair]]
@@ -69,7 +69,6 @@ class Multiplex:
         self._matchDB = matchDB
         self._last_pp_added = []
         self._msa_dict = msa_dict
-
         # Set up coverage dict
         self.setup_coverage()
 
@@ -161,7 +160,7 @@ class Multiplex:
         ):
             return PrimerPairCheck.INTERACTING
 
-        # Check for other PCR producrs
+        # Check for other PCR Products
         if detect_new_products(
             primerpair.find_matches(
                 self._matchDB,
@@ -204,7 +203,7 @@ class Multiplex:
 
     def get_coverage_percent(self, msa_index: int) -> float:
         """
-        Returns the coverage percentage for the spesified MSA index
+        Returns the coverage percentage for the specified MSA index
         :param msa_index: int
         :return: float | None
         """
@@ -214,7 +213,7 @@ class Multiplex:
 
     def update_coverage(self, primerpair: PrimerPair, add: bool = True) -> None:
         """
-        Updates the coverage for the spesified MSA index
+        Updates the coverage for the specified MSA index
         :param msa_index: int
         :param primerpair: PrimerPair object
         :param add: bool. If True, add to the coverage. If False, remove from the coverage
@@ -248,11 +247,11 @@ class Multiplex:
     ):
         """
         Main method to add a primerpair to a pool. Performs no checks.
-        - Adds PrimerPair to the spesified pool
+        - Adds PrimerPair to the specified pool
         - Updates the PrimerPair's pool and amplicon_number
         - Updates the pools matches
         - Appends PrimerPair to _last_pp_added
-        - Sets the Mutliplex to the spesified pool. Then moves the Mutliplex to the next pool
+        - Sets the Multiplex to the specified pool. Then moves the Multiplex to the next pool
 
 
         :param primerpair: PrimerPair object

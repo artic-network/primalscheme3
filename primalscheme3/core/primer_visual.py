@@ -5,7 +5,12 @@ import plotly.graph_objects as go
 
 # Create in the classes from primalscheme3
 from primalscheme3.core.bedfiles import BedLine, read_in_bedlines
-from primalscheme3.core.mapping import create_mapping
+from primalscheme3.core.mapping import (
+    check_for_end_on_gap,
+    create_mapping,
+    fix_end_on_gap,
+    ref_index_to_msa,
+)
 from primalscheme3.core.seq_functions import reverse_complement
 
 
@@ -53,13 +58,13 @@ def get_primers_from_msa(
             row_data[row] = None
             while index - length - gaps >= 0:
                 # Get slice
-                inital_slice = array[row, index - length - gaps : index]
+                initial_slice = array[row, index - length - gaps : index]
                 # Check for gaps on set base
-                if inital_slice[-1] == "-":
+                if initial_slice[-1] == "-":
                     break
-                sequence = "".join(inital_slice).replace("-", "")
+                sequence = "".join(initial_slice).replace("-", "")
                 # Covered removed gaps
-                if "" in inital_slice:
+                if "" in initial_slice:
                     break
                 # Check for gaps in the slice
                 if len(sequence) == length:
@@ -73,13 +78,13 @@ def get_primers_from_msa(
             row_data[row] = None
             while index + length + gaps <= array.shape[1]:
                 # Get slice
-                inital_slice = array[row, index : index + length + gaps]
+                initial_slice = array[row, index : index + length + gaps]
                 # Check for gaps on set base
-                if inital_slice[0] == "-":
+                if initial_slice[0] == "-":
                     break
-                sequence = "".join(inital_slice).replace("-", "")
+                sequence = "".join(initial_slice).replace("-", "")
                 # Covered removed gaps
-                if "" in inital_slice:
+                if "" in initial_slice:
                     break
                 # Check for gaps in the slice
                 if len(sequence) == length:
@@ -108,19 +113,15 @@ def primer_mismatch_heatmap(
     array: np.ndarray,
     seqdict: dict,
     bedfile: pathlib.Path,
-    outpath: pathlib.Path | None = None,
-    show_plot: bool = False,
     include_seqs: bool = True,
     offline_plots: bool = True,
-):
+) -> str:
     """
     Create a heatmap of primer mismatches in an MSA.
     :param array: The MSA array.
     :param seqdict: The sequence dictionary.
     :param bedfile: The bedfile of primers.
-    :param outpath: The output path for the plot.
-    :param show_plot: Show the plot.
-    :param minimal: Reduces plot size by removing hovertext.
+    :param include_seqs: Reduces plot size by removing hovertext.
     """
     # Read in the bedfile
     bedlines, _header = read_in_bedlines(bedfile)
@@ -130,20 +131,18 @@ def primer_mismatch_heatmap(
 
     # Reference genome
     primary_ref = bed_chrom_names.intersection(seqdict.keys())
+
     if len(primary_ref) == 0:
         # Try to fix a common issue with Jalview
         parsed_seqdict = {k.split("/")[0]: v for k, v in seqdict.items()}
         primary_ref = bed_chrom_names.intersection(parsed_seqdict.keys())
-
-        if len(primary_ref) == 0:
-            raise ValueError(
-                f"Chrom names ({', '.join(bed_chrom_names)}) not found in MSA"
-            )
-        else:  # Update seqdict
-            seqdict = parsed_seqdict
+        seqdict = parsed_seqdict
 
     # Filter the bedlines for only the reference genome
     bedlines = [bedline for bedline in bedlines if bedline.chrom_name in primary_ref]
+
+    if len(bedlines) == 0:
+        return ""
 
     kmers_names = [bedline.primername for bedline in bedlines]
 
@@ -154,9 +153,7 @@ def primer_mismatch_heatmap(
     ]
 
     mapping_array, array = create_mapping(array, mapping_index)
-    ref_index_to_msa = {
-        x: i for i, x in enumerate(list(mapping_array)) if x is not None
-    }
+    ref_index_to_msa_dict = ref_index_to_msa(mapping_array)
 
     # Group Primers by basename
     basename_to_line: dict[str, set[BedLine]] = {
@@ -185,10 +182,15 @@ def primer_mismatch_heatmap(
         # Set the direction
         if "LEFT" in bn:
             forward = True
-            msa_index = ref_index_to_msa[list(lines)[0].end]
+            primer_end = list(lines)[0].end
+            # Check for the end on a gap edge case and fix it
+            if check_for_end_on_gap(ref_index_to_msa_dict, primer_end):
+                msa_index = fix_end_on_gap(ref_index_to_msa_dict, primer_end)
+            else:
+                msa_index = ref_index_to_msa_dict[list(lines)[0].end]
         else:
             forward = False
-            msa_index = ref_index_to_msa[list(lines)[0].start]
+            msa_index = ref_index_to_msa_dict[list(lines)[0].start]
 
         # Get the primer sequences
         msa_data = get_primers_from_msa(array, msa_index, forward, primer_len_max)
@@ -266,14 +268,8 @@ def primer_mismatch_heatmap(
     fig.update_layout(
         font=dict(family="Courier New, monospace"),
         hoverlabel=dict(font_family="Courier New, monospace"),
+        title_text=f"Primer Mismatches: {list(primary_ref)[0]}",
     )
     fig.update_yaxes(autorange="reversed")
 
-    # Output the plot
-    if outpath:
-        if outpath.suffix != ".html":
-            outpath = outpath.with_suffix(".html")
-        fig.write_html(str(outpath), include_plotlyjs=True if offline_plots else "cdn")
-
-    if show_plot:
-        fig.show()
+    return fig.to_html(include_plotlyjs=True if offline_plots else "cdn")

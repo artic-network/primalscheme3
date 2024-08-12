@@ -28,7 +28,7 @@ class TestParseMSA(unittest.TestCase):
         """
         Checks if the MSA contains two identical IDs
         """
-        with self.assertRaises(MSAFileInvalidLength):
+        with self.assertRaises(MSAFileInvalid):
             _ = parse_msa(self.msa_id_collision)
 
     def test_parse_msa_non_fasta(self):

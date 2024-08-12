@@ -88,7 +88,7 @@ def interaction(seq1: str, seq2: str, threshold: float) -> list[str]:
     return interactions
 
 
-def visulise_interactions(bedpath: pathlib.Path, threshold: float) -> None:
+def visualise_interactions(bedpath: pathlib.Path, threshold: float) -> None:
     """
     Calculate the interaction score between two sequences.
     If the score is less than the threshold

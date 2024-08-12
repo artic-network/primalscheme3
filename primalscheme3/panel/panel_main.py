@@ -50,7 +50,6 @@ def read_region_bedfile(path) -> list[list[str]]:
     """
     Bedfiles need to be in the format:
     chrom start end name score
-
     """
     ## If bedfile given, parse it:
     bed_lines = []
@@ -59,9 +58,7 @@ def read_region_bedfile(path) -> list[list[str]]:
             line = line.strip()
             if not line or line.startswith("#"):  # Skip empty lines and header lines
                 continue
-
             bed_lines.append(line.split("\t"))
-
     return bed_lines
 
 
@@ -94,7 +91,7 @@ def panelcreate(
     if mode == PanelRunModes.REGION_ONLY and regionbedfile is None:
         sys.exit("ERROR: region-only mode requires a region bedfile")
 
-    # See if the output dir already exsits
+    # See if the output dir already exists
     if OUTPUT_DIR.is_dir() and not force:
         sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
 
@@ -299,7 +296,7 @@ def panelcreate(
     # Create a lookup dict for the msa index to name
     msa_index_to_name = {k: v._chrom_name for k, v in msa_dict.items()}
 
-    # Create a dict to store how many amplicons have been addded to each msa
+    # Create a dict to store how many amplicons have been added to each msa
     msa_index_to_amplicon_count = {k: 0 for k in msa_data.keys()}
 
     # Create the panel object
@@ -333,7 +330,7 @@ def panelcreate(
         for msa_obj in panel._msa_dict.values():
             msa_obj.primerpairs.sort(key=lambda x: x.fprimer.end)
 
-        # Add the first primerpair
+    # Add the first primerpair
 
     counter = 0
     while max_amplicons is None or counter < max_amplicons:
@@ -491,11 +488,13 @@ def panelcreate(
     )
     generate_all_plots(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
 
-    for msa_obj in msa_dict.values():
-        primer_mismatch_heatmap(
-            array=msa_obj.array,
-            seqdict=msa_obj._seq_dict,
-            outpath=OUTPUT_DIR / "work" / f"{msa_obj._chrom_name}_primers.html",
-            bedfile=OUTPUT_DIR / "primer.bed",
-            offline_plots=offline_plots,
-        )
+    with open(OUTPUT_DIR / "primer.html", "w") as outfile:
+        for i, msa_obj in enumerate(msa_dict.values()):
+            outfile.write(
+                primer_mismatch_heatmap(
+                    array=msa_obj.array,
+                    seqdict=msa_obj._seq_dict,
+                    bedfile=OUTPUT_DIR / "primer.bed",
+                    offline_plots=True if offline_plots and i == 0 else False,
+                )
+            )

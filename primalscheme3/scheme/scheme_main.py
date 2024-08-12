@@ -393,8 +393,7 @@ def schemecreate(
                 "No valid FKmers or RKmers found for <blue>{msa_name}</>",
                 msa_name=msa_obj.name,
             )
-            sys.exit(1)
-
+            continue
         # Generate all primerpairs then interaction check
         msa_obj.generate_primerpairs(
             amplicon_size_max=config.amplicon_size_max,
@@ -593,13 +592,15 @@ def schemecreate(
     )
     generate_all_plots(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
 
-    for msa_obj in msa_dict.values():
-        primer_mismatch_heatmap(
-            array=msa_obj.array,
-            seqdict=msa_obj._seq_dict,
-            outpath=OUTPUT_DIR / "work" / f"{msa_obj._chrom_name}_primers.html",
-            bedfile=OUTPUT_DIR / "primer.bed",
-            offline_plots=offline_plots,
-        )
+    with open(OUTPUT_DIR / "primer.html", "w") as outfile:
+        for i, msa_obj in enumerate(msa_dict.values()):
+            outfile.write(
+                primer_mismatch_heatmap(
+                    array=msa_obj.array,
+                    seqdict=msa_obj._seq_dict,
+                    bedfile=OUTPUT_DIR / "primer.bed",
+                    offline_plots=True if offline_plots and i == 0 else False,
+                )
+            )
 
     logger.info("Completed Successfully")

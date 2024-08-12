@@ -12,7 +12,7 @@ from primalscheme3.core.errors import (
     MSAFileInvalidBase,
     MSAFileInvalidLength,
 )
-from primalscheme3.core.mapping import create_mapping
+from primalscheme3.core.mapping import create_mapping, ref_index_to_msa
 from primalscheme3.core.seq_functions import remove_end_insertion
 
 
@@ -40,13 +40,19 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
     """
     try:
         records_index = SeqIO.index(str(msa_path), "fasta")
+    except ValueError as e:
+        raise MSAFileInvalid(f"{msa_path.name}: {e}") from e
+
+    try:
         array = np.array(
             [record.seq.upper() for record in records_index.values()],
             dtype="U1",
             ndmin=2,  # Enforce 2D array even if one genome
         )
     except ValueError as e:
-        raise MSAFileInvalidLength("MSA contains sequences of different lengths") from e
+        raise MSAFileInvalidLength(
+            f"{msa_path.name}: contains sequences of different lengths"
+        ) from e
 
     # Check for empty MSA, caused by no records being parsed
     if array.size == 0:
@@ -126,13 +132,10 @@ class MSA:
         else:
             raise ValueError(f"Mapping method: {mapping} not recognised")
 
-        # Create the Unmapping array
         # Goes from ref idx -> msa idx
-        self._ref_to_msa = {
-            x: i for i, x in enumerate(list(self._mapping_array)) if x is not None
-        }
+        self._ref_to_msa = ref_index_to_msa(self._mapping_array)
 
-        # Asign a UUID
+        # Assign a UUID
         self._uuid = str(uuid4())[:8]
 
     def digest(
