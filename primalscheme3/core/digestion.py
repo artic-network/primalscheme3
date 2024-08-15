@@ -753,13 +753,9 @@ def f_digest(
         # Log the Digestion
         if logger is not None:
             if isinstance(fkmer, tuple):
-                logger.debug(
-                    "FKmer: <red>{end_col}\t{error}</>",
-                    end_col=fkmer[0],
-                    error=fkmer[1].value,
-                )
+                logger.debug(f"FKmer: [red]{fkmer[0]}[/red]\t{fkmer[1].value}")
             else:
-                logger.debug("FKmer: <green>{end_col}</>: AllPass", end_col=fkmer.end)
+                logger.debug(f"FKmer: [green]{fkmer.end}[/green]: AllPass")
 
     return fkmers
 
@@ -778,15 +774,9 @@ def r_digest(
         # Log the Digestion
         if logger is not None:
             if isinstance(rkmer, tuple):
-                logger.debug(
-                    "RKmer: <red>{start_col}\t{error}</>",
-                    start_col=rkmer[0],
-                    error=rkmer[1].value,
-                )
+                logger.debug(f"RKmer: [red]{rkmer[0]}[/red]\t{rkmer[1].value}")
             else:
-                logger.debug(
-                    "RKmer: <green>{start_col}</>: AllPass", start_col=rkmer.start
-                )
+                logger.debug(f"RKmer: [green]{rkmer.start}[/green]: AllPass")
     return rkmers
 
 
@@ -836,18 +826,9 @@ def digest(
 
         if logger is not None:
             if isinstance(fkmer, tuple):
-                logger.debug(
-                    "{chrom}:FKmer: <red>{end_col}\t{error}</>",
-                    end_col=fkmer[0],
-                    error=fkmer[1].value,
-                    chrom=chrom,
-                )
+                logger.debug(f"{chrom}:FKmer: [red]{fkmer[0]}\t{fkmer[1].value}[/red]")
             else:
-                logger.debug(
-                    "{chrom}:FKmer: <green>{end_col}</>: AllPass",
-                    end_col=fkmer.end,  # type: ignore
-                    chrom=chrom,
-                )
+                logger.debug(f"{chrom}:FKmer: [green]{fkmer.end}[/green]: AllPass")
 
         # Append valid FKmers
         if isinstance(fkmer, FKmer) and fkmer.seqs:
@@ -866,18 +847,9 @@ def digest(
 
         if logger is not None:
             if isinstance(rkmer, tuple):
-                logger.debug(
-                    "{chrom}:RKmer: <red>{start_col}\t{error}</>",
-                    start_col=rkmer[0],
-                    error=rkmer[1].value,
-                    chrom=chrom,
-                )
+                logger.debug(f"{chrom}:RKmer: [red]{rkmer[0]}\t{rkmer[1].value}[/red]")
             else:
-                logger.debug(
-                    "{chrom}:RKmer: <green>{start_col}</>: AllPass",
-                    start_col=rkmer.start,  # type: ignore
-                    chrom=chrom,
-                )
+                logger.debug(f"{chrom}:RKmer: [green]{rkmer.start}[/green]: AllPass")
 
         # Append valid RKmers
         if isinstance(rkmer, RKmer) and rkmer.seqs:

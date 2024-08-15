@@ -18,7 +18,7 @@ class MappingType(Enum):
 class Config:
     """
     PrimalScheme3 configuration.
-    Class properties are defaults, can be overriden
+    Class properties are defaults, can be overridden
     on instantiation (and will shadow class defaults)
     """
 
@@ -55,6 +55,7 @@ class Config:
     primer_homopolymer_max: int = 5
     primer_max_walk: int = 80
     # MatchDB Settings
+    use_matchdb: bool = True
     editdist_max: int = 1
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min

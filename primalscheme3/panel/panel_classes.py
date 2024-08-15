@@ -12,6 +12,7 @@ from primalscheme3.core.bedfiles import BedPrimerPair
 # Core Module imports
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
+from primalscheme3.core.errors import CustomErrors
 from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
@@ -68,14 +69,26 @@ class Region:
     stop: int
     name: str
     score: int
+    typing: bool
 
-    def __init__(self, chromname: str, start: int, stop: int, name: str, score: int):
+    def __init__(
+        self,
+        chromname: str,
+        start: int,
+        stop: int,
+        name: str,
+        score: int,
+        typing: int | bool = 0,
+    ) -> None:
+        """
+        typing: 1 for typing
+        """
         self.chromname = str(chromname)
         self.start = int(start)
         self.stop = int(stop)
         self.name = str(name)
         self.score = int(score)
-
+        self.typing = typing == 1
         if self.start >= self.stop:
             raise ValueError(f"{self.name}: Circular regions are not supported.")
 
@@ -84,7 +97,7 @@ class Region:
 
     def __hash__(self) -> int:
         return hash(
-            f"{self.chromname}:{self.start}:{self.stop}:{self.name}:{self.score}"
+            f"{self.chromname}:{self.start}:{self.stop}:{self.name}:{self.score}:{self.typing}"
         )
 
     def __eq__(self, __value: object) -> bool:
@@ -93,7 +106,44 @@ class Region:
         return hash(self) == hash(__value)
 
     def to_bed(self) -> str:
-        return f"{self.chromname}\t{self.start}\t{self.stop}\t{self.name}\t{self.score}"
+        return f"{self.chromname}\t{self.start}\t{self.stop}\t{self.name}\t{self.score}\t{1 if self.typing else 0}"
+
+
+class RegionParser:
+    @staticmethod
+    def from_list(bed_list: list[str]) -> Region:
+        """
+        Returns a single region object from a list representing a line of a bedfile, split by tabs
+        """
+        # Handle extra columns
+        if len(bed_list) >= 6:
+            chromname, start, stop, name, score, typing = bed_list[:6]
+        elif len(bed_list) == 5:
+            chromname, start, stop, name, score = bed_list[:5]
+            typing = 0
+        else:
+            raise CustomErrors(
+                f"Invalid region: {' '.join(bed_list)}. Requires 5 or 6 columns."
+            )
+
+        try:
+            start = int(start)
+            stop = int(stop)
+            score = int(score)
+            typing = int(typing)
+        except ValueError as e:
+            raise CustomErrors(
+                f"Invalid region: {' '.join(bed_list)}. Start, stop, score, and typing must be integers."
+            ) from e
+
+        return Region(chromname, start, stop, name, score, typing)
+
+    @staticmethod
+    def from_str(bed_str: str) -> Region:
+        """
+        Returns a single region object from a string representing a line of a bedfile
+        """
+        return RegionParser.from_list(bed_str.strip().split("\t"))
 
 
 class PanelMSA(MSA):
@@ -293,7 +343,7 @@ class Panel(Multiplex):
         )
         for pospp in current_msa.primerpairs:
             # Check primer has score
-            if self.calc_pp_score(current_msa, pospp) <= 0:
+            if self.calc_pp_score(current_msa, pospp) < 5:
                 continue
             for pospool in pos_pools_indexes:
                 # Check if the primerpair can be added

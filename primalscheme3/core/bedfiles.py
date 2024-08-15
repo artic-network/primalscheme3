@@ -1,7 +1,10 @@
+import logging
 import pathlib
 import re
+import sys
 
 from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+from primalscheme3.core.config import Config
 
 # Module imports
 from primalscheme3.core.seq_functions import expand_ambs
@@ -222,3 +225,43 @@ def create_amplicon_str(
                 f"{pp.chrom_name}\t{pp.fprimer.region()[0]}\t{pp.rprimer.region()[1]}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
             )
     return "\n".join(amplicon_str) + "\n"
+
+
+def read_in_extra_primers(
+    inputbedfile: pathlib.Path, config: Config, logger: logging.Logger
+) -> list[BedPrimerPair]:
+    """
+    Reads in Primers from a bedfile, and QC checks them for Tm and Pools
+    """
+    bedprimerpairs, _headers = read_in_bedprimerpairs(inputbedfile)
+
+    logger.info(
+        f"Read in bedfile: [blue]{inputbedfile.name}[/blue]: "
+        f"[green]{len(bedprimerpairs)}[/green] PrimersPairs containing "
+        f"{len([primer for primers in (bedprimerpair.all_seqs() for bedprimerpair in bedprimerpairs) for primer in primers])} primers",
+    )
+
+    # Check the primers for Tm
+    primer_tms = [
+        tm for tm in (pp.calc_tm(config) for pp in bedprimerpairs) for tm in tm
+    ]
+    if min(primer_tms) < config.primer_tm_min or max(primer_tms) > config.primer_tm_max:
+        logger.warning(
+            f"Primer Tm outside range: {round(min(primer_tms), 2)} : {round(max(primer_tms),2)} (range: {config.primer_tm_min} : {config.primer_tm_max})"
+        )
+
+    else:
+        logger.info(
+            f"Primer Tm range: [green]{min(primer_tms)}[/green] : [green]{max(primer_tms)}[/green]"
+        )
+
+    # Check pools are within the range
+    pools_in_bed = {primer.pool for primer in bedprimerpairs}
+    if max(pools_in_bed) > config.n_pools:
+        logger.critical(
+            f"The number of pools in the bedfile is greater than --npools: "
+            f"{max(pools_in_bed)} > {config.n_pools}"
+        )
+        sys.exit(1)
+
+    return bedprimerpairs

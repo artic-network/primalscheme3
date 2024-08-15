@@ -151,6 +151,12 @@ def scheme_create(
             help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
         ),
     ] = True,
+    use_matchdb: Annotated[
+        bool,
+        typer.Option(
+            help="Create and use a mispriming database",
+        ),
+    ] = Config.use_matchdb,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -294,9 +300,15 @@ def panel_create(
             help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
         ),
     ] = True,
+    use_matchdb: Annotated[
+        bool,
+        typer.Option(
+            help="Create and use a mispriming database",
+        ),
+    ] = Config.use_matchdb,
 ):
     """
-    Creates a primerpanel
+    Creates a primer panel
     """
     # Update the config with CLI params
     config = Config(**locals())
