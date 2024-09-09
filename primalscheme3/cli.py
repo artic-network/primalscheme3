@@ -22,7 +22,7 @@ from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
 
 ## Commands are in the format of
 # {pclass}-{mode}
-# pclass = pannel or scheme
+# pclass = panel or scheme
 
 # Example to create a scheme
 # scheme-create
@@ -30,8 +30,8 @@ from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
 # To repair a scheme
 # scheme-repair
 
-# To create a pannel
-# pannel-create
+# To create a panel
+# panel-create
 
 
 def check_path_is_file(value: str | pathlib.Path) -> pathlib.Path:
@@ -74,7 +74,7 @@ def scheme_create(
     msa: Annotated[
         list[pathlib.Path],
         typer.Option(
-            help="The name of the scheme",
+            help="The MSA to design against. To use multiple MSAs, use multiple --msa flags. (--msa 1.fasta --msa 2.fasta)",
             exists=True,
             readable=True,
             resolve_path=True,
@@ -90,7 +90,7 @@ def scheme_create(
     amplicon_size: Annotated[
         int,
         typer.Option(
-            help="The size of an amplicon. Use single value for ± 10 percent [100<=x<=2000]",
+            help="The size of an amplicon. Min / max size are ± 10 percent [100<=x<=2000]",
         ),
     ] = Config.amplicon_size,
     bedfile: Annotated[
@@ -141,7 +141,7 @@ def scheme_create(
     input_bedfile: Annotated[
         Optional[pathlib.Path],
         typer.Option(
-            help="Path to a primer.bedfile containing the precalculated primers"
+            help="Path to a primer.bedfile containing the pre-calculated primers"
         ),
     ] = Config.input_bedfile,
     high_gc: Annotated[bool, typer.Option(help="Use high GC primers")] = Config.high_gc,
@@ -261,7 +261,7 @@ def panel_create(
     inputbedfile: Annotated[
         Optional[pathlib.Path],
         typer.Option(
-            help="Path to a primer.bedfile containing the precalculated primers"
+            help="Path to a primer.bedfile containing the pre-calculated primers"
         ),
     ] = None,
     mode: Annotated[
