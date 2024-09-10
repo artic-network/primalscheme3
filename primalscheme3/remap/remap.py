@@ -6,9 +6,7 @@ import sys
 from Bio import Seq, SeqIO, SeqRecord
 
 from primalscheme3.core.bedfiles import (
-    create_amplicon_str,
-    create_bedfile_str,
-    read_in_bedprimerpairs,
+    read_in_bedlines,
 )
 from primalscheme3.core.logger import setup_logger
 
@@ -29,15 +27,15 @@ def remap(
     logger = setup_logger(OUTPUT_DIR)
 
     # Read in the primerpairs
-    primer_pairs, _header = read_in_bedprimerpairs(bedfile_path)
+    bedlines, _header = read_in_bedlines(bedfile_path)
 
     # Read in the MSA
     msa_dict = SeqIO.index(str(msa_path), "fasta")
 
     # Check primer's reference genome is in the msa
-    chrom_names = set([primer.chrom_name for primer in primer_pairs])
+    chrom_names = set([primer.chrom_name for primer in bedlines])
     if len(chrom_names) > 1:
-        # TODO spesify the primer chrom name to remap
+        # TODO specify the primer chrom name to remap
         logger.error("More than one reference genome in the primer.bed")
         sys.exit(1)
     remap_chrom = next(iter(chrom_names))
@@ -86,75 +84,73 @@ def remap(
     msa_length = len(msa_dict.get(id_to_remap_to))  # type: ignore
     perfect_map = True
 
-    for primerpair in primer_pairs:
-        primername = f"{primerpair.amplicon_prefix}_{primerpair.amplicon_number}"
-        # Dict will always have the key
-        pp_fp_msa = primer_to_msa[primerpair.fprimer.end]
-        pp_fp_newref = msa_to_new_ref.get(pp_fp_msa)  # type: ignore
+    for bedline in bedlines:
+        primername = "_".join(bedline.primername.split("_")[:3])
 
-        if pp_fp_newref is None:
-            logger.warning(
-                f"<red>Gap preventing direct mapping</> of {primername}_LEFT {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}"
-            )
-            # Walk to next valid index
-            while pp_fp_newref is None and pp_fp_msa < msa_length:
-                pp_fp_msa += 1
-                pp_fp_newref = msa_to_new_ref.get(pp_fp_msa)
+        if bedline.direction == "+":
+            # Dict will always have the key
+            pp_fp_msa = primer_to_msa[bedline.end]
+            pp_fp_newref = msa_to_new_ref.get(pp_fp_msa)  # type: ignore
 
-            # Check fixed
             if pp_fp_newref is None:
-                logger.critical(
-                    f"Could not find or repair a valid index for {primername}_LEFT: {primerpair.fprimer.end}"
-                )
-                sys.exit(1)
-            else:
                 logger.warning(
-                    f"Fixed with non-direct mapping {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}:{pp_fp_newref}"
+                    f"<red>Gap preventing direct mapping</> of {primername}_LEFT {remap_chrom}:{bedline.end} -> {id_to_remap_to}"
                 )
-                perfect_map = False
+                # Walk to next valid index
+                while pp_fp_newref is None and pp_fp_msa < msa_length:
+                    pp_fp_msa += 1
+                    pp_fp_newref = msa_to_new_ref.get(pp_fp_msa)
 
-        logger.debug(
-            f"<green>Mapped {primername}_LEFT</>: {remap_chrom}:{primerpair.fprimer.end} -> {id_to_remap_to}:{pp_fp_newref}"
-        )
+                # Check fixed
+                if pp_fp_newref is None:
+                    logger.critical(
+                        f"Could not find or repair a valid index for {primername}_LEFT: {bedline.end}"
+                    )
+                    sys.exit(1)
+                else:
+                    logger.warning(
+                        f"Fixed with non-direct mapping {remap_chrom}:{bedline.end} -> {id_to_remap_to}:{pp_fp_newref}"
+                    )
+                    perfect_map = False
 
-        primerpair.fprimer.end = pp_fp_newref
-        primerpair.fprimer._starts = {
-            primerpair.fprimer.end - len(x) for x in primerpair.fprimer.seqs
-        }
-
-        # Map the reverse primer
-        pp_rp_msa = primer_to_msa[primerpair.rprimer.start]
-        pp_rp_newref = msa_to_new_ref.get(pp_rp_msa)  # type: ignore
-
-        if pp_rp_newref is None:
-            logger.warning(
-                f"<red>Gap preventing direct mapping</> of {primername}_RIGHT {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}"
+            logger.debug(
+                f"<green>Mapped {primername}_LEFT</>: {remap_chrom}:{bedline.end} -> {id_to_remap_to}:{pp_fp_newref}"
             )
-            # Walk left to next valid index
-            while pp_rp_newref is None and pp_rp_msa > 0:
-                pp_rp_msa -= 1
-                pp_rp_newref = msa_to_new_ref.get(pp_rp_msa)
+
+            bedline._end = pp_fp_newref
+            bedline._start = bedline.end - len(bedline.sequence)
+            bedline.chrom_name = id_to_remap_to
+        else:
+            # Map the reverse primer
+            pp_rp_msa = primer_to_msa[bedline.start]
+            pp_rp_newref = msa_to_new_ref.get(pp_rp_msa)  # type: ignore
 
             if pp_rp_newref is None:
-                logger.critical(
-                    f"Could not find or repair a valid index for {primername}_RIGHT: {primerpair.fprimer.end}"
-                )
-                sys.exit(1)
-            else:
                 logger.warning(
-                    f"Fixed with non-direct mapping {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}:{pp_rp_newref}"
+                    f"<red>Gap preventing direct mapping</> of {primername}_RIGHT {remap_chrom}:{bedline.start} -> {id_to_remap_to}"
                 )
-                perfect_map = False
+                # Walk left to next valid index
+                while pp_rp_newref is None and pp_rp_msa > 0:
+                    pp_rp_msa -= 1
+                    pp_rp_newref = msa_to_new_ref.get(pp_rp_msa)
 
-        logger.debug(
-            f"<green>Mapped {primername}_RIGHT</>: {remap_chrom}:{primerpair.rprimer.start} -> {id_to_remap_to}:{pp_rp_newref}"
-        )
-        primerpair.rprimer.start = pp_rp_newref
-        primerpair.rprimer._ends = {
-            primerpair.rprimer.start + len(x) for x in primerpair.rprimer.seqs
-        }
+                if pp_rp_newref is None:
+                    logger.critical(
+                        f"Could not find or repair a valid index for {primername}_RIGHT: {bedline.start}"
+                    )
+                    sys.exit(1)
+                else:
+                    logger.warning(
+                        f"Fixed with non-direct mapping {remap_chrom}:{bedline.start} -> {id_to_remap_to}:{pp_rp_newref}"
+                    )
+                    perfect_map = False
 
-        primerpair.chrom_name = id_to_remap_to
+            logger.debug(
+                f"<green>Mapped {primername}_RIGHT</>: {remap_chrom}:{bedline.start} -> {id_to_remap_to}:{pp_rp_newref}"
+            )
+            bedline._start = pp_rp_newref
+            bedline._end = bedline.start + len(bedline.sequence)
+            bedline.chrom_name = id_to_remap_to
 
     # Check if the mapping was perfect
     if perfect_map:
@@ -162,20 +158,14 @@ def remap(
     else:
         logger.warning("<red>Imperfect</> mapping. See .log for details.")
 
-    # Write out the outputfiles
-    primer_pairs.sort(key=lambda x: (x.chrom_name, x.fprimer.end))
+    # Write out the output files
     _header.append(f"# remapped {remap_chrom} -> {id_to_remap_to}")
     _header.append(f"# exact_mapping: {perfect_map}")
 
     # Write the new primer.bed file
     with open(OUTPUT_DIR / "primer.bed", "w") as f:
-        f.write(create_bedfile_str(_header, primer_pairs))  # type: ignore
-
-    # Write amplicon bed file
-    with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
-        outfile.write(create_amplicon_str(primer_pairs))  # type: ignore
-    with open(OUTPUT_DIR / "primertrim.amplicon.bed", "w") as outfile:
-        outfile.write(create_amplicon_str(primer_pairs, trim_primers=True))  # type: ignore
+        for bedline in bedlines:
+            f.write(str(bedline) + "\n")
 
     # Write the new reference genome out
     with open(OUTPUT_DIR / "reference.fasta", "w") as f:

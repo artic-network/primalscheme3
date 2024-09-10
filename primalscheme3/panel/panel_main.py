@@ -14,7 +14,7 @@ from Bio import Seq, SeqIO, SeqRecord
 from primalscheme3.core.bedfiles import read_in_extra_primers
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import generate_all_plotdata
-from primalscheme3.core.create_reports import generate_all_plots
+from primalscheme3.core.create_reports import generate_all_plots_html
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
@@ -177,7 +177,7 @@ def panelcreate(
         msa_data[msa_index]["msa_name"] = msa_obj.name
         msa_data[msa_index]["msa_path"] = str(
             "work/" + msa_path.name
-        )  # Write localpath
+        )  # Write local path
         msa_data[msa_index]["msa_chromname"] = msa_obj._chrom_name
         msa_data[msa_index]["msa_uuid"] = msa_obj._uuid
 
@@ -530,7 +530,12 @@ def panelcreate(
         OUTPUT_DIR / "work",
         last_pp_added=panel._last_pp_added,
     )
-    generate_all_plots(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
+
+    # Write the plot
+    with open(OUTPUT_DIR / "plot.html", "w") as outfile:
+        outfile.write(
+            generate_all_plots_html(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
+        )
 
     with open(OUTPUT_DIR / "primer.html", "w") as outfile:
         for i, msa_obj in enumerate(msa_dict.values()):

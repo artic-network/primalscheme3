@@ -17,7 +17,7 @@ from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
-from primalscheme3.core.create_reports import generate_all_plots
+from primalscheme3.core.create_reports import generate_all_plots_html
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import (
     generate_consensus,
@@ -547,7 +547,12 @@ def schemecreate(
         OUTPUT_DIR / "work",
         last_pp_added=scheme._last_pp_added,
     )
-    generate_all_plots(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
+
+    # Write the plot
+    with open(OUTPUT_DIR / "plot.html", "w") as outfile:
+        outfile.write(
+            generate_all_plots_html(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
+        )
 
     with open(OUTPUT_DIR / "primer.html", "w") as outfile:
         for i, msa_obj in enumerate(msa_dict.values()):

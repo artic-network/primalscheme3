@@ -4,23 +4,28 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
-def generate_all_plots(
+def generate_all_plots_html(
     plot_data: dict, outdir: pathlib.Path, offline_plots: bool = True
-) -> None:
+) -> str:
     """Generate all the plots for a scheme from the plot_data"""
     # Generate the plot for each MSA
-    for chromname, data in plot_data.items():
-        generate_plot2(
-            chromname=chromname,
-            msa_data=data,
-            outdir=outdir,
-            offline_plots=offline_plots,
+    plot_html = []
+
+    for index, (chromname, data) in enumerate(plot_data.items()):
+        plot_html.append(
+            generate_plot_html(
+                chromname=chromname,
+                msa_data=data,
+                outdir=outdir,
+                offline_plots=True if offline_plots and index == 0 else False,
+            )
         )
+    return "\n".join(plot_html)
 
 
-def generate_plot2(
+def generate_plot_html(
     chromname: str, msa_data: dict, outdir: pathlib.Path, offline_plots=True
-) -> None:
+) -> str:
     # Create an empty figure with the Fprimer hovers
     fig = make_subplots(
         cols=1,
@@ -350,13 +355,13 @@ def generate_plot2(
     fig.update_layout(height=900, title_text=chromname, showlegend=False)
     # plot_bgcolor="rgba(246, 237, 202, 0.5)",
 
-    fig.write_html(
-        str(outdir.absolute() / (chromname + ".html")),
-        include_plotlyjs=True if offline_plots else "cdn",
-    )
+    # Write a png version of the plot
     fig.write_image(
         str(outdir.absolute() / (chromname + ".png")),
         format="png",
         height=900,
         width=1600,
     )
+
+    # Write a html version of the plot
+    return fig.to_html(include_plotlyjs=True if offline_plots else "cdn")
