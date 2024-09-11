@@ -11,7 +11,7 @@ from primalscheme3.core.mapping import (
     fix_end_on_gap,
     ref_index_to_msa,
 )
-from primalscheme3.core.seq_functions import reverse_complement
+from primalscheme3.core.seq_functions import extend_ambiguous_base, reverse_complement
 
 
 class PlotlyText:
@@ -104,8 +104,12 @@ def calc_primer_hamming(seq1, seq2) -> int:
     """
     dif = 0
     for seq1b, seq2b in zip(seq1[::-1], seq2[::-1]):
-        if seq1b != seq2b and (seq1b != "N" and seq2b != "N"):
+        seq1b_exp = set(extend_ambiguous_base(seq1b))
+        seq2b_exp = set(extend_ambiguous_base(seq2b))
+
+        if not seq1b_exp & seq2b_exp and (seq1b != "N" and seq2b != "N"):
             dif += 1
+
     return dif
 
 
