@@ -56,17 +56,18 @@ class DIGESTION_ERROR(Enum):
     AMB_FAIL = "AmbFail"  # Generic error for when the error is unknown
 
     # Thermo errors
-    THEMRO_HIGH_GC = "HighGC"
-    THEMRO_LOW_GC = "LowGC"
-    THEMRO_HIGH_TM = "HighTM"
-    THEMRO_LOW_TM = "LowTM"
-    THEMRO_MAX_HOMOPOLY = "MaxHomopoly"
+    THERMO_HIGH_GC = "HighGC"
+    THERMO_LOW_GC = "LowGC"
+    THERMO_HIGH_TM = "HighTM"
+    THERMO_LOW_TM = "LowTM"
+    THERMO_MAX_HOMOPOLY = "MaxHomopoly"
+    NO_SEQUENCES = "NoSequences"
 
 
 def parse_error(results: set[CustomErrors | str]) -> DIGESTION_ERROR:
     """
-    Parses the error set for the error that occured
-    As only one error is returned, there is an arbitrary heirarchy of errors
+    Parses the error set for the error that occurred
+    As only one error is returned, there is an arbitrary hierarchy of errors
     - CONTAINS_INVALID_BASE > GAP_ON_SET_BASE > WALKS_OUT > CUSTOM_RECURSION_ERROR > WALK_TO_FAR > CUSTOM_ERRORS
     """
     if ContainsInvalidBase() in results:
@@ -87,19 +88,19 @@ def parse_error(results: set[CustomErrors | str]) -> DIGESTION_ERROR:
 
 def parse_thermo_error(result: THERMORESULT) -> DIGESTION_ERROR:
     """
-    Parses the THERMORESULT for the error that occured
+    Parses the THERMORESULT for the error that occurred
     """
     match result:
         case THERMORESULT.HIGH_GC:
-            return DIGESTION_ERROR.THEMRO_HIGH_GC
+            return DIGESTION_ERROR.THERMO_HIGH_GC
         case THERMORESULT.LOW_GC:
-            return DIGESTION_ERROR.THEMRO_LOW_GC
+            return DIGESTION_ERROR.THERMO_LOW_GC
         case THERMORESULT.HIGH_TM:
-            return DIGESTION_ERROR.THEMRO_HIGH_TM
+            return DIGESTION_ERROR.THERMO_HIGH_TM
         case THERMORESULT.LOW_TM:
-            return DIGESTION_ERROR.THEMRO_LOW_TM
+            return DIGESTION_ERROR.THERMO_LOW_TM
         case THERMORESULT.MAX_HOMOPOLY:
-            return DIGESTION_ERROR.THEMRO_MAX_HOMOPOLY
+            return DIGESTION_ERROR.THERMO_MAX_HOMOPOLY
         case _:
             raise ValueError("Unknown error occured")
 
@@ -491,7 +492,10 @@ def mp_r_digest(
     elif isinstance(tmp_parsed_seqs, dict):
         parsed_seqs = tmp_parsed_seqs
     else:
-        raise ValueError("Unknown error occured")
+        raise ValueError("Unknown error occurred")
+
+    if not parsed_seqs:
+        return (start_col, DIGESTION_ERROR.NO_SEQUENCES)
 
     # Create the Kmer
     rc_seqs = [reverse_complement(seq) for seq in parsed_seqs.keys()]
@@ -626,6 +630,9 @@ def mp_f_digest(
         [*parsed_seqs.keys()], [*parsed_seqs.keys()], config.dimer_score
     ):
         return (end_col, DIGESTION_ERROR.DIMER_FAIL)
+
+    if not parsed_seqs:
+        return (end_col, DIGESTION_ERROR.NO_SEQUENCES)
 
     return FKmer(end_col, list(parsed_seqs.keys()))
 
