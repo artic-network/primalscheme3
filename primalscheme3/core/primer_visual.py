@@ -276,4 +276,6 @@ def primer_mismatch_heatmap(
     )
     fig.update_yaxes(autorange="reversed")
 
-    return fig.to_html(include_plotlyjs=True if offline_plots else "cdn")
+    return fig.to_html(
+        include_plotlyjs=True if offline_plots else "cdn", full_html=False
+    )

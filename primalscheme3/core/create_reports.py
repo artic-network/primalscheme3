@@ -364,4 +364,6 @@ def generate_plot_html(
     )
 
     # Write a html version of the plot
-    return fig.to_html(include_plotlyjs=True if offline_plots else "cdn")
+    return fig.to_html(
+        include_plotlyjs=True if offline_plots else "cdn", full_html=False
+    )
