@@ -18,6 +18,7 @@ from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots_html
+from primalscheme3.core.errors import DigestionFailNoPrimerPairs
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import (
     generate_consensus,
@@ -304,6 +305,9 @@ def schemecreate(
     # Create a dict full of msa data
     msa_data = {}
     msa_dict: dict[int, MSA] = {}
+
+    msa_has_primerpairs_bool = {msa_index: False for msa_index, _ in enumerate(ARG_MSA)}
+
     for msa_index, msa_path in enumerate(ARG_MSA):
         msa_data[msa_index] = {}
 
@@ -376,12 +380,19 @@ def schemecreate(
 
         if len(msa_obj.primerpairs) == 0:
             logger.critical(f"No valid primers found for [blue]{msa_obj.name}[/blue]")
+        else:
+            msa_has_primerpairs_bool[msa_index] = True
 
         # Add the msa to the scheme
         msa_dict[msa_index] = msa_obj
 
     # Add MSA data into cfg
     cfg_dict["msa_data"] = msa_data
+
+    # If all MSAs have no primers, exit
+    if not any(msa_has_primerpairs_bool.values()):
+        logger.critical("No valid primers found in any MSA")
+        raise DigestionFailNoPrimerPairs("No valid primerpairs found in any MSA")
 
     # Create the scheme object early
     scheme = Scheme(config=config, matchDB=mismatch_db, msa_dict=msa_dict)
