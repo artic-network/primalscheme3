@@ -267,6 +267,7 @@ def primer_mismatch_heatmap(
             hovertemplate=hovertemplatestr,
             xgap=0.1,
             ygap=0.1,
+            name="Primer Mismatches",
         )
     )
     fig.update_layout(
@@ -275,6 +276,18 @@ def primer_mismatch_heatmap(
         title_text=f"Primer Mismatches: {list(primary_ref)[0]}",
     )
     fig.update_yaxes(autorange="reversed")
+
+    # Remove unnecessary plot elements
+    fig.update_layout(
+        modebar_remove=[
+            "select2d",
+            "lasso2d",
+            "select",
+            "autoScale2d",
+            "zoom",
+            "toImage",
+        ]
+    )
 
     return fig.to_html(
         include_plotlyjs=True if offline_plots else "cdn", full_html=False

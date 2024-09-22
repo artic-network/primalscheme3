@@ -223,7 +223,7 @@ def generate_plot_html(
         col=1,
     )
 
-    # Add all posible Fkmers
+    # Add all possible Fkmers
     fkmer_data = [
         (end, num_seqs) for end, num_seqs in msa_data["thermo_pass"]["F"].items()
     ]
@@ -234,11 +234,12 @@ def generate_plot_html(
             hovertext=[f"Number Seqs: {x[1]}" for x in fkmer_data],
             marker=dict(symbol="triangle-right", size=10),
             mode="markers",
+            name="Passing Forward Primers",
         ),
         row=4,
         col=1,
     )
-    # Add all posible Rkmers
+    # Add all possible Rkmers
     rkmer_data = [
         (start, num_seqs) for start, num_seqs in msa_data["thermo_pass"]["R"].items()
     ]
@@ -249,6 +250,7 @@ def generate_plot_html(
             hovertext=[f"Number Seqs: {x[1]}" for x in rkmer_data],
             marker=dict(symbol="triangle-left", size=10),
             mode="markers",
+            name="Passing Reverse Primers",
         ),
         row=4,
         col=1,
@@ -292,7 +294,7 @@ def generate_plot_html(
         tickformat=",d",
         title_font=dict(size=18, family="Arial", color="Black"),
         range=[0, length],
-        title="Position",
+        title="",  # Blank title for all x-axes
     )
     fig.update_yaxes(
         showline=True,
@@ -350,10 +352,25 @@ def generate_plot_html(
         col=1,
         secondary_y=False,
     )
+    fig.update_xaxes(
+        title="Position", row=4, col=1
+    )  # Add the x-axis title to the bottom plot
 
     # fig.update_layout(paper_bgcolor="#000000")
     fig.update_layout(height=900, title_text=chromname, showlegend=False)
     # plot_bgcolor="rgba(246, 237, 202, 0.5)",
+
+    # Remove unnecessary plot elements
+    fig.update_layout(
+        modebar_remove=[
+            "select2d",
+            "lasso2d",
+            "select",
+            "autoScale2d",
+            "zoom",
+            "toImage",
+        ]
+    )
 
     # Write a png version of the plot
     fig.write_image(
