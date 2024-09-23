@@ -117,6 +117,11 @@ class MSA:
         self.logger = logger
         self.progress_manager = progress_manager
 
+        # Add empty lists for the primerpairs, fkmers and rkmers
+        self.primerpairs = []
+        self.fkmers = []
+        self.rkmers = []
+
         # Read in the MSA
         try:
             self.array, self._seq_dict = parse_msa(path)

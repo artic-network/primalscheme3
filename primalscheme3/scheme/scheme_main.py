@@ -362,11 +362,15 @@ def schemecreate(
             f"[green]{len(msa_obj.rkmers)}[/green] RKmers"
         )
 
+        # Add the msa to the scheme
+        msa_dict[msa_index] = msa_obj
+
         if len(msa_obj.fkmers) == 0 or len(msa_obj.rkmers) == 0:
             logger.critical(
                 f"No valid FKmers or RKmers found for [blue]{msa_obj.name}[/blue]"
             )
             continue
+
         # Generate all primerpairs then interaction check
         msa_obj.generate_primerpairs(
             amplicon_size_max=config.amplicon_size_max,
@@ -382,9 +386,6 @@ def schemecreate(
             logger.critical(f"No valid primers found for [blue]{msa_obj.name}[/blue]")
         else:
             msa_has_primerpairs_bool[msa_index] = True
-
-        # Add the msa to the scheme
-        msa_dict[msa_index] = msa_obj
 
     # Add MSA data into cfg
     cfg_dict["msa_data"] = msa_data
