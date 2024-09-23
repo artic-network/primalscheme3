@@ -374,9 +374,11 @@ def r_digest_to_count(
         return (start_col, {DIGESTION_ERROR.WALKS_OUT: -1})
 
     # Check for gap frequency on first base
-    first_base_counter = Counter(align_array[:, start_col])
-    del first_base_counter[""]
-    num_seqs = sum(first_base_counter.values())
+    base, counts = np.unique(align_array[:, start_col], return_counts=True)
+    first_base_counter = dict(zip(base, counts))
+    first_base_counter.pop("", None)
+
+    num_seqs = np.sum(counts)
     first_base_freq = {k: v / num_seqs for k, v in first_base_counter.items()}
 
     # If the freq of gap is above minfreq
@@ -420,7 +422,9 @@ def r_digest_to_count(
             return (start_col, {parse_error(set(results)): -1})
 
         # Add the results to the Counter
-        total_col_seqs.update(parse_error_list(results))
+        total_col_seqs.update(
+            {seq: 1 / len(results) for seq in parse_error_list(results)}
+        )
 
     return (start_col, dict(total_col_seqs))
 
@@ -519,9 +523,14 @@ def f_digest_to_count(
     """
 
     # Check for gap frequency on first base
-    first_base_counter = Counter(align_array[:, end_col])
-    del first_base_counter[""]
-    num_seqs = sum(first_base_counter.values())
+    base, counts = np.unique(
+        align_array[:, end_col], return_counts=True
+    )  # -1 for non-inclusive end
+    first_base_counter = dict(zip(base, counts))
+    first_base_counter.pop("", None)
+
+    num_seqs = np.sum(counts)
+
     first_base_freq = {k: v / num_seqs for k, v in first_base_counter.items()}
 
     # If the freq of gap is above minfreq
@@ -565,7 +574,9 @@ def f_digest_to_count(
             return (end_col, {parse_error(set(results)): -1})
 
         # Add the results to the Counter
-        total_col_seqs.update(parse_error_list(results))
+        total_col_seqs.update(
+            {seq: 1 / len(results) for seq in parse_error_list(results)}
+        )
 
     return (end_col, dict(total_col_seqs))
 
@@ -591,7 +602,7 @@ def f_digest_index(
     elif isinstance(tmp_parsed_seqs, dict):
         parsed_seqs = tmp_parsed_seqs
     else:
-        raise ValueError("Unknown error occured")
+        raise ValueError("Unknown error occurred")
 
     # # DownSample the seqs if asked
     # if cfg["reducekmers"]:
@@ -622,7 +633,7 @@ def f_digest_index(
 
 def hamming_dist(s1, s2) -> int:
     """
-    Return the number of subsitutions, starting from the 3p end
+    Return the number of substitutions, starting from the 3p end
     """
     return sum((x != y for x, y in zip(s1[::-1], s2[::-1])))
 
@@ -680,9 +691,9 @@ def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set
             # If the sequence is not accounted for and not included
             if sequence not in accounted_seqs and sequence not in included_seqs:
                 included_seqs.add(sequence)
-                # Add all the neighbor into accounted seqs
-                for neighbor in G.neighbors(sequence):
-                    accounted_seqs.add(neighbor)
+                # Add all the neighbors into accounted seqs
+                for neighbors in G.neighbors(sequence):
+                    accounted_seqs.add(neighbors)
 
         # Update the p3_end_dict to contain the downsampled tails
         p3_end_dict[p3_end] = included_seqs
