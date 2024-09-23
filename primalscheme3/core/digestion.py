@@ -361,17 +361,12 @@ def wrap_walk(
 
 
 def r_digest_to_count(
-    data: tuple[np.ndarray, Config, int, float],
+    align_array: np.ndarray, config: Config, start_col: int, min_freq: float
 ) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
     Returns the count of each sequence / error at a given index
-
     A value of -1 in the return dict means the function returned early, and not all seqs were counted. Only used for WALKS_OUT and GAP_ON_SET_BASE
     """
-    align_array: np.ndarray = data[0]
-    config: Config = data[1]
-    start_col: int = data[2]
-    min_freq: float = data[3]
 
     ### Process early return conditions
     # If the initial slice is outside the range of the array
@@ -484,9 +479,7 @@ def r_digest_index(
     :return: A RKmer object or a tuple of (start_col, error)
     """
     # Count how many times each sequence / error occurs
-    _start_col, seq_counts = r_digest_to_count(
-        (align_array, config, start_col, min_freq)
-    )
+    _start_col, seq_counts = r_digest_to_count(align_array, config, start_col, min_freq)
     tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=config.ignore_n)
     if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
         return (start_col, tmp_parsed_seqs)
@@ -518,17 +511,12 @@ def r_digest_index(
 
 
 def f_digest_to_count(
-    data: tuple[np.ndarray, Config, int, float],
+    align_array: np.ndarray, config: Config, end_col: int, min_freq: float
 ) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
     """
     This will try and create a FKmer ended at the given index
-    :data: A tuple of (align_array, cfg, end_col, min_freq)
     :return: A FKmer object or a tuple of (end_col, error)
     """
-    align_array: np.ndarray = data[0]
-    config: Config = data[1]
-    end_col: int = data[2]
-    min_freq: float = data[3]
 
     # Check for gap frequency on first base
     first_base_counter = Counter(align_array[:, end_col])
@@ -596,7 +584,7 @@ def f_digest_index(
     """
 
     # Count how many times each sequence / error occurs
-    _end_col, seq_counts = f_digest_to_count((align_array, config, end_col, min_freq))
+    _end_col, seq_counts = f_digest_to_count(align_array, config, end_col, min_freq)
     tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=config.ignore_n)
     if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
         return (end_col, tmp_parsed_seqs)
