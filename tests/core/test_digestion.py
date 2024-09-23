@@ -7,10 +7,10 @@ from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import (
     DIGESTION_ERROR,
     digest,
+    f_digest_index,
     hamming_dist,
-    mp_f_digest,
-    mp_r_digest,
     parse_error,
+    r_digest_index,
     reduce_kmers,
     walk_left,
     walk_right,
@@ -462,37 +462,35 @@ class Test_MPRDigest(unittest.TestCase):
             array_list.append([x for x in seq])
         return np.array(array_list)
 
-    def test_mp_r_digest(self):
+    def test_r_digest_index(self):
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        data = (self.create_array(seqs), self.config, 20, 0)
-        result = mp_r_digest(data)
+        result = r_digest_index(self.create_array(seqs), self.config, 20, 0)
 
         # The Expected Sequence
         expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
-    def test_mp_r_digest_one_invalid_0(self):
+    def test_r_digest_index_one_invalid_0(self):
         """The invalid base and min_freq 0 should return None"""
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.config, 20, 0)
-        result = mp_r_digest(data)
+        result = r_digest_index(self.create_array(seqs), self.config, 20, 0)
 
         # The Expected Sequence
         expected = (20, DIGESTION_ERROR.CONTAINS_INVALID_BASE)
 
         self.assertEqual(result, expected)
 
-    def test_mp_r_digest_one_invalid_MBF(self):
+    def test_r_digest_index_one_invalid_MBF(self):
         """The invalid base and min_freq 0.5 should return sequence"""
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
@@ -500,15 +498,14 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        data = (self.create_array(seqs), self.config, 20, 0.5)
-        result = mp_r_digest(data)
+        result = r_digest_index(self.create_array(seqs), self.config, 20, 0.5)
 
         # The Expected Sequence
         expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
-    def test_mp_r_digest_walkout(self):
+    def test_r_digest_index_walkout(self):
         """
         Tests that walking out of the array returns the correct error
         """
@@ -517,14 +514,13 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.config, 60, 0.5)
-        result = mp_r_digest(data)
+        result = r_digest_index(self.create_array(seqs), self.config, 60, 0.5)
 
         # The Expected Sequence
         expected = (60, DIGESTION_ERROR.WALKS_OUT)
         self.assertEqual(result, expected)  # type: ignore
 
-    def test_mp_r_digest_gaponsetbase(self):
+    def test_r_digest_index_gaponsetbase(self):
         """
         Tests GapOnSetBase is returned
         """
@@ -533,14 +529,13 @@ class Test_MPRDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.config, 24, 0)
-        result = mp_r_digest(data)
+        result = r_digest_index(self.create_array(seqs), self.config, 24, 0)
 
         # The Expected Sequence
         expected = (24, DIGESTION_ERROR.GAP_ON_SET_BASE)
         self.assertEqual(result, expected)  # type: ignore
 
-    def test_mp_r_digest_walktofar(self):
+    def test_r_digest_index_walktofar(self):
         """
         Tests WalksToFar is returned
         """
@@ -554,8 +549,7 @@ class Test_MPRDigest(unittest.TestCase):
         local_cfg = Config()
         local_cfg.primer_max_walk = 10  # Force the primer to walk to far
 
-        data = (self.create_array(seqs), local_cfg, 10, 0)
-        result = mp_r_digest(data)
+        result = r_digest_index(self.create_array(seqs), local_cfg, 10, 0)
 
         # The Expected Sequence
         expected = (10, DIGESTION_ERROR.WALK_TO_FAR)
@@ -572,52 +566,49 @@ class Test_MPFDigest(unittest.TestCase):
             array_list.append([x for x in seq])
         return np.array(array_list)
 
-    def test_mp_f_digest(self):
+    def test_f_digest_index(self):
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
 
-        data = (self.create_array(seqs), self.config, 40, 0)
-        result = mp_f_digest(data)
+        result = f_digest_index(self.create_array(seqs), self.config, 40, 0)
 
         # The Expected Sequence
         expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
-    def test_mp_f_digest_one_invalid(self):
+    def test_f_digest_index_one_invalid(self):
         """The invalid base and min_freq 0 should return None"""
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.config, 40, 0)
-        result = mp_f_digest(data)
+        result = f_digest_index(self.create_array(seqs), self.config, 40, 0)
 
         # The Expected Sequence
         expected = (40, DIGESTION_ERROR.CONTAINS_INVALID_BASE)
 
         self.assertEqual(result, expected)
 
-    def test_mp_f_digest_one_invalid_with_mbf(self):
+    def test_f_digest_index_one_invalid_with_mbf(self):
         """The invalid base and min_freq 0.5 should return sequence"""
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCANTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.config, 40, 0.5)
-        result = mp_f_digest(data)
+        result = f_digest_index(self.create_array(seqs), self.config, 40, 0.5)
 
         # The Expected Sequence
         expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
 
         self.assertEqual(result.seqs, expected)  # type: ignore
 
-    def test_mp_f_digest_walkout(self):
+    def test_f_digest_index_walkout(self):
         """
         Tests that walking out of the array returns the correct error
         """
@@ -626,14 +617,13 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.config, 5, 0.5)
-        result = mp_f_digest(data)
+        result = f_digest_index(self.create_array(seqs), self.config, 5, 0.5)
 
         # The Expected Sequence
         expected = (5, DIGESTION_ERROR.WALKS_OUT)
         self.assertEqual(result, expected)  # type: ignore
 
-    def test_mp_f_digest_gaponsetbase(self):
+    def test_f_digest_index_gaponsetbase(self):
         """
         Tests GapOnSetBase is returned
         """
@@ -642,14 +632,13 @@ class Test_MPFDigest(unittest.TestCase):
             "CCAATGGTGCAAAAGGTATAATCA-TAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
         ]
-        data = (self.create_array(seqs), self.config, 24, 0)
-        result = mp_f_digest(data)
+        result = f_digest_index(self.create_array(seqs), self.config, 24, 0)
 
         # The Expected Sequence
         expected = (24, DIGESTION_ERROR.GAP_ON_SET_BASE)
         self.assertEqual(result, expected)  # type: ignore
 
-    def test_mp_f_digest_walktofar(self):
+    def test_f_digest_index_walktofar(self):
         """
         Tests WalksToFar is returned
         """
@@ -663,8 +652,7 @@ class Test_MPFDigest(unittest.TestCase):
         local_cfg = Config()
         local_cfg.primer_max_walk = 10  # Force the primer to walk to far
 
-        data = (self.create_array(seqs), local_cfg, 60, 0)
-        result = mp_f_digest(data)
+        result = f_digest_index(self.create_array(seqs), local_cfg, 60, 0)
 
         # The Expected Sequence
         expected = (60, DIGESTION_ERROR.WALK_TO_FAR)

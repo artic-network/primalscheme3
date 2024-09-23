@@ -35,7 +35,6 @@ from primalscheme3.core.seq_functions import (
 from primalscheme3.core.thermo import (
     THERMORESULT,
     calc_tm,
-    forms_hairpin,
     thermo_check_kmers,
 )
 
@@ -61,6 +60,7 @@ class DIGESTION_ERROR(Enum):
     THERMO_HIGH_TM = "HighTM"
     THERMO_LOW_TM = "LowTM"
     THERMO_MAX_HOMOPOLY = "MaxHomopoly"
+    THERMO_HAIRPIN = "Hairpin"
     NO_SEQUENCES = "NoSequences"
 
 
@@ -101,6 +101,8 @@ def parse_thermo_error(result: THERMORESULT) -> DIGESTION_ERROR:
             return DIGESTION_ERROR.THERMO_LOW_TM
         case THERMORESULT.MAX_HOMOPOLY:
             return DIGESTION_ERROR.THERMO_MAX_HOMOPOLY
+        case THERMORESULT.HAIRPIN:
+            return DIGESTION_ERROR.THERMO_HAIRPIN
         case _:
             raise ValueError("Unknown error occured")
 
@@ -469,19 +471,18 @@ def process_seqs(
     return parsed_seqs
 
 
-def mp_r_digest(
-    data: tuple[np.ndarray, Config, int, float],
+def r_digest_index(
+    align_array: np.ndarray, config: Config, start_col: int, min_freq: float
 ) -> RKmer | tuple[int, DIGESTION_ERROR]:
     """
     This will try and create a RKmer started at the given index
-    :data: A tuple of (align_array, cfg, start_col, min_freq)
+    :align_array: The alignment array
+    :config: The configuration object
+    :start_col: The column index to start the RKmer
+    :min_freq: The minimum frequency threshold
+
     :return: A RKmer object or a tuple of (start_col, error)
     """
-    align_array: np.ndarray = data[0]
-    config: Config = data[1]
-    start_col: int = data[2]
-    min_freq: float = data[3]
-
     # Count how many times each sequence / error occurs
     _start_col, seq_counts = r_digest_to_count(
         (align_array, config, start_col, min_freq)
@@ -509,9 +510,6 @@ def mp_r_digest(
         case _:
             return (start_col, parse_thermo_error(thermo_result))
 
-    # Check for hairpins
-    if forms_hairpin(tmp_kmer.seqs, config=config):
-        return (start_col, DIGESTION_ERROR.HAIRPIN_FAIL)
     # Check for dimer
     if do_pools_interact_py([*tmp_kmer.seqs], [*tmp_kmer.seqs], config.dimer_score):
         return (start_col, DIGESTION_ERROR.DIMER_FAIL)
@@ -584,18 +582,18 @@ def f_digest_to_count(
     return (end_col, dict(total_col_seqs))
 
 
-def mp_f_digest(
-    data: tuple[np.ndarray, Config, int, float],
+def f_digest_index(
+    align_array: np.ndarray, config: Config, end_col: int, min_freq: float
 ) -> FKmer | tuple[int, DIGESTION_ERROR]:
     """
     This will try and create a FKmer ended at the given index
-    :data: A tuple of (align_array, cfg, end_col, min_freq)
+    :align_array: The alignment array
+    :config: The configuration object
+    :end_col: The column index to end the FKmer
+    :min_freq: The minimum frequency threshold
+
     :return: A FKmer object or a tuple of (end_col, error)
     """
-    align_array: np.ndarray = data[0]
-    config: Config = data[1]
-    end_col: int = data[2]
-    min_freq: float = data[3]
 
     # Count how many times each sequence / error occurs
     _end_col, seq_counts = f_digest_to_count((align_array, config, end_col, min_freq))
@@ -622,9 +620,6 @@ def mp_f_digest(
             pass
         case _:
             return (end_col, parse_thermo_error(thermo_result))
-
-    if forms_hairpin({*parsed_seqs.keys()}, config=config):
-        return (end_col, DIGESTION_ERROR.HAIRPIN_FAIL)
 
     if do_pools_interact_py(
         [*parsed_seqs.keys()], [*parsed_seqs.keys()], config.dimer_score
@@ -751,7 +746,7 @@ def f_digest(
 ) -> list[FKmer]:
     fkmers = []
     for findex in findexes:
-        fkmer = mp_f_digest((msa_array, config, findex, config.min_base_freq))
+        fkmer = f_digest_index(msa_array, config, findex, config.min_base_freq)
 
         # Append valid FKmers
         if isinstance(fkmer, FKmer) and fkmer.seqs:
@@ -772,7 +767,7 @@ def r_digest(
 ) -> list[RKmer]:
     rkmers = []
     for rindex in rindexes:
-        rkmer = mp_r_digest((msa_array, config, rindex, config.min_base_freq))
+        rkmer = r_digest_index(msa_array, config, rindex, config.min_base_freq)
 
         # Append valid RKmers
         if isinstance(rkmer, RKmer) and rkmer.seqs:
@@ -829,7 +824,7 @@ def digest(
         iter=findexes, process="Creating forward primers", chrom=chrom
     )
     for findex in pt:
-        fkmer = mp_f_digest((msa_array, config, findex, config.min_base_freq))
+        fkmer = f_digest_index(msa_array, config, findex, config.min_base_freq)
 
         if logger is not None:
             if isinstance(fkmer, tuple):
@@ -850,7 +845,7 @@ def digest(
         iter=rindexes, process="Creating reverse primers", chrom=chrom
     )
     for rindex in pt:
-        rkmer = mp_r_digest((msa_array, config, rindex, config.min_base_freq))
+        rkmer = r_digest_index(msa_array, config, rindex, config.min_base_freq)
 
         if logger is not None:
             if isinstance(rkmer, tuple):

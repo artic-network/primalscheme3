@@ -16,6 +16,7 @@ class THERMORESULT(Enum):
     HIGH_TM = 3
     LOW_TM = 4
     MAX_HOMOPOLY = 5
+    HAIRPIN = 6
 
 
 def calc_tm(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
@@ -97,6 +98,7 @@ def passes_thermo_checks(kmer_seq: str, config: Config) -> THERMORESULT:
     GC CHECK
     TM CHECK
     HOMOPOLY CHECK
+    HAIRPIN
     PASS
 
     Args:
@@ -130,7 +132,26 @@ def passes_thermo_checks(kmer_seq: str, config: Config) -> THERMORESULT:
     if max_homo(kmer_seq) > config.primer_homopolymer_max:
         return THERMORESULT.MAX_HOMOPOLY
 
+    # Check for hairpin
+    if (
+        calc_hairpin_tm(
+            kmer_seq,
+            mv_conc=config.mv_conc,
+            dv_conc=config.dv_conc,
+            dntp_conc=config.dntp_conc,
+            dna_conc=config.dna_conc,
+        )
+        > config.primer_hairpin_th_max
+    ):
+        return THERMORESULT.HAIRPIN
+
     return THERMORESULT.PASS
+
+
+def thermo_check_all_kmers(
+    kmers: Iterable[str], config: Config
+) -> dict[str, THERMORESULT]:
+    return {kmer: passes_thermo_checks(kmer, config) for kmer in kmers}
 
 
 def thermo_check_kmers(kmers: Iterable[str], config: Config) -> THERMORESULT:
