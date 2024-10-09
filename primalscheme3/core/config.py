@@ -94,9 +94,17 @@ class Config:
         Return a dict (key, val) for non-private, non-callable members
         """
         items = {}
-        for key, val in self.__dict__.items():
-            if not (callable(getattr(self, key)) or key.startswith("_")):
-                items[key] = val
+        for key in [x for x in dir(self) if not x.startswith("_")]:
+            if not callable(getattr(self, key)):  # prevent functions
+                value = getattr(self, key)
+                # Convert Enum and Path objects to their values
+                if isinstance(value, Enum):
+                    items[key] = value.value
+                if isinstance(value, pathlib.Path):
+                    items[key] = str(value)
+                else:
+                    items[key] = value
+
         return items
 
     def to_json(self) -> dict[str, Any]:
