@@ -1,7 +1,7 @@
 import unittest
 
 from primalscheme3.core.config import Config
-from primalscheme3.core.thermo import THERMORESULT, gc, max_homo, passes_thermo_checks
+from primalscheme3.core.thermo import THERMORESULT, gc, max_homo, thermo_check
 
 
 class Test_GC(unittest.TestCase):
@@ -30,7 +30,7 @@ class Test_MaxHomo(unittest.TestCase):
 class Test_PassesThermoCHecks(unittest.TestCase):
     config = Config()
 
-    def test_passes_thermo_checks(self):
+    def test_thermo_check(self):
         """
         Valution order.
         """
@@ -44,7 +44,7 @@ class Test_PassesThermoCHecks(unittest.TestCase):
         }
 
         for seq, truth in test_data.items():
-            self.assertEqual(passes_thermo_checks(seq, config=self.config), truth)
+            self.assertEqual(thermo_check(seq, config=self.config), truth)
 
 
 if __name__ == "__main__":
