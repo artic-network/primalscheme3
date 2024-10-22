@@ -105,7 +105,7 @@ class BedLine:
         return self._end
 
     def __str__(self, *kwargs) -> str:
-        # I use *kwargs so that it can have the same behavor as PrimerPairs
+        # I use *kwargs so that it can have the same behaviour as PrimerPairs
         return f"{self.chrom_name}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
 
 
@@ -147,7 +147,7 @@ def read_in_bedprimerpairs(path: pathlib.Path) -> tuple[list[BedPrimerPair], lis
     primerpairs = []
     primerlines, _headers = read_in_bedlines(path)  # Ignore headers for now
 
-    # Group primers by referance
+    # Group primers by reference
     ref_to_bedlines: dict[str, list[BedLine]] = dict()
     for ref in {bedline.chrom_name for bedline in primerlines}:
         ref_to_bedlines[ref] = [x for x in primerlines if x.chrom_name == ref]
@@ -162,14 +162,26 @@ def read_in_bedprimerpairs(path: pathlib.Path) -> tuple[list[BedPrimerPair], lis
                 x for x in ref_bed_lines if x.amplicon_number == ampliconnumber
             ]
             pool = ampliconlines[0].pool
+
+            fp = [x for x in ampliconlines if x.direction == "+"]
+            rp = [x for x in ampliconlines if x.direction == "-"]
+
+            if len(fp) == 0:
+                raise ValueError(
+                    f"Primer {ampliconlines[0].primername} has no forward primer"
+                )
+            if len(rp) == 0:
+                raise ValueError(
+                    f"Primer {ampliconlines[0].primername} has no reverse primer"
+                )
             # Group the ampliconlines by direction
             fkmer = FKmer(
-                [x.end for x in ampliconlines if x.direction == "+"][0],
-                [x.sequence for x in ampliconlines if x.direction == "+"],
+                max([x.end for x in fp]),
+                [x.sequence for x in fp],
             )
             rkmer = RKmer(
-                [x.start for x in ampliconlines if x.direction == "-"][0],
-                [x.sequence for x in ampliconlines if x.direction == "-"],
+                min([x.start for x in rp]),
+                [x.sequence for x in rp],
             )
             primerpairs.append(
                 BedPrimerPair(
