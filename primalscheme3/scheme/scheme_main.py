@@ -350,7 +350,7 @@ def schemecreate(
         msa_data[msa_index]["msa_name"] = msa_obj.name
         msa_data[msa_index]["msa_path"] = str(
             "work/" + msa_path.name
-        )  # Write localpath
+        )  # Write local path
         msa_data[msa_index]["msa_chromname"] = msa_obj._chrom_name
         msa_data[msa_index]["msa_uuid"] = msa_obj._uuid
 
@@ -448,7 +448,7 @@ def schemecreate(
                     pass  # Do nothing move on to next step
                 case SchemeReturn.NO_FIRST_PRIMERPAIR:
                     logger.warning(
-                        f"No valid primers found for <blue>{msa_obj.name}</>",
+                        f"No valid primerpairs found for [blue]{msa_obj.name}[/blue]",
                     )
                     break
 

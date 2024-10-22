@@ -34,7 +34,7 @@ class SchemeReturn(Enum):
     ADDED_BACKTRACKED = 7
     NO_BACKTRACK = 8
 
-    ADDED_CIRULAR = 9
+    ADDED_CIRCULAR = 9
     NO_CIRCULAR = 10
 
 
@@ -66,7 +66,7 @@ class Scheme(Multiplex):
                 self.add_primer_pair_to_pool(primerpairs[0], pool_index, msa_index)
                 return SchemeReturn.ADDED_FIRST_PRIMERPAIR
 
-        # Create a hashmap of what seqs are in each pool for quicklook up
+        # Create a hashmap of what seqs are in each pool for quick look up
         pool_seqs_map: dict[int, list[str]] = {
             index: self.get_seqs_in_pool(index) for index in range(self.n_pools)
         }
@@ -241,7 +241,7 @@ class Scheme(Multiplex):
                 ):
                     continue
 
-                # Guard for misprimal
+                # Guard for miss priming
                 if detect_new_products(
                     pp.find_matches(
                         self._matchDB,
@@ -419,7 +419,7 @@ class Scheme(Multiplex):
                 # Skip the miss priming product check, as we are using special indexes
                 # If the primer passes all the checks, add it to the pool
                 self.add_primer_pair_to_pool(c_pp, pool_index, msa.msa_index)
-                return SchemeReturn.ADDED_CIRULAR
+                return SchemeReturn.ADDED_CIRCULAR
 
         # No Primers could be added
         return SchemeReturn.NO_CIRCULAR
