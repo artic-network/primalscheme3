@@ -5,7 +5,7 @@ from typing import Any
 from primalscheme3 import __version__
 
 
-# Writen by Andy Smith, modified by: Chris Kent
+# Written by Andy Smith, modified by: Chris Kent
 class MappingType(Enum):
     """
     Enum for the mapping type
