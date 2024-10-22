@@ -10,9 +10,11 @@ from typing_extensions import Annotated
 from primalscheme3.__init__ import __version__
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.msa import parse_msa
-from primalscheme3.core.primer_visual import primer_mismatch_heatmap
+from primalscheme3.core.primer_visual import bedfile_plot_html, primer_mismatch_heatmap
 from primalscheme3.core.progress_tracker import ProgressManager
-from primalscheme3.interaction.interaction import visualise_interactions
+from primalscheme3.interaction.interaction import (
+    visualise_interactions,
+)
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
 from primalscheme3.remap.remap import remap
 from primalscheme3.repair.repair import repair
@@ -398,7 +400,6 @@ def repair_mode(
     pm = ProgressManager()
 
     repair(
-        cores=1,
         config_path=config,
         bedfile_path=bedfile,
         force=force,
@@ -498,6 +499,52 @@ def visualise_primer_mismatches(
                 offline_plots=offline_plots,
                 include_seqs=include_seqs,
             )
+        )
+
+
+@app.command(no_args_is_help=True)
+def visualise_bedfile(
+    bedfile: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The bedfile containing the primers",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    ref_id: Annotated[str, typer.Option(help="The reference genome ID")],
+    ref_path: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The bedfile containing the primers",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    output: Annotated[
+        pathlib.Path,
+        typer.Option(help="Output location of the plot", dir_okay=False, writable=True),
+    ] = pathlib.Path("bedfile.html"),
+):
+    """
+    Visualise the bedfile
+    """
+    from Bio import SeqIO
+
+    ref_file = SeqIO.index(ref_path, "fasta")
+    ref_genome = ref_file.get(ref_id)
+    if ref_genome is None:
+        raise typer.BadParameter(
+            f"Reference genome ID '{ref_id}' not found in '{ref_path}'"
+        )
+
+    with open(output, "w") as outfile:
+        outfile.write(
+            bedfile_plot_html(bedfile=bedfile, ref_name=ref_id, ref_seq=ref_genome)
         )
 
 
