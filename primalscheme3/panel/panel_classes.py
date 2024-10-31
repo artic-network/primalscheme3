@@ -5,15 +5,13 @@ from itertools import islice
 import numpy as np
 
 # Iterations checker
-from primaldimer_py import do_pools_interact_py  # type: ignore
-
 from primalscheme3.core.bedfiles import BedPrimerPair
 
 # Core Module imports
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
 from primalscheme3.core.errors import CustomErrors
-from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 from primalscheme3.core.progress_tracker import ProgressManager
@@ -27,10 +25,9 @@ class PanelReturn(Enum):
     Enum for the return values of the Panel class.
     """
 
-    ADDED_PRIMERPAIR = 0
-    NO_PRIMERPAIRS = 1
-    MOVING_TO_NEW_MSA = 2
-    NO_MORE_PRIMERPAIRS_IN_MSA = 3
+    ADDED_PRIMERPAIR = 0  # A primerpair was added
+    NO_PRIMERPAIRS = 1  # No more primerpairs to add (finished)
+    NO_PRIMERPAIRS_IN_MSA = 3  # No more primerpairs in the current MSA (moving to next)
 
 
 def does_overlap(
@@ -69,7 +66,7 @@ class Region:
     stop: int
     name: str
     score: int
-    typing: bool
+    group: str | None
 
     def __init__(
         self,
@@ -78,26 +75,23 @@ class Region:
         stop: int,
         name: str,
         score: int,
-        typing: int | bool = 0,
+        group: str | None = None,
     ) -> None:
-        """
-        typing: 1 for typing
-        """
-        self.chromname = str(chromname)
+        self.chromname = str(chromname).strip()
         self.start = int(start)
         self.stop = int(stop)
-        self.name = str(name)
+        self.name = str(name).strip()
         self.score = int(score)
-        self.typing = typing == 1
         if self.start >= self.stop:
             raise ValueError(f"{self.name}: Circular regions are not supported.")
+        self.group = group
 
     def positions(self):
         return range(self.start, self.stop)
 
     def __hash__(self) -> int:
         return hash(
-            f"{self.chromname}:{self.start}:{self.stop}:{self.name}:{self.score}:{self.typing}"
+            f"{self.chromname}:{self.start}:{self.stop}:{self.name}:{self.score}"
         )
 
     def __eq__(self, __value: object) -> bool:
@@ -106,7 +100,7 @@ class Region:
         return hash(self) == hash(__value)
 
     def to_bed(self) -> str:
-        return f"{self.chromname}\t{self.start}\t{self.stop}\t{self.name}\t{self.score}\t{1 if self.typing else 0}"
+        return f"{self.chromname}\t{self.start}\t{self.stop}\t{self.name}\t{self.score}\t{self.group}"
 
 
 class RegionParser:
@@ -116,27 +110,29 @@ class RegionParser:
         Returns a single region object from a list representing a line of a bedfile, split by tabs
         """
         # Handle extra columns
-        if len(bed_list) >= 6:
-            chromname, start, stop, name, score, typing = bed_list[:6]
-        elif len(bed_list) == 5:
+        if len(bed_list) >= 5:
             chromname, start, stop, name, score = bed_list[:5]
-            typing = 0
         else:
             raise CustomErrors(
-                f"Invalid region: {' '.join(bed_list)}. Requires 5 or 6 columns."
+                f"Invalid region: {' '.join(bed_list)}. Requires 5 or more columns."
             )
 
         try:
             start = int(start)
             stop = int(stop)
             score = int(score)
-            typing = int(typing)
         except ValueError as e:
             raise CustomErrors(
-                f"Invalid region: {' '.join(bed_list)}. Start, stop, score, and typing must be integers."
+                f"Invalid region: {' '.join(bed_list)}. Start, stop, score must be integers."
             ) from e
 
-        return Region(chromname, start, stop, name, score, typing)
+        # Handle group column
+        try:
+            group = bed_list[5]
+        except IndexError:
+            group = None
+
+        return Region(chromname, start, stop, name, score, group)
 
     @staticmethod
     def from_str(bed_str: str) -> Region:
@@ -151,7 +147,6 @@ class PanelMSA(MSA):
     _score_array: np.ndarray | None
     _midx_entropy_array: np.ndarray | None
     regions: list[Region] | None
-
     primerpairpointer: int
 
     def __init__(
@@ -177,9 +172,13 @@ class PanelMSA(MSA):
         self.primerpairpointer = 0
         self.regions = None
 
-    def create_score_array(self, regions: list[Region]) -> None:
-        self._score_array = np.zeros(len(self._mapping_array), dtype=int)
+    def create_score_array(self, regions: list[Region] | None) -> None:
+        # If no regions provided set all scores to 1
+        if regions is None:
+            self._score_array = np.ones(len(self._mapping_array), dtype=int)
+            return
 
+        self._score_array = np.zeros(len(self._mapping_array), dtype=int)
         # Add the score to the score array
         for region in regions:
             self._score_array[region.start : region.stop] += region.score
@@ -187,7 +186,7 @@ class PanelMSA(MSA):
     def create_entropy_array(self):
         self._midx_entropy_array = np.array(entropy_score_array(self.array))
 
-    def add_regions(self, regions: list[Region]) -> None:
+    def add_regions(self, regions: list[Region] | None) -> None:
         self.regions = regions
         self.create_score_array(regions)
 
@@ -277,8 +276,8 @@ class Panel(Multiplex):
     # New attributes
     _current_msa_index: int
 
-    # for keep adding
-    _workingmsasbool: list[bool] | None = None
+    # Keep adding
+    _is_msa_index_finished: dict[int, bool]
 
     def __init__(
         self, msa_dict: dict[int, PanelMSA], config: Config, matchdb: MatchDB
@@ -287,6 +286,9 @@ class Panel(Multiplex):
 
         self._current_msa_index = 0
         self._failed_primerpairs = [set() for _ in range(self.n_pools)]
+
+        # Keep adding
+        self._is_msa_index_finished = {msa_index: False for msa_index in msa_dict}
 
     def _next_msa(self) -> int:
         """
@@ -317,6 +319,11 @@ class Panel(Multiplex):
         current_msa = self._msa_dict[self._current_msa_index]
         current_pool = self._current_pool
 
+        # Check if the current MSA is finished
+        if self._is_msa_index_finished[self._current_msa_index]:
+            self._next_msa()
+            return PanelReturn.NO_PRIMERPAIRS_IN_MSA
+
         # Pools to try
         pos_pools_indexes = [
             (current_pool + i) % self.n_pools for i in range(self.n_pools)
@@ -338,12 +345,15 @@ class Panel(Multiplex):
         # ]
         # For the primerpairs in the current MSA Sort all primerpairs by score
         current_msa.primerpairs.sort(
-            key=lambda x: (self.calc_pp_score(current_msa, x), len(x.all_seqs())),
+            key=lambda x: (
+                self.calc_pp_score(current_msa, x),
+                -len(x.all_seqs()),
+            ),
             reverse=True,
         )
         for pospp in current_msa.primerpairs:
             # Check primer has score
-            if self.calc_pp_score(current_msa, pospp) < 5:
+            if self.calc_pp_score(current_msa, pospp) <= 0:
                 continue
             for pospool in pos_pools_indexes:
                 # Check if the primerpair can be added
@@ -351,205 +361,44 @@ class Panel(Multiplex):
                     pospp, current_pool, seqs_in_each_pool[pospool]
                 ):
                     case PrimerPairCheck.OK:
+                        # _add_primerpair updates the score array for the added primerpair
                         self._add_primerpair(
                             pospp, current_pool, self._current_msa_index
                         )
+                        # Check for other regions in the same group
+                        # Find regions with overlap
+                        if current_msa.regions:
+                            ol_regions_groups = {
+                                x.group
+                                for x in current_msa.regions
+                                if x.group
+                                and does_overlap(
+                                    (
+                                        pospp.fprimer.region()[0],
+                                        pospp.rprimer.region()[1],
+                                        self._current_msa_index,
+                                    ),
+                                    [(x.start, x.stop, self._current_msa_index)],
+                                )
+                            }
+                            print(f"added pp for: {ol_regions_groups}")
+                            # Find other regions in the same group
+                            other_regions = [
+                                x
+                                for x in current_msa.regions
+                                if x.group in ol_regions_groups
+                            ]
+                            # Update the score for all regions
+                            for region in other_regions:
+                                assert current_msa._score_array is not None
+                                current_msa._score_array[region.start : region.stop] = 0
+
                         return PanelReturn.ADDED_PRIMERPAIR
                     case _:
                         continue
-
-        return PanelReturn.NO_PRIMERPAIRS
-
-    def try_add_primerpair(self) -> PanelReturn:
-        """
-        Try to add a primer pair to the current pool.
-        :return: PanelReturn.
-        """
-        # Get the current MSA
-        current_msa = self._msa_dict[self._current_msa_index]
-        current_pool = self._current_pool
-
-        # Get the current pool
-        added = False
-        # All seqs in each pool
-        seqs_in_pool = [
-            seq
-            for seq in (pp.all_seqs() for pp in self._pools[current_pool])
-            for seq in seq
-        ]
-        # For each primerpair in the current msa
-        for new_pointer, pos_primerpair in enumerate(
-            current_msa.iter_unchecked_primerpairs(), current_msa.primerpairpointer
-        ):
-            # Guard if the primerpair is in the failed primerpairs
-            if pos_primerpair in self._failed_primerpairs[current_pool]:
-                continue
-
-            # Guard if there is overlap
-            if super().does_overlap(pos_primerpair, current_pool):
-                self._failed_primerpairs[current_pool].add(pos_primerpair)
-                continue
-
-            # Guard if there is an interaction
-            if do_pools_interact_py(
-                pos_primerpair.all_seqs(),
-                seqs_in_pool,
-                self.config.dimer_score,
-            ):
-                self._failed_primerpairs[current_pool].add(pos_primerpair)
-                continue
-
-            # Guard if there is a match
-            if detect_new_products(
-                pos_primerpair.find_matches(
-                    self._matchDB,
-                    remove_expected=False,
-                    kmersize=self.config.mismatch_kmersize,
-                    fuzzy=self.config.mismatch_fuzzy,
-                ),
-                self._matches[current_pool],
-            ):
-                self._failed_primerpairs[current_pool].add(pos_primerpair)
-                continue
-
-            # If primerpair passes all checks add it to the pool
-            self._add_primerpair(pos_primerpair, current_pool, self._current_msa_index)
-            added = True
-            # Update the pointer
-            current_msa.primerpairpointer = new_pointer
-            break
-
-        # Return if a primerpair was added
-        if added:
-            return PanelReturn.ADDED_PRIMERPAIR
-        else:
-            return PanelReturn.NO_PRIMERPAIRS
-
-    def keep_adding(self) -> PanelReturn:
-        # Create a list of which msa still have posible primerpairs
-        if self._workingmsasbool is None:
-            self._workingmsasbool = [True] * len(self._msa_dict)
-
-        # All seqs in each pool
-        all_seqs_in_pools: dict[int, list[str]] = {
-            pool: [
-                y
-                for sublist in (x.all_seqs() for x in self._pools[pool])
-                for y in sublist
-            ]
-            for pool in range(self.n_pools)
-        }
-        # Move to next msa if current msa is done
-        if not self._workingmsasbool[self._current_msa_index]:
-            self._next_msa()
-            return PanelReturn.MOVING_TO_NEW_MSA
-        else:
-            msa = self._msa_dict[self._current_msa_index]
-
-        # For each primerpair
-        for new_pointer, pos_primerpair in enumerate(
-            msa.iter_unchecked_primerpairs(), msa.primerpairpointer
-        ):
-            # For each pool
-            for pool in range(self.n_pools):
-                # Guard if there is overlap
-                if super().does_overlap(pos_primerpair, pool):
-                    continue
-
-                # Guard if there is an interaction
-                if do_pools_interact_py(
-                    pos_primerpair.all_seqs(),
-                    all_seqs_in_pools[pool],
-                    self.config.dimer_score,
-                ):
-                    continue
-
-                # Guard if there is a match
-                if detect_new_products(
-                    pos_primerpair.find_matches(
-                        self._matchDB,
-                        remove_expected=False,
-                        kmersize=self.config.mismatch_kmersize,
-                        fuzzy=self.config.mismatch_fuzzy,
-                    ),
-                    self._matches[pool],
-                ):
-                    continue
-
-                # If primerpair passes all checks add it to the pool
-                self._add_primerpair(pos_primerpair, pool, self._current_msa_index)
-                # Update the pointer
-                msa.primerpairpointer = new_pointer
-                return PanelReturn.ADDED_PRIMERPAIR
-
-        # If no primerpairs were added to this msa, mark it as done
-        self._workingmsasbool[self._current_msa_index] = False
-        # If there are still working msas, return that we are moving to a new msa
-        if any(self._workingmsasbool):
-            return PanelReturn.NO_MORE_PRIMERPAIRS_IN_MSA
-        else:
-            return PanelReturn.NO_PRIMERPAIRS
-
-    def try_add_overlap(self):
-        """
-        This will try and find an overlap primerpair and add it to a pool.
-        """
-        # Get the current MSA
-        current_msa = self._msa_dict[self._current_msa_index]
-        current_pool = self._current_pool
-
-        # All seqs in each pool
-        seqs_in_pool = [
-            seq
-            for seq in (pp.all_seqs() for pp in self._pools[current_pool])
-            for seq in seq
-        ]
-        # For each primerpair in the current msa
-        for new_pointer, pos_primerpair in enumerate(
-            current_msa.iter_unchecked_primerpairs(), current_msa.primerpairpointer
-        ):
-            # Guard if the primerpair is in the failed primerpairs
-            if pos_primerpair in self._failed_primerpairs[current_pool]:
-                continue
-
-            # Guard if there is overlap
-            if not self.does_overlap(pos_primerpair, current_pool):
-                continue
-
-            # Guard if there is an interaction
-            if do_pools_interact_py(
-                pos_primerpair.all_seqs(),
-                seqs_in_pool,
-                self.config.dimer_score,
-            ):
-                self._failed_primerpairs[current_pool].add(pos_primerpair)
-                continue
-
-            # Guard if there is a match
-            if detect_new_products(
-                pos_primerpair.find_matches(
-                    self._matchDB,
-                    remove_expected=False,
-                    kmersize=self.config.mismatch_kmersize,
-                    fuzzy=self.config.mismatch_fuzzy,
-                ),
-                self._matches[current_pool],
-            ):
-                self._failed_primerpairs[current_pool].add(pos_primerpair)
-                continue
-
-            # If primerpair passes all checks add it to the pool
-            self._add_primerpair(pos_primerpair, current_pool, self._current_msa_index)
-            added = True
-            # Update the pointer
-            current_msa.primerpairpointer = new_pointer
-            break
-
-        # Return if a primerpair was added
-        if added:
-            return PanelReturn.ADDED_PRIMERPAIR
-        else:
-            return PanelReturn.NO_PRIMERPAIRS
+        # No more primerpairs in the current MSA
+        self._is_msa_index_finished[self._current_msa_index] = True
+        return PanelReturn.NO_PRIMERPAIRS_IN_MSA
 
     def calc_pp_score(self, msa: PanelMSA, pp: PrimerPair) -> int:
         """
