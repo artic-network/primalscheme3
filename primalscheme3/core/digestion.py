@@ -101,7 +101,7 @@ def parse_thermo_error(result: THERMORESULT) -> DIGESTION_ERROR:
         case THERMORESULT.HAIRPIN:
             return DIGESTION_ERROR.THERMO_HAIRPIN
         case _:
-            raise ValueError("Unknown error occured")
+            raise ValueError("Unknown error occurred")
 
 
 def parse_error_list(
@@ -737,7 +737,7 @@ def digest(
             if isinstance(rkmer, tuple):
                 logger.debug(f"{chrom}:RKmer: {rkmer[0]}\t{rkmer[1].value}")
             else:
-                logger.debug(f"{chrom}:RKmer: {rkmer.start}]\tPass")
+                logger.debug(f"{chrom}:RKmer: {rkmer.start}\tPass")
 
         # Append valid RKmers
         if isinstance(rkmer, RKmer) and rkmer.seqs:

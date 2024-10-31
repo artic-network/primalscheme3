@@ -3,6 +3,7 @@ import json
 import pathlib
 import shutil
 import sys
+from time import sleep
 
 from Bio import Seq, SeqIO, SeqRecord
 
@@ -415,7 +416,7 @@ def schemecreate(
     for msa_index, msa_obj in msa_dict.items():
         # Set up the pm for the MSA
         scheme_pt = pm.create_sub_progress(
-            iter=None, chrom=msa_obj.name, process="Creating Scheme"
+            iter=None, chrom=msa_obj.name, process="Creating Scheme", leave=False
         )
         scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
 
@@ -496,16 +497,23 @@ def schemecreate(
         scheme_pt.close()
 
     # Create the progress tracker for the final steps
-    upload_pt = pm.create_sub_progress(
-        iter=[], chrom="ALL", process="Creating / Uploading Files", disable=True
-    )
-    upload_pt.manual_update(n=0, total=0, count=0)
     logger.info("Writing output files")
+    upload_steps = 8
+    upload_pt = pm.create_sub_progress(
+        iter=None,
+        chrom="file creation",
+        process="Creating output files",
+        leave=False,
+        bar_format="{l_bar}{bar}",
+        unit="%",
+    )
+    upload_pt.manual_update(n=0, total=upload_steps)
 
     # Write primer bed file
     with open(OUTPUT_DIR / "primer.bed", "w") as outfile:
         primer_bed_str = scheme.to_bed()
         outfile.write(primer_bed_str)
+    upload_pt.manual_update(n=1, update=True)
 
     # Write amplicon bed file
     with open(OUTPUT_DIR / "amplicon.bed", "w") as outfile:
@@ -513,6 +521,7 @@ def schemecreate(
         outfile.write(amp_bed_str)
     with open(OUTPUT_DIR / "primertrim.amplicon.bed", "w") as outfile:
         outfile.write(scheme.to_amplicons(trim_primers=True))
+    upload_pt.manual_update(n=2, update=True)
 
     # Write all the consensus sequences to a single file
     with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
@@ -533,6 +542,7 @@ def schemecreate(
             )
 
         SeqIO.write(reference_records, reference_outfile, "fasta")
+    upload_pt.manual_update(n=3, update=True)
 
     # Create all hashes
     ## Generate the bedfile hash, and add it into the config
@@ -552,6 +562,8 @@ def schemecreate(
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
         outfile.write(json.dumps(cfg_dict, sort_keys=True))
 
+    upload_pt.manual_update(n=4, update=True)
+
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data
     plot_data = generate_all_plotdata(
@@ -559,13 +571,14 @@ def schemecreate(
         OUTPUT_DIR / "work",
         last_pp_added=scheme._last_pp_added,
     )
+    upload_pt.manual_update(n=5, update=True)
 
     # Write the plot
     with open(OUTPUT_DIR / "plot.html", "w") as outfile:
         outfile.write(
             generate_all_plots_html(plot_data, OUTPUT_DIR, offline_plots=offline_plots)
         )
-
+    upload_pt.manual_update(n=6, update=True)
     with open(OUTPUT_DIR / "primer.html", "w") as outfile:
         for i, msa_obj in enumerate(msa_dict.values()):
             outfile.write(
@@ -576,5 +589,11 @@ def schemecreate(
                     offline_plots=True if offline_plots and i == 0 else False,
                 )
             )
+    upload_pt.manual_update(n=7, update=True)
+
+    # Close the progress tracker
+    upload_pt.manual_update(n=upload_steps, update=True)
+    sleep(0.5)  # Sleep to allow the progress bar to finish
+    upload_pt.close()
 
     logger.info("Completed Successfully")
