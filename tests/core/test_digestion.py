@@ -11,7 +11,6 @@ from primalscheme3.core.digestion import (
     hamming_dist,
     parse_error,
     r_digest_index,
-    reduce_kmers,
     walk_left,
     walk_right,
     wrap_walk,
@@ -97,48 +96,6 @@ class Test_HammingDist(unittest.TestCase):
         result = hamming_dist(s1, s2)
 
         self.assertEqual(expected, result)
-
-
-class Test_ReduceKmers(unittest.TestCase):
-    def test_reduce_kmers(self):
-        seqs = {
-            "CAATGGTGCGAAAGGTATAATCATTAATGT",
-            "CCAATGGTGCAAAAGGAATAATCATTAATGT",
-            "CCAATGGTGCAAAAGGTATAATCATTAATGT",
-            "CCAATGGTGCAAATGGTATAATCATTAATGT",
-            "CCAGTGGTGCAAAAGGTATAATCATTAATGT",
-        }
-
-        expected = ["CCAATGGTGCAAAAGGTATAATCATTAATGT"]
-        result = reduce_kmers(seqs, 1, 6)
-
-        self.assertEqual(expected, list(result))
-
-    def test_reduce_kmers_single(self):
-        seqs = {
-            "CCAATGGTGCAAAAGGTATAATCATTAATGT",
-        }
-
-        expected = ["CCAATGGTGCAAAAGGTATAATCATTAATGT"]
-        result = reduce_kmers(seqs, 1, 6)
-
-        self.assertEqual(expected, list(result))
-
-    def test_reduce_kmers_all_dif(self):
-        seqs = {
-            "CCAATGGTGCAAAAGGTATAATCATTAATGT",
-            "CCAATGGTGCAAAAGGTATAATCATTAATG",
-            "CCAATGGTGCAAAAGGTATAATCATTAAT",
-            "CCAATGGTGCAAAAGGTATAATCATTAA",
-        }
-
-        expected = list(seqs)
-        expected.sort()
-
-        result = list(reduce_kmers(seqs, 1, 6))
-        result.sort()
-
-        self.assertEqual(expected, list(result))
 
 
 class Test_WalkLeft(unittest.TestCase):

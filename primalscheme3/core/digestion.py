@@ -1,12 +1,9 @@
 # Modules
-import itertools
 from collections import Counter
 from enum import Enum
 from typing import Callable, Union
 
-import networkx as nx
 import numpy as np
-from loguru._logger import Logger
 
 # Submodules
 from primaldimer_py import (
@@ -104,7 +101,7 @@ def parse_thermo_error(result: THERMORESULT) -> DIGESTION_ERROR:
         case THERMORESULT.HAIRPIN:
             return DIGESTION_ERROR.THERMO_HAIRPIN
         case _:
-            raise ValueError("Unknown error occured")
+            raise ValueError("Unknown error occurred")
 
 
 def parse_error_list(
@@ -604,14 +601,6 @@ def f_digest_index(
     else:
         raise ValueError("Unknown error occurred")
 
-    # # DownSample the seqs if asked
-    # if cfg["reducekmers"]:
-    #     wanted_seqs = reduce_kmers(
-    #         seqs={*parsed_seqs.keys()},
-    #         max_edit_dist=cfg["editdist_max"],
-    #         end_3p=cfg["editdist_end3p"],
-    #     )
-
     # Thermo check the kmers
     thermo_result = thermo_check_kmers({*parsed_seqs.keys()}, config)
     match thermo_result:
@@ -636,108 +625,6 @@ def hamming_dist(s1, s2) -> int:
     Return the number of substitutions, starting from the 3p end
     """
     return sum((x != y for x, y in zip(s1[::-1], s2[::-1])))
-
-
-def reduce_kmers(seqs: set[str], max_edit_dist: int = 1, end_3p: int = 6) -> set[str]:
-    """
-    Reduces a set of DNA sequences by clustering them based on their 3' end, and then minimizing the edit distance between
-    all tails within the same 3' cluster. The resulting set of sequences will have at most `max_edit_dist` differences
-    between any two sequences, and will all have a common 3' end of length `end_3p`.
-
-    Args:
-        seqs: A set of DNA sequences to be reduced.
-        max_edit_dist: The maximum edit distance allowed between any two sequences in the same 3' cluster. Defaults to 1.
-        end_3p: The length of the 3' end to use for clustering. Defaults to 6.
-
-    Returns:
-        A set of reduced DNA sequences, where each sequence has a common 3' end of length `end_3p`, and at most
-        `max_edit_dist` differences between any two sequences.
-    """
-    ## Cluster sequences via the 3p end
-    p3_end_dict: dict[str, set[str]] = {}
-    for sequence in seqs:
-        p3_end = sequence[-end_3p:]
-        p5_tail = sequence[:-end_3p]
-        if p3_end in p3_end_dict:
-            p3_end_dict[p3_end].add(p5_tail)
-        else:
-            p3_end_dict[p3_end] = {p5_tail}
-
-    ## Minimise edit distance between all tails within the same p3 cluster
-    for p3_end, p5_tails in p3_end_dict.items():
-        # If only one sequence skip
-        if len(p5_tails) <= 1:
-            continue
-
-        # Create a linkage graph
-        G = nx.Graph()
-        G.add_nodes_from(p5_tails)
-        for s1, s2 in itertools.combinations(p5_tails, 2):
-            if hamming_dist(s1, s2) <= max_edit_dist:
-                # Add edges if the distance is <= hamming dist max
-                G.add_edge(s1, s2)
-
-        # Find the most connected sequence
-        sorted_sequences = sorted(
-            p5_tails, key=lambda seq: (len(list(G.neighbors(seq))), seq), reverse=True
-        )
-
-        # Seqs which are included in the scheme
-        included_seqs = set()
-        # Seqs which have a closely related sequence included
-        accounted_seqs = set()
-
-        for sequence in sorted_sequences:
-            # If the sequence is not accounted for and not included
-            if sequence not in accounted_seqs and sequence not in included_seqs:
-                included_seqs.add(sequence)
-                # Add all the neighbors into accounted seqs
-                for neighbors in G.neighbors(sequence):
-                    accounted_seqs.add(neighbors)
-
-        # Update the p3_end_dict to contain the downsampled tails
-        p3_end_dict[p3_end] = included_seqs
-
-    seqs = set()
-    ## Regenerate all the sequences from p3_end_dict
-    for k, v in p3_end_dict.items():
-        for seq in v:
-            seqs.add(f"{seq}{k}")
-    return seqs
-
-
-def concurrent_digest(
-    msa_array: np.ndarray,
-    config: Config,
-    findexes: list[int],
-    rindexes: list[int],
-) -> tuple[list[FKmer], list[RKmer]]:
-    """
-    Carries out the FKmer and RKmer digestion in parallel.
-    """
-    import multiprocessing as mp
-
-    q = mp.Queue()
-    jobs = (f_digest, r_digest)
-    args = (
-        (
-            msa_array.copy(),
-            config,
-            findexes,
-            None,
-        ),
-        (
-            msa_array.copy(),
-            config,
-            rindexes,
-            None,
-        ),
-    )
-    for job, arg in zip(jobs, args):
-        p = mp.Process(target=job, args=(arg, q))
-        p.start()
-
-    return q.get(), q.get()
 
 
 def f_digest(
@@ -786,7 +673,7 @@ def digest(
     config: Config,
     progress_manager: ProgressManager,
     indexes: tuple[list[int], list[int]] | None = None,
-    logger: None | Logger = None,
+    logger=None,
     chrom: str = "",
 ) -> tuple[list[FKmer], list[RKmer]]:
     """
@@ -795,12 +682,12 @@ def digest(
     :param msa_array: The input MSA array.
     :param cfg: A dictionary containing configuration parameters.
     :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or None to use all indexes.
-    :param logger: None or the Logguru logger object.
+    :param logger: None or the logger object.
     :return: A tuple containing lists of sorted FKmers and RKmers.
     """
     # Guard for invalid indexes
     if indexes is not None:
-        if min(indexes[0]) < 0 or max(indexes[1]) >= msa_array.shape[1]:
+        if min(indexes[0]) < 0 or max(indexes[0]) >= msa_array.shape[1]:
             raise IndexError("FIndexes are out of range")
         if min(indexes[1]) < 0 or max(indexes[1]) >= msa_array.shape[1]:
             raise IndexError("RIndexes are out of range")
@@ -827,9 +714,9 @@ def digest(
 
         if logger is not None:
             if isinstance(fkmer, tuple):
-                logger.debug(f"{chrom}:FKmer: [red]{fkmer[0]}\t{fkmer[1].value}[/red]")
+                logger.debug(f"{chrom}:FKmer: {fkmer[0]}\t{fkmer[1].value}")
             else:
-                logger.debug(f"{chrom}:FKmer: [green]{fkmer.end}[/green]: AllPass")
+                logger.debug(f"{chrom}:FKmer: {fkmer.end}\tPass")
 
         # Append valid FKmers
         if isinstance(fkmer, FKmer) and fkmer.seqs:
@@ -848,9 +735,9 @@ def digest(
 
         if logger is not None:
             if isinstance(rkmer, tuple):
-                logger.debug(f"{chrom}:RKmer: [red]{rkmer[0]}\t{rkmer[1].value}[/red]")
+                logger.debug(f"{chrom}:RKmer: {rkmer[0]}\t{rkmer[1].value}")
             else:
-                logger.debug(f"{chrom}:RKmer: [green]{rkmer.start}[/green]: AllPass")
+                logger.debug(f"{chrom}:RKmer: {rkmer.start}\tPass")
 
         # Append valid RKmers
         if isinstance(rkmer, RKmer) and rkmer.seqs:

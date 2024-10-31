@@ -62,7 +62,7 @@ def calc_hairpin_struct(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> floa
 def forms_hairpin(seqs: Iterable[str], config: Config) -> bool:
     """
     Given a iterable of strings it will check the hairpin tm of all seqs
-    If any form haripins it will return True
+    If any form hairpins it will return True
     If all clear it will return False
     """
     for seq in seqs:
@@ -91,7 +91,7 @@ def max_homo(kmer_seq) -> int:
     return max(sum(1 for _ in group) for _, group in groupby(kmer_seq))
 
 
-def passes_thermo_checks(kmer_seq: str, config: Config) -> THERMORESULT:
+def thermo_check(kmer_seq: str, config: Config) -> THERMORESULT:
     """Are all kmer thermo values below threshold?.
 
     Evaluation order.
@@ -151,12 +151,12 @@ def passes_thermo_checks(kmer_seq: str, config: Config) -> THERMORESULT:
 def thermo_check_all_kmers(
     kmers: Iterable[str], config: Config
 ) -> dict[str, THERMORESULT]:
-    return {kmer: passes_thermo_checks(kmer, config) for kmer in kmers}
+    return {kmer: thermo_check(kmer, config) for kmer in kmers}
 
 
 def thermo_check_kmers(kmers: Iterable[str], config: Config) -> THERMORESULT:
     """
-    Will call passes_thermo_checks on each kmer sequence in the kmers list
+    Will call thermo_check on each kmer sequence in the kmers list
     Will stop evaluating on first error
 
     Args:
@@ -168,7 +168,7 @@ def thermo_check_kmers(kmers: Iterable[str], config: Config) -> THERMORESULT:
 
     """
     for kmer in kmers:
-        result = passes_thermo_checks(kmer, config)
+        result = thermo_check(kmer, config)
         if result == THERMORESULT.PASS:
             continue
         else:

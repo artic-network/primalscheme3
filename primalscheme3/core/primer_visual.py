@@ -2,9 +2,15 @@ import pathlib
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Create in the classes from primalscheme3
-from primalscheme3.core.bedfiles import BedLine, read_in_bedlines
+from primalscheme3.core.bedfiles import (
+    BedLine,
+    read_in_bedlines,
+    read_in_bedprimerpairs,
+)
+from primalscheme3.core.create_report_data import calc_gc
 from primalscheme3.core.mapping import (
     check_for_end_on_gap,
     create_mapping,
@@ -289,6 +295,162 @@ def primer_mismatch_heatmap(
         ]
     )
 
+    return fig.to_html(
+        include_plotlyjs=True if offline_plots else "cdn", full_html=False
+    )
+
+
+def bedfile_plot_html(
+    bedfile: pathlib.Path, ref_name: str, ref_seq: str, offline_plots: bool = False
+) -> str:
+    """
+    Create a plotly heatmap from a bedfile.
+    """
+    # Read in the bedfile
+    primerpairs, _header = read_in_bedprimerpairs(bedfile)
+
+    # Filter primerpairs for the reference genome
+    wanted_primerspairs = [pp for pp in primerpairs if pp.chrom_name == ref_name]
+    if len(wanted_primerspairs) == 0:
+        raise ValueError(f"No primers found for {ref_name}")
+
+    # Calculate the GC data
+    ref_array = np.array(
+        [ref_seq.upper()],
+        dtype="U1",
+        ndmin=2,
+    )
+    gc = calc_gc(ref_array)
+
+    # Create the plot
+    fig = make_subplots(
+        cols=1,
+        rows=2,
+        shared_xaxes=True,
+        row_heights=[1, 0.5],
+        specs=[
+            [{"secondary_y": False}],
+            [{"secondary_y": False}],
+        ],
+    )
+
+    # Add the GC data
+    fig.add_trace(
+        go.Scattergl(
+            x=[x[0] for x in gc],
+            y=[x[1] for x in gc],
+            mode="lines",
+            name="GC Prop",
+            line=dict(color="#005c68", width=2),
+            fill="tozeroy",
+        ),
+        row=2,
+        col=1,
+    )
+
+    # Add the primer lines
+    for pp in wanted_primerspairs:
+        print(f"Adding primer: {pp._primername}")
+        fig.add_shape(
+            type="rect",
+            y0=pp.pool + 1 - 0.05,
+            y1=pp.pool + 1 + 0.05,
+            x0=pp.fprimer.region()[0],
+            x1=pp.fprimer.region()[1],
+            fillcolor="LightSalmon",
+            line=dict(color="darksalmon", width=2),
+            row=1,
+            col=1,
+        )
+        fig.add_shape(
+            type="rect",
+            y0=pp.pool + 1 - 0.05,
+            y1=pp.pool + 1 + 0.05,
+            x0=pp.rprimer.region()[0],
+            x1=pp.rprimer.region()[1],
+            fillcolor="LightSalmon",
+            line=dict(color="darksalmon", width=2),
+            row=1,
+            col=1,
+        )
+        # Handle circular genomes
+        is_circular = pp.fprimer.region()[0] > pp.rprimer.region()[1]
+        fig.add_shape(
+            type="line",
+            y0=pp.pool + 1,
+            y1=pp.pool + 1,
+            x0=pp.fprimer.region()[1],
+            x1=pp.rprimer.region()[0] if not is_circular else len(ref_seq),
+            line=dict(color="LightSeaGreen", width=5),
+            row=1,
+            col=1,
+        )
+        if is_circular:
+            fig.add_shape(
+                type="line",
+                y0=pp.pool + 1,
+                y1=pp.pool + 1,
+                x0=0,
+                x1=pp.rprimer.region()[0],
+                line=dict(color="LightSeaGreen", width=5),
+                row=1,
+                col=1,
+            )
+
+    fig.update_xaxes(
+        showline=True,
+        mirror=True,
+        ticks="outside",
+        linewidth=2,
+        linecolor="black",
+        tickformat=",d",
+        title_font=dict(size=18, family="Arial", color="Black"),
+        range=[0, len(ref_seq)],
+        title="",  # Blank title for all x-axes
+    )
+    fig.update_yaxes(
+        showline=True,
+        mirror=True,
+        ticks="outside",
+        linewidth=2,
+        linecolor="black",
+        fixedrange=True,
+        title_font=dict(size=18, family="Arial", color="Black"),
+    )
+    # Update the top plot
+    pools = sorted({x.pool + 1 for x in wanted_primerspairs})
+    fig.update_yaxes(
+        range=[pools[0] - 0.5, pools[-1] + 0.5],
+        title="pool",
+        tickmode="array",
+        tickvals=pools,
+        row=1,
+        col=1,
+    )
+    fig.update_yaxes(
+        range=[-0.1, 1.1],
+        title="GC%",
+        tickmode="array",
+        tickvals=[0, 0.25, 0.5, 0.75, 1],
+        ticktext=[0, 25, 50, 75, 100],
+        row=2,
+        col=1,
+    )
+
+    # Remove unnecessary plot elements
+    fig.update_layout(
+        modebar_remove=[
+            "select2d",
+            "lasso2d",
+            "select",
+            "autoScale2d",
+            "zoom",
+            "toImage",
+        ]
+    )
+    fig.update_layout(height=400, title_text=ref_name, showlegend=False)
+
+    # Write a html version of the plot
     return fig.to_html(
         include_plotlyjs=True if offline_plots else "cdn", full_html=False
     )

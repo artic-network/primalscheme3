@@ -158,6 +158,14 @@ def panelcreate(
             logger=logger,
             progress_manager=pm,
         )
+        logger.info(
+            f"Read in MSA: [blue]{msa_obj.name}[/blue]\t"
+            f"seqs:[green]{msa_obj.array.shape[0]}[/green]\t"
+            f"cols:[green]{msa_obj.array.shape[1]}[/green]"
+        )
+        # Add the MSA to the dict
+        msa_dict[msa_index] = msa_obj
+
         if "/" in msa_obj._chrom_name:
             new_chromname = msa_obj._chrom_name.split("/")[0]
             logger.warning(
@@ -166,12 +174,6 @@ def panelcreate(
                 f"Parsing chromname [yellow]{msa_obj._chrom_name}[/yellow] -> [green]{new_chromname}[/green]"
             )
             msa_obj._chrom_name = new_chromname
-
-        logger.info(
-            f"Read in MSA: [blue]{msa_obj.name}[/blue]\t"
-            f"seqs:[green]{msa_obj.array.shape[0]}[/green]\t"
-            f"cols:[green]{msa_obj.array.shape[1]}[/green]"
-        )
 
         # Add some msa data to the dict
         msa_data[msa_index]["msa_name"] = msa_obj.name
@@ -182,13 +184,13 @@ def panelcreate(
         msa_data[msa_index]["msa_uuid"] = msa_obj._uuid
 
         # Add the regions
+        msa_regions = None
         if regions_mapping is not None:
             msa_regions = []
             for region in regions_mapping.keys():
                 if region.chromname == msa_obj._chrom_name:
                     msa_regions.append(region)
                     regions_mapping[region] = msa_obj._chrom_name
-            msa_obj.add_regions(msa_regions)
 
             # Print Number mapped
             logger.info(
@@ -196,22 +198,31 @@ def panelcreate(
                 f"[green]{len(msa_regions)}[/green] regions mapped",
             )
 
-            # Create indexes from the regions
-            indexes = set()
-            for region in msa_regions:
-                if max(region.start, region.stop) > len(msa_obj._mapping_array):
-                    logger.error(
-                        f"Region {region.name} is out of bounds for {msa_obj._chrom_name}",
-                    )
-                    sys.exit(1)
-                indexes.update(
-                    [
-                        msa_obj._ref_to_msa[x]
-                        for x in range(region.start, region.stop)
-                        if msa_obj._ref_to_msa[x] is not None
-                    ]
-                )
+        # is mode is all msa_regions is None
+        # Creates the score array
+        msa_obj.add_regions(msa_regions)
 
+    # Print mapping stats
+    if regions_mapping is not None:
+        mapped_regions = sum(1 for x in regions_mapping.values() if x is not None)
+        unmapped_regions = len(regions_mapping) - mapped_regions
+        logger.info(
+            f"Regions mapped: ([green]{mapped_regions}[/green]). Regions not mapped: ({unmapped_regions})",
+        )
+
+    # Start the digestion loop
+    for _msa_index, msa_obj in msa_dict.items():
+        if msa_obj.regions is not None:
+            indexes = set()
+            for region in msa_obj.regions:
+                if max(region.start, region.stop) >= msa_obj.array.shape[1]:
+                    logger.warning(
+                        f"Region {region.name} ({region.start}:{region.stop}) is out of bounds for {msa_obj._chrom_name} (0:{len(msa_obj._mapping_array)})",
+                    )
+                    region.stop = msa_obj.array.shape[1]
+
+                indexes.update(range(region.start, region.stop))
+            # Clean up
             findexes = list(
                 {
                     fi
@@ -232,8 +243,10 @@ def panelcreate(
                 }
             )
             rindexes.sort()
-
         # Split the logic for the different modes
+        logger.info(
+            f"Digesting [blue]{msa_obj.name}[/blue]",
+        )
         match mode:
             case PanelRunModes.REGION_ONLY:
                 msa_obj.digest(config=config, indexes=(findexes, rindexes))  # type: ignore
@@ -271,23 +284,19 @@ def panelcreate(
                 msa_obj.primerpairs = [
                     x for x in msa_obj.primerpairs if msa_obj.get_pp_score(x) > 0
                 ]
-                msa_obj.primerpairs.sort(key=lambda x: x.fprimer.end)
             case _:
                 continue
-
-        # Add the MSA to the dict
-        msa_dict[msa_index] = msa_obj
 
     # Add all the msa_data to the cfg
     config_dict["msa_data"] = msa_data
 
     ## Digestion finished, now create the panel
 
-    # Create the typing for the regions_mapping
+    # Create the regions for the regions_mapping
     chrom_name_regions_mapping: dict[str, dict[str, list[Region]]] = {}
     if regions_mapping is not None:
         for region, chrom_name in regions_mapping.items():
-            # Add only mapped typing snps
+            # Add only mapped snps
             if chrom_name is None:
                 continue
             if chrom_name not in chrom_name_regions_mapping:
@@ -328,16 +337,20 @@ def panelcreate(
                 f"[blue]{inputbedfile.name}[/blue]",
             )
 
-    # if pool > 1 then should be an ol scheme
-    if config.n_pools > 1:
-        # Sort primerpairs start position
-        for msa_obj in panel._msa_dict.values():
-            msa_obj.primerpairs.sort(key=lambda x: x.fprimer.end)
-
     # Add the first primerpair
-
     counter = 0
+
+    # Randomise the order of primerpairs
+    for msa_obj in msa_dict.values():
+        msa_obj.primerpairs = sorted(
+            msa_obj.primerpairs, key=lambda x: x.fprimer.__hash__()
+        )
+
     while max_amplicons is None or counter < max_amplicons:
+        # Check if the panel is complete
+        if all(panel._is_msa_index_finished.values()):
+            break
+
         match panel.add_next_primerpair():
             case PanelReturn.ADDED_PRIMERPAIR:
                 added_pp = panel._last_pp_added[-1]
@@ -351,74 +364,12 @@ def panelcreate(
                 counter += 1
                 # Update the scores arrays
                 chrom_name = msa_index_to_name[added_pp.msa_index]
-                # Check if the pp region ol any region
-                added = False
-                for regionname, regions in chrom_name_regions_mapping[
-                    chrom_name
-                ].items():
-                    for region in regions:
-                        if (
-                            added_pp.fprimer.end <= region.start
-                            and added_pp.rprimer.start >= region.stop
-                        ):
-                            added = True
-                            logger.info(
-                                f"Added amplicon to [blue]{regionname}[/blue]",
-                            )
-                            break
-
-                    if added:
-                        # Update the msa score array
-                        msa_score_array = panel._msa_dict[
-                            added_pp.msa_index
-                        ]._score_array
-                        assert msa_score_array is not None
-                        for region in regions:
-                            msa_score_array[region.start : region.stop] = 1
-                            logger.info(
-                                f"Updated score at {region.start}:{region.stop}",
-                            )
-
-                        break
-
                 continue
-            case PanelReturn.NO_PRIMERPAIRS:
-                logger.info(
-                    f"No more valid amplicons for "
-                    f"[blue]{msa_index_to_name.get(panel._current_msa_index)}[/blue]",
-                )
-                break
-
-    # Try adding all remaining primerpairs
-    while False and (max_amplicons is not None or counter < max_amplicons):
-        match panel.keep_adding():
-            case PanelReturn.ADDED_PRIMERPAIR:
-                # Update the amplicon count
-                added_pp = panel._last_pp_added[-1]
-                msa_index_to_amplicon_count[added_pp.msa_index] += 1
-                logger.info(
-                    f"Added amplicon ([green]{msa_index_to_amplicon_count.get(added_pp.msa_index)}[/green]) "
-                    f"for [blue]{msa_index_to_name.get(added_pp.msa_index)}[/blue]: {added_pp.fprimer.region()[0]}"
-                    f"\t{added_pp.rprimer.region()[1]}",
-                )
-                counter += 1
+            case PanelReturn.NO_PRIMERPAIRS_IN_MSA:
+                logger.debug("Skipping MSA")
                 continue
-            case PanelReturn.NO_PRIMERPAIRS:
-                logger.info("All primerpairs added")
-                break
-            case PanelReturn.NO_MORE_PRIMERPAIRS_IN_MSA:
-                logger.info(
-                    f"No more valid [red]amplicons[/red] for "
-                    f"[blue]{msa_index_to_name.get(panel._current_msa_index)}[/blue]",
-                )
-            case PanelReturn.MOVING_TO_NEW_MSA:
-                logger.debug(
-                    f"Skipping [blue]{msa_index_to_name.get(panel._current_msa_index),}[/blue]",
-                )  # Catch case but no nothing
-            case _:
-                logger.error("Unknown return value")
-                sys.exit(1)
-                pass
+            case _:  # pragma: no cover
+                logger.error("Unknown return from add_next_primerpair")
 
     # Log that the panel is finished
     logger.info(
@@ -436,9 +387,6 @@ def panelcreate(
         for msa_obj in panel._msa_dict.values():
             assert msa_obj.regions is not None
             for region in msa_obj.regions:
-                # Only print non typing regions
-                if region.typing:
-                    continue
                 region_coverage = panel._coverage[msa_obj.msa_index][
                     region.start : region.stop
                 ]
@@ -452,20 +400,6 @@ def panelcreate(
                     f"[{log_percent_col}]{percent}%[/{log_percent_col}] covered",
                 )
                 region_to_coverage[region] = region_mean_coverage
-
-        # Handle typing regions
-        for chromname, region_dict in chrom_name_regions_mapping.items():
-            msa_index = msa_chromname_to_index[chromname]
-            for regionname, regions in region_dict.items():
-                coverage_count = 0
-
-                for region in regions:
-                    if panel._coverage[msa_index][region.start : region.stop].all():
-                        coverage_count += 1
-
-                logger.info(
-                    f"[blue]{chromname}[/blue]:{regionname} count: {coverage_count}",
-                )
 
     logger.info(
         "Writing outputs...",

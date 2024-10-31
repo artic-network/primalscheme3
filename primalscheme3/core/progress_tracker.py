@@ -25,7 +25,9 @@ class ProgressTracker(tqdm):
         process: str | None = None,
         chrom: str | None = None,
         count: int | float | None = None,
+        update: bool = False,
     ):
+        old_n = self.n
         # Update the progress bar manually
         if n is not None:
             self.n = n
@@ -37,6 +39,9 @@ class ProgressTracker(tqdm):
             self.chrom = chrom
         if count is not None:
             self.count = count
+
+        if update:
+            self.update(self.n - old_n)
 
         self.parent.signal()
 
