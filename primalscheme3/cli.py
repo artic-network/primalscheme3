@@ -45,7 +45,9 @@ def check_path_is_file(value: str | pathlib.Path) -> pathlib.Path:
 
 
 # Create the main app
-app = typer.Typer(name="primalscheme3", no_args_is_help=True)
+app = typer.Typer(
+    name="primalscheme3", no_args_is_help=True, pretty_exceptions_show_locals=False
+)
 
 
 def check_output_dir(output: pathlib.Path, force: bool):
@@ -177,7 +179,7 @@ def scheme_create(
         config=config,
         pm=pm,
         force=force,
-        inputbedfile=input_bedfile,
+        input_bedfile=input_bedfile,
         offline_plots=offline_plots,
     )
 
@@ -256,20 +258,30 @@ def panel_create(
             resolve_path=True,
         ),
     ],
-    regionbedfile: Annotated[
-        Optional[pathlib.Path],
-        typer.Option(help="Path to the bedfile containing the wanted regions"),
-    ] = None,
-    inputbedfile: Annotated[
+    region_bedfile: Annotated[
         Optional[pathlib.Path],
         typer.Option(
-            help="Path to a primer.bedfile containing the pre-calculated primers"
+            help="Path to the bedfile containing the wanted regions",
+            readable=True,
+            dir_okay=False,
+            file_okay=True,
+            exists=True,
+        ),
+    ] = None,
+    input_bedfile: Annotated[
+        Optional[pathlib.Path],
+        typer.Option(
+            help="Path to a primer.bedfile containing the pre-calculated primers",
+            readable=True,
+            dir_okay=False,
+            file_okay=True,
+            exists=True,
         ),
     ] = None,
     mode: Annotated[
         PanelRunModes,
         typer.Option(
-            help="Select what mode for selecting regions in --regionbedfile",
+            help="Select what run mode",
         ),
     ] = PanelRunModes.REGION_ONLY.value,  # type: ignore
     amplicon_size: Annotated[
@@ -291,8 +303,15 @@ def panel_create(
             help="How should the primers in the bedfile be mapped",
         ),
     ] = Config.mapping.value,  # type: ignore
-    maxamplicons: Annotated[
+    max_amplicons: Annotated[
         Optional[int], typer.Option(help="Max number of amplicons to create", min=1)
+    ] = None,
+    max_amplicons_msa: Annotated[
+        Optional[int], typer.Option(help="Max number of amplicons for each MSA", min=1)
+    ] = None,
+    max_amplicons_region_group: Annotated[
+        Optional[int],
+        typer.Option(help="Max number of amplicons for each region", min=1),
     ] = None,
     force: Annotated[bool, typer.Option(help="Override the output directory")] = False,
     high_gc: Annotated[bool, typer.Option(help="Use high GC primers")] = Config.high_gc,
@@ -324,12 +343,14 @@ def panel_create(
     panelcreate(
         msa=msa,
         output_dir=output,
-        regionbedfile=regionbedfile,
-        inputbedfile=inputbedfile,
+        region_bedfile=region_bedfile,
+        input_bedfile=input_bedfile,
         mode=mode,
         config=config,
         pm=pm,
-        max_amplicons=maxamplicons,
+        max_amplicons=max_amplicons,
+        max_amplicons_msa=max_amplicons_msa,
+        max_amplicons_region_group=max_amplicons_region_group,
         force=force,
         offline_plots=offline_plots,
     )
@@ -406,6 +427,7 @@ def repair_mode(
         pm=pm,
         output_dir=output,
         msa_path=msa,
+        cores=1,
     )
 
 
