@@ -6,6 +6,7 @@ import sys
 from time import sleep
 
 from Bio import Seq, SeqIO, SeqRecord
+from click import UsageError
 
 # Interaction checker
 from primaldimer_py import do_pools_interact_py  # type: ignore
@@ -66,7 +67,7 @@ def schemereplace(
 
     # If more than two pools are given throw error
     if config.n_pools > 2:
-        raise ValueError("ERROR: repair is only supported with two pools")
+        raise UsageError("ERROR: repair is only supported with two pools")
 
     # Create a mapping of chromname/reference to msa_index
     msa_chrom_to_index: dict[str, int] = {
@@ -105,7 +106,7 @@ def schemereplace(
         if pp.match_primer_stem(primerstem):
             wanted_pp = pp
     if wanted_pp is None:
-        raise ValueError(f"ERROR: {primername} not found in bedfile")
+        raise UsageError(f"ERROR: {primername} not found in bedfile")
     else:
         print(wanted_pp.__str__())
 
@@ -247,7 +248,7 @@ def schemecreate(
     config: Config,
     pm: ProgressManager | None,
     force: bool = False,
-    inputbedfile: pathlib.Path | None = None,
+    input_bedfile: pathlib.Path | None = None,
     offline_plots: bool = True,
 ):
     """
@@ -259,7 +260,7 @@ def schemecreate(
         config (Config): Configuration settings for scheme creation.
         pm (ProgressManager | None): Optional. A progress manager instance for UI feedback.
         force (bool): If True, existing output directories will be overwritten.
-        inputbedfile (pathlib.Path | None): Optional. A path to an input BED file for incorporating specific primer pairs.
+        input_bedfile (pathlib.Path | None): Optional. A path to an input BED file for incorporating specific primer pairs.
         offline_plots (bool): If True, plots will be generated for offline use.
 
     Raises:
@@ -273,7 +274,7 @@ def schemecreate(
 
     # See if the output dir already exists.
     if OUTPUT_DIR.is_dir() and not force:
-        sys.exit(f"ERROR: {OUTPUT_DIR} already exists, please use --force to override")
+        raise UsageError(f"{OUTPUT_DIR} already exists, please use --force to override")
 
     # Create the output dir and a work subdir
     pathlib.Path.mkdir(OUTPUT_DIR, exist_ok=True)
@@ -300,8 +301,8 @@ def schemecreate(
     )
 
     # If the bedfile flag is given add the primers into the scheme
-    if inputbedfile is not None:
-        bedprimerpairs = read_in_extra_primers(inputbedfile, config, logger)
+    if input_bedfile is not None:
+        bedprimerpairs = read_in_extra_primers(input_bedfile, config, logger)
 
     # Create a dict full of msa data
     msa_data = {}
@@ -342,7 +343,7 @@ def schemecreate(
             msa_obj._chrom_name = new_chromname
 
         logger.info(
-            f"Read in MSA: [blue]{msa_obj.name}[/blue]\t"
+            f"Read in MSA: [blue]{msa_obj._chrom_name}[/blue]\t"
             f"seqs:[green]{msa_obj.array.shape[0]}[/green]\t"
             f"cols:[green]{msa_obj.array.shape[1]}[/green]"
         )
@@ -355,10 +356,20 @@ def schemecreate(
         msa_data[msa_index]["msa_chromname"] = msa_obj._chrom_name
         msa_data[msa_index]["msa_uuid"] = msa_obj._uuid
 
+        # Add the msa to the dict
+        msa_dict[msa_index] = msa_obj
+
+    # Check for collisions in the MSA._chrom_names names
+    if len({msa_obj._chrom_name for msa_obj in msa_dict.values()}) != len(msa_dict):
+        logger.critical("Duplicate chrom names found in MSA data. Exiting.")
+        sys.exit(1)
+
+    # Read in all MSAs before digestion
+    for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
         msa_obj.digest(config)
         logger.info(
-            f"[blue]{msa_obj.name}[/blue]: digested to "
+            f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
             f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
             f"[green]{len(msa_obj.rkmers)}[/green] RKmers"
         )
@@ -368,7 +379,7 @@ def schemecreate(
 
         if len(msa_obj.fkmers) == 0 or len(msa_obj.rkmers) == 0:
             logger.critical(
-                f"No valid FKmers or RKmers found for [blue]{msa_obj.name}[/blue]"
+                f"No valid FKmers or RKmers found for [blue]{msa_obj._chrom_name}[/blue]"
             )
             continue
 
@@ -379,12 +390,14 @@ def schemecreate(
             dimerscore=config.dimer_score,
         )
         logger.info(
-            f"[blue]{msa_obj.name}[/blue]: Generated "
+            f"[blue]{msa_obj._chrom_name}[/blue]: Generated "
             f"[green]{len(msa_obj.primerpairs)}[/green] possible amplicons"
         )
 
         if len(msa_obj.primerpairs) == 0:
-            logger.critical(f"No valid primers found for [blue]{msa_obj.name}[/blue]")
+            logger.critical(
+                f"No valid primers found for [blue]{msa_obj._chrom_name}[/blue]"
+            )
         else:
             msa_has_primerpairs_bool[msa_index] = True
 
@@ -403,20 +416,20 @@ def schemecreate(
         msa._chrom_name: msa_index for msa_index, msa in msa_dict.items()
     }
     # Add the bedprimerpairs into the scheme
-    if inputbedfile is not None and bedprimerpairs:
+    if input_bedfile is not None and bedprimerpairs:
         for bedpp in bedprimerpairs:
             # Map the primerpair to the msa via chromname
             bedpp.msa_index = msa_chrom_to_index.get(bedpp.chrom_name, -1)  # type: ignore
             scheme.add_primer_pair_to_pool(bedpp, bedpp.pool, bedpp.msa_index)
             logger.debug(
-                f"Added {bedpp.amplicon_prefix} from [blue]{inputbedfile.name}[/blue]",
+                f"Added {bedpp.amplicon_prefix} from [blue]{input_bedfile.name}[/blue]",
             )
 
     # Start the Scheme generation
     for msa_index, msa_obj in msa_dict.items():
         # Set up the pm for the MSA
         scheme_pt = pm.create_sub_progress(
-            iter=None, chrom=msa_obj.name, process="Creating Scheme", leave=False
+            iter=None, chrom=msa_obj._chrom_name, process="Creating Scheme", leave=False
         )
         scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
 
@@ -433,7 +446,7 @@ def schemecreate(
                     last_pp_added = scheme._last_pp_added[-1]
                     logger.info(
                         "Added [green]overlapping[/green] amplicon for "
-                        f"[blue]{msa_obj.name}[/blue]: {last_pp_added.fprimer.region()[0]}\t"
+                        f"[blue]{msa_obj._chrom_name}[/blue]: {last_pp_added.fprimer.region()[0]}\t"
                         f"{last_pp_added.rprimer.region()[1]}\t{last_pp_added.pool + 1}"
                     )
                     continue
@@ -441,7 +454,7 @@ def schemecreate(
                     last_pp_added = scheme._last_pp_added[-1]
                     logger.info(
                         "Added [green]first[/green] amplicon for "
-                        f"[blue]{msa_obj.name}[/blue]: {last_pp_added.fprimer.region()[0]}\t"
+                        f"[blue]{msa_obj._chrom_name}[/blue]: {last_pp_added.fprimer.region()[0]}\t"
                         f"{last_pp_added.rprimer.region()[1]}\t{last_pp_added.pool + 1}",
                     )
                     continue
@@ -449,7 +462,7 @@ def schemecreate(
                     pass  # Do nothing move on to next step
                 case SchemeReturn.NO_FIRST_PRIMERPAIR:
                     logger.warning(
-                        f"No valid primerpairs found for [blue]{msa_obj.name}[/blue]",
+                        f"No valid primerpairs found for [blue]{msa_obj._chrom_name}[/blue]",
                     )
                     break
 
@@ -460,12 +473,12 @@ def schemecreate(
                     case SchemeReturn.ADDED_BACKTRACKED:
                         last_pp_added = scheme._last_pp_added[-1]
                         logger.info(
-                            f"Backtracking allowed [green]overlapping[/green] amplicon for [blue]{msa_obj.name}[/blue]: "
+                            f"Backtracking allowed [green]overlapping[/green] amplicon for [blue]{msa_obj._chrom_name}[/blue]: "
                             f"{last_pp_added.fprimer.region()[0]}\t{last_pp_added.rprimer.region()[1]}\t{last_pp_added.pool + 1}",
                         )
                     case SchemeReturn.NO_BACKTRACK:
                         logger.info(
-                            f"Could not backtrack for [blue]{msa_obj.name}[/blue]",
+                            f"Could not backtrack for [blue]{msa_obj._chrom_name}[/blue]",
                         )
                         pass  # Do nothing move on to next step
 
@@ -474,7 +487,7 @@ def schemecreate(
                 case SchemeReturn.ADDED_WALK_PRIMERPAIR:
                     last_pp_added = scheme._last_pp_added[-1]
                     logger.info(
-                        f"Added [yellow]walking[/yellow] amplicon for [blue]{msa_obj.name}[/blue]: "
+                        f"Added [yellow]walking[/yellow] amplicon for [blue]{msa_obj._chrom_name}[/blue]: "
                         f"{last_pp_added.fprimer.region()[0]}\t{last_pp_added.rprimer.region()[1]}\t{last_pp_added.pool + 1}",
                     )
                 case _:
@@ -485,12 +498,12 @@ def schemecreate(
                 case SchemeReturn.ADDED_CIRCULAR:
                     last_pp_added = scheme._last_pp_added[-1]
                     logger.info(
-                        f"Added [green]circular[/green] amplicon for [blue]{msa_obj.name}[/blue]: "
+                        f"Added [green]circular[/green] amplicon for [blue]{msa_obj._chrom_name}[/blue]: "
                         f"{last_pp_added.fprimer.region()[0]}\t{last_pp_added.rprimer.region()[1]}\t{last_pp_added.pool + 1}",
                     )
                 case SchemeReturn.NO_CIRCULAR:
                     logger.info(
-                        f"No [red]circular[/red] amplicon for [blue]{msa_obj.name}[/blue]"
+                        f"No [red]circular[/red] amplicon for [blue]{msa_obj._chrom_name}[/blue]"
                     )
         # Close the progress tracker
         scheme_pt.manual_update(n=scheme_pt.total)
