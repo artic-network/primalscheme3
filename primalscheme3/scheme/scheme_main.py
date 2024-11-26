@@ -270,7 +270,7 @@ def schemecreate(
     OUTPUT_DIR = pathlib.Path(output_dir).absolute()  # Keep absolute path
 
     # Create the Config_dict
-    cfg_dict = config.to_json()
+    cfg_dict = config.to_dict()
 
     # See if the output dir already exists.
     if OUTPUT_DIR.is_dir() and not force:

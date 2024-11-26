@@ -73,7 +73,7 @@ def panelcreate(
     OUTPUT_DIR = pathlib.Path(output_dir).absolute()
 
     # Config Dicts
-    config_dict = config.to_json()
+    config_dict = config.to_dict()
     config_dict["max_amplicons"] = max_amplicons
     config_dict["mode"] = mode.value
     config_dict["max_amplicons_msa"] = max_amplicons_msa
