@@ -1,6 +1,6 @@
 site_name: PrimalScheme3
 
-repo_url:
+repo_url: https://github.com/ChrisgKent/primalscheme3
 
 site_url: https://chrisgkent.github.io/primalscheme3/
 theme:
