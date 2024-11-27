@@ -240,15 +240,15 @@ def create_amplicon_str(
 
 
 def read_in_extra_primers(
-    inputbedfile: pathlib.Path, config: Config, logger: logging.Logger
+    input_bedfile: pathlib.Path, config: Config, logger: logging.Logger
 ) -> list[BedPrimerPair]:
     """
     Reads in Primers from a bedfile, and QC checks them for Tm and Pools
     """
-    bedprimerpairs, _headers = read_in_bedprimerpairs(inputbedfile)
+    bedprimerpairs, _headers = read_in_bedprimerpairs(input_bedfile)
 
     logger.info(
-        f"Read in bedfile: [blue]{inputbedfile.name}[/blue]: "
+        f"Read in bedfile: [blue]{input_bedfile.name}[/blue]: "
         f"[green]{len(bedprimerpairs)}[/green] PrimersPairs containing "
         f"{len([primer for primers in (bedprimerpair.all_seqs() for bedprimerpair in bedprimerpairs) for primer in primers])} primers",
     )

@@ -139,7 +139,6 @@ class Config:
                     setattr(self, key, int(value))
                 elif isinstance(getattr(self, key), float):
                     setattr(self, key, float(value))
-
                 elif isinstance(getattr(self, key), str):
                     setattr(self, key, str(value))
                 else:

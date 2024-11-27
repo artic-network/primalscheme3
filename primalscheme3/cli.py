@@ -16,7 +16,6 @@ from primalscheme3.interaction.interaction import (
     visualise_interactions,
 )
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
-from primalscheme3.remap.remap import remap
 from primalscheme3.repair.repair import repair
 
 # Import main functions
@@ -45,9 +44,7 @@ def check_path_is_file(value: str | pathlib.Path) -> pathlib.Path:
 
 
 # Create the main app
-app = typer.Typer(
-    name="primalscheme3", no_args_is_help=True, pretty_exceptions_show_locals=False
-)
+app = typer.Typer(name="primalscheme3", no_args_is_help=True)
 
 
 def check_output_dir(output: pathlib.Path, force: bool):
@@ -207,7 +204,7 @@ def scheme_replace(
             resolve_path=True,
         ),
     ],
-    ampliconsize: Annotated[
+    amplicon_size: Annotated[
         int,
         typer.Option(
             help="The size of an amplicon. Use single value for ± 10 percent [100<=x<=2000]",
@@ -226,8 +223,8 @@ def scheme_replace(
     """
     Replaces a primerpair in a bedfile
     """
-    ampliconsizemin = int(ampliconsize * 0.9)
-    ampliconsizemax = int(ampliconsize * 1.1)
+    ampliconsizemin = int(amplicon_size * 0.9)
+    ampliconsizemax = int(amplicon_size * 1.1)
 
     # Set up the progress manager
     pm = ProgressManager()
@@ -427,45 +424,6 @@ def repair_mode(
         pm=pm,
         output_dir=output,
         msa_path=msa,
-        cores=1,
-    )
-
-
-@app.command(no_args_is_help=True)
-def remap_mode(
-    bedfile: Annotated[
-        pathlib.Path,
-        typer.Option(
-            help="Path to the bedfile",
-            exists=True,
-            readable=True,
-            resolve_path=True,
-        ),
-    ],
-    id_to_remap_to: Annotated[
-        str, typer.Option(help="The ID of the reference genome to remap to")
-    ],
-    msa: Annotated[
-        pathlib.Path,
-        typer.Option(
-            help="Path to the MSA file",
-            exists=True,
-            readable=True,
-            resolve_path=True,
-        ),
-    ],
-    output: Annotated[
-        pathlib.Path, typer.Option(help="The output directory", dir_okay=True)
-    ],
-):
-    """
-    Remaps a primer scheme to a new reference genome
-    """
-    remap(
-        bedfile_path=bedfile,
-        id_to_remap_to=id_to_remap_to,
-        msa_path=msa,
-        output_dir=output,
     )
 
 
