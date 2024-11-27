@@ -87,7 +87,7 @@ def schemereplace(
             # Set the msa index to -1
             primerpair.msa_index = -1
         else:
-            raise ValueError(f"ERROR: {primerpair.chrom_name} not found in MSA data")
+            raise UsageError(f"ERROR: {primerpair.chrom_name} not found in MSA data")
 
     bedprimerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
 
@@ -96,7 +96,7 @@ def schemereplace(
         prefix, ampliconnumber = primername.split("_")[:2]
         primerstem = f"{ampliconnumber}_{prefix}"
     except ValueError:
-        raise ValueError(
+        raise UsageError(
             f"ERROR: {primername} cannot be parsed using _ as delim"
         ) from None
 
@@ -114,9 +114,9 @@ def schemereplace(
     msa_data = _cfg["msa_data"].get(wanted_pp.msa_index)
     if msa_data is None:
         if wanted_pp.msa_index == -1:
-            raise ValueError(f"ERROR: The Primer {primername} was added via --bedfile")
+            raise UsageError(f"ERROR: The Primer {primername} was added via --bedfile")
         else:
-            raise ValueError(f"ERROR: MSA index {wanted_pp.msa_index} not found")
+            raise UsageError(f"ERROR: MSA index {wanted_pp.msa_index} not found")
 
     msa = MSA(
         name=msa_data["msa_name"],
@@ -134,9 +134,34 @@ def schemereplace(
     else:
         print("MSA checksums match")
 
+    # Target digest the MSA
+    msa_fp_end = msa._ref_to_msa[wanted_pp.fprimer.region()[1]]
+    msa_rp_start = msa._ref_to_msa[wanted_pp.fprimer.region()[0]]
+
+    findexes = sorted(
+        [
+            x
+            for x in range(
+                msa_fp_end - config.amplicon_size_max,
+                msa_fp_end + config.amplicon_size_max,
+            )
+            if x >= 0 and x < msa.array.shape[1]
+        ]
+    )
+    rindexes = sorted(
+        [
+            x
+            for x in range(
+                msa_rp_start - config.amplicon_size_max,
+                msa_rp_start + config.amplicon_size_max,
+            )
+            if x >= 0 and x < msa.array.shape[1]
+        ]
+    )
+
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
-    msa.digest(config)  ## Primer are remapped at this point.
+    msa.digest(config, (findexes, rindexes))  ## Primer are remapped at this point.
     print(f"Found {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
