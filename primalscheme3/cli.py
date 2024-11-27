@@ -16,7 +16,6 @@ from primalscheme3.interaction.interaction import (
     visualise_interactions,
 )
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
-from primalscheme3.remap.remap import remap
 from primalscheme3.repair.repair import repair
 
 # Import main functions
@@ -177,7 +176,7 @@ def scheme_create(
         config=config,
         pm=pm,
         force=force,
-        inputbedfile=input_bedfile,
+        input_bedfile=input_bedfile,
         offline_plots=offline_plots,
     )
 
@@ -205,7 +204,7 @@ def scheme_replace(
             resolve_path=True,
         ),
     ],
-    ampliconsize: Annotated[
+    amplicon_size: Annotated[
         int,
         typer.Option(
             help="The size of an amplicon. Use single value for ± 10 percent [100<=x<=2000]",
@@ -224,8 +223,8 @@ def scheme_replace(
     """
     Replaces a primerpair in a bedfile
     """
-    ampliconsizemin = int(ampliconsize * 0.9)
-    ampliconsizemax = int(ampliconsize * 1.1)
+    ampliconsizemin = int(amplicon_size * 0.9)
+    ampliconsizemax = int(amplicon_size * 1.1)
 
     # Set up the progress manager
     pm = ProgressManager()
@@ -256,20 +255,30 @@ def panel_create(
             resolve_path=True,
         ),
     ],
-    regionbedfile: Annotated[
-        Optional[pathlib.Path],
-        typer.Option(help="Path to the bedfile containing the wanted regions"),
-    ] = None,
-    inputbedfile: Annotated[
+    region_bedfile: Annotated[
         Optional[pathlib.Path],
         typer.Option(
-            help="Path to a primer.bedfile containing the pre-calculated primers"
+            help="Path to the bedfile containing the wanted regions",
+            readable=True,
+            dir_okay=False,
+            file_okay=True,
+            exists=True,
+        ),
+    ] = None,
+    input_bedfile: Annotated[
+        Optional[pathlib.Path],
+        typer.Option(
+            help="Path to a primer.bedfile containing the pre-calculated primers",
+            readable=True,
+            dir_okay=False,
+            file_okay=True,
+            exists=True,
         ),
     ] = None,
     mode: Annotated[
         PanelRunModes,
         typer.Option(
-            help="Select what mode for selecting regions in --regionbedfile",
+            help="Select what run mode",
         ),
     ] = PanelRunModes.REGION_ONLY.value,  # type: ignore
     amplicon_size: Annotated[
@@ -291,8 +300,15 @@ def panel_create(
             help="How should the primers in the bedfile be mapped",
         ),
     ] = Config.mapping.value,  # type: ignore
-    maxamplicons: Annotated[
+    max_amplicons: Annotated[
         Optional[int], typer.Option(help="Max number of amplicons to create", min=1)
+    ] = None,
+    max_amplicons_msa: Annotated[
+        Optional[int], typer.Option(help="Max number of amplicons for each MSA", min=1)
+    ] = None,
+    max_amplicons_region_group: Annotated[
+        Optional[int],
+        typer.Option(help="Max number of amplicons for each region", min=1),
     ] = None,
     force: Annotated[bool, typer.Option(help="Override the output directory")] = False,
     high_gc: Annotated[bool, typer.Option(help="Use high GC primers")] = Config.high_gc,
@@ -324,12 +340,14 @@ def panel_create(
     panelcreate(
         msa=msa,
         output_dir=output,
-        regionbedfile=regionbedfile,
-        inputbedfile=inputbedfile,
+        region_bedfile=region_bedfile,
+        input_bedfile=input_bedfile,
         mode=mode,
         config=config,
         pm=pm,
-        max_amplicons=maxamplicons,
+        max_amplicons=max_amplicons,
+        max_amplicons_msa=max_amplicons_msa,
+        max_amplicons_region_group=max_amplicons_region_group,
         force=force,
         offline_plots=offline_plots,
     )
@@ -406,44 +424,6 @@ def repair_mode(
         pm=pm,
         output_dir=output,
         msa_path=msa,
-    )
-
-
-@app.command(no_args_is_help=True)
-def remap_mode(
-    bedfile: Annotated[
-        pathlib.Path,
-        typer.Option(
-            help="Path to the bedfile",
-            exists=True,
-            readable=True,
-            resolve_path=True,
-        ),
-    ],
-    id_to_remap_to: Annotated[
-        str, typer.Option(help="The ID of the reference genome to remap to")
-    ],
-    msa: Annotated[
-        pathlib.Path,
-        typer.Option(
-            help="Path to the MSA file",
-            exists=True,
-            readable=True,
-            resolve_path=True,
-        ),
-    ],
-    output: Annotated[
-        pathlib.Path, typer.Option(help="The output directory", dir_okay=True)
-    ],
-):
-    """
-    Remaps a primer scheme to a new reference genome
-    """
-    remap(
-        bedfile_path=bedfile,
-        id_to_remap_to=id_to_remap_to,
-        msa_path=msa,
-        output_dir=output,
     )
 
 

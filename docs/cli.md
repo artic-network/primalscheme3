@@ -1,22 +1,4 @@
-# Primalscheme3
-
-[![CI](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml/badge.svg)](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml)
-
-This is a command-line interface tool that generates a primer scheme from a Multiple Sequence Alignment (MSA) file, utilising degenerate primers to handle variation in the genomes.
-
-## Installation
-
-Currently the best way to use is to use poetry to handle dependencies.
-
-```         
-git clone https://github.com/ChrisgKent/primalscheme3
-cd primalscheme3
-poetry install
-poetry build
-
-```
-
-# `PrimalScheme3`
+# CLI
 
 **Usage**:
 
@@ -205,3 +187,4 @@ $ primalscheme3 visualise-primer-mismatches [OPTIONS] MSA BEDFILE
 * `--include-seqs / --no-include-seqs`: Reduces plot filesize, by excluding primer sequences  [default: include-seqs]
 * `--offline-plots / --no-offline-plots`: Includes 3Mb of dependencies into the plots, so they can be viewed offline  [default: offline-plots]
 * `--help`: Show this message and exit.
+

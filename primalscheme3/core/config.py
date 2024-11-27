@@ -68,9 +68,7 @@ class Config:
     dimer_score: float = -26.0
 
     def __init__(self, **kwargs: Any) -> None:
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
+        self.assign_kwargs(**kwargs)
         # Set amplicon size
         if self.amplicon_size_min == 0:
             self.amplicon_size_min = int(self.amplicon_size * 0.9)
@@ -107,22 +105,44 @@ class Config:
 
         return items
 
-    def to_json(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Return a dict (key, val) for non-private, non-callable members
         """
-        json = {}
+        dict = {}
         for key, val in self.items().items():
             if isinstance(val, Enum):
-                json[key] = val.value
+                dict[key] = val.value
             elif isinstance(val, pathlib.Path):
-                json[key] = str(val)
+                dict[key] = str(val)
             else:
-                json[key] = val
-        return json
+                dict[key] = val
+        return dict
 
     def __str__(self) -> str:
         return "\n".join(f"{key}: {val}" for key, val in self.items())
+
+    def assign_kwargs(self, **kwargs: Any) -> None:
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                # Convert to expected type
+                if isinstance(getattr(self, key), MappingType):
+                    setattr(self, key, MappingType(value))
+                elif isinstance(getattr(self, key), pathlib.Path):
+                    setattr(self, key, pathlib.Path(value))
+                elif isinstance(
+                    getattr(self, key), bool
+                ):  # Need to check bool before int
+                    parsed_bool = str(value).lower()
+                    setattr(self, key, parsed_bool == "true")
+                elif isinstance(getattr(self, key), int):
+                    setattr(self, key, int(value))
+                elif isinstance(getattr(self, key), float):
+                    setattr(self, key, float(value))
+                elif isinstance(getattr(self, key), str):
+                    setattr(self, key, str(value))
+                else:
+                    print(f"Could not parse {key} with value {value} ({type(value)}")
 
 
 # All bases allowed in the input MSA

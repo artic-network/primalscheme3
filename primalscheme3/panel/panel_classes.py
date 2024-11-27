@@ -20,6 +20,12 @@ from primalscheme3.core.seq_functions import (
 )
 
 
+class PanelRunModes(Enum):
+    ENTROPY = "entropy"
+    REGION_ONLY = "region-only"
+    EQUAL = "equal"
+
+
 class PanelReturn(Enum):
     """
     Enum for the return values of the Panel class.
@@ -84,6 +90,13 @@ class Region:
         self.score = int(score)
         if self.start >= self.stop:
             raise ValueError(f"{self.name}: Circular regions are not supported.")
+
+        # Parse Group
+        if group is not None and group != "":
+            group = str(group).strip()
+        else:
+            group = None
+
         self.group = group
 
     def positions(self):
@@ -100,7 +113,8 @@ class Region:
         return hash(self) == hash(__value)
 
     def to_bed(self) -> str:
-        return f"{self.chromname}\t{self.start}\t{self.stop}\t{self.name}\t{self.score}\t{self.group}"
+        group_str = self.group if self.group else ""
+        return f"{self.chromname}\t{self.start}\t{self.stop}\t{self.name}\t{self.score}\t{group_str}\n"
 
 
 class RegionParser:
@@ -129,6 +143,8 @@ class RegionParser:
         # Handle group column
         try:
             group = bed_list[5]
+            if group == "" or not group:  # Allow empty group
+                group = None
         except IndexError:
             group = None
 
@@ -147,6 +163,7 @@ class PanelMSA(MSA):
     _score_array: np.ndarray | None
     _midx_entropy_array: np.ndarray | None
     regions: list[Region] | None
+    region_group_count: dict[str, int] | None
     primerpairpointer: int
 
     def __init__(
@@ -172,23 +189,40 @@ class PanelMSA(MSA):
         self.primerpairpointer = 0
         self.regions = None
 
-    def create_score_array(self, regions: list[Region] | None) -> None:
-        # If no regions provided set all scores to 1
-        if regions is None:
-            self._score_array = np.ones(len(self._mapping_array), dtype=int)
-            return
-
-        self._score_array = np.zeros(len(self._mapping_array), dtype=int)
-        # Add the score to the score array
-        for region in regions:
-            self._score_array[region.start : region.stop] += region.score
+    def create_score_array(
+        self,
+        regions: list[Region] | None,
+        mode: PanelRunModes = PanelRunModes.REGION_ONLY,
+    ) -> None:
+        match mode:
+            case PanelRunModes.REGION_ONLY:
+                if regions is None:
+                    raise ValueError("Regions must be provided to create score array.")
+                self._score_array = np.zeros(len(self._mapping_array), dtype=int)
+                for region in regions:
+                    self._score_array[region.start : region.stop] += region.score
+            case PanelRunModes.ENTROPY:
+                # Turn the msa indexed entropy array into a ref indexed array
+                msa_entropy_array = entropy_score_array(self.array)
+                self._score_array = np.array(
+                    [
+                        x + 0.01  # Add a small value to avoid 0
+                        for msai, x in enumerate(msa_entropy_array)
+                        if self._mapping_array[msai] is not None
+                    ]
+                )
+            case PanelRunModes.EQUAL:
+                self._score_array = np.ones(len(self._mapping_array), dtype=int)
 
     def create_entropy_array(self):
         self._midx_entropy_array = np.array(entropy_score_array(self.array))
 
     def add_regions(self, regions: list[Region] | None) -> None:
         self.regions = regions
-        self.create_score_array(regions)
+        if regions is not None:
+            # Create an empty dict
+            region_groups = {x.group for x in regions if x.group}
+            self.region_group_count = {x: 0 for x in region_groups}
 
     def remove_kmers_that_clash_with_regions(self):
         """
@@ -280,7 +314,11 @@ class Panel(Multiplex):
     _is_msa_index_finished: dict[int, bool]
 
     def __init__(
-        self, msa_dict: dict[int, PanelMSA], config: Config, matchdb: MatchDB
+        self,
+        msa_dict: dict[int, PanelMSA],
+        config: Config,
+        matchdb: MatchDB,
+        logger=None,
     ) -> None:
         super().__init__(config, matchdb, msa_dict)  # type: ignore
 
@@ -289,6 +327,8 @@ class Panel(Multiplex):
 
         # Keep adding
         self._is_msa_index_finished = {msa_index: False for msa_index in msa_dict}
+
+        self.logger = logger
 
     def _next_msa(self) -> int:
         """
@@ -311,7 +351,9 @@ class Panel(Multiplex):
         # Update the current MSA
         self._next_msa()
 
-    def add_next_primerpair(self) -> PanelReturn:
+    def add_next_primerpair(
+        self, max_amplicons_group: None | int = None
+    ) -> PanelReturn:
         """
         Try and add the next primerpair
         """
@@ -353,7 +395,7 @@ class Panel(Multiplex):
         )
         for pospp in current_msa.primerpairs:
             # Check primer has score
-            if self.calc_pp_score(current_msa, pospp) <= 0:
+            if self.calc_pp_score(current_msa, pospp, False) <= 0:
                 continue
             for pospool in pos_pools_indexes:
                 # Check if the primerpair can be added
@@ -368,30 +410,23 @@ class Panel(Multiplex):
                         # Check for other regions in the same group
                         # Find regions with overlap
                         if current_msa.regions:
-                            ol_regions_groups = {
-                                x.group
-                                for x in current_msa.regions
-                                if x.group
-                                and does_overlap(
-                                    (
-                                        pospp.fprimer.region()[0],
-                                        pospp.rprimer.region()[1],
-                                        self._current_msa_index,
-                                    ),
-                                    [(x.start, x.stop, self._current_msa_index)],
-                                )
-                            }
-                            print(f"added pp for: {ol_regions_groups}")
                             # Find other regions in the same group
-                            other_regions = [
-                                x
-                                for x in current_msa.regions
-                                if x.group in ol_regions_groups
-                            ]
-                            # Update the score for all regions
+                            other_regions = self.get_regions_with_group_overlap()
+                            # Update the MSA region_group_count
                             for region in other_regions:
+                                assert current_msa.region_group_count is not None
                                 assert current_msa._score_array is not None
-                                current_msa._score_array[region.start : region.stop] = 0
+                                assert region.group is not None
+
+                                if max_amplicons_group is not None and (
+                                    current_msa.region_group_count[region.group]
+                                    >= max_amplicons_group
+                                ):  # type: ignore
+                                    current_msa._score_array[
+                                        region.start : region.stop
+                                    ] = 0
+
+                                current_msa.region_group_count[region.group] += 1  # type: ignore
 
                         return PanelReturn.ADDED_PRIMERPAIR
                     case _:
@@ -400,7 +435,7 @@ class Panel(Multiplex):
         self._is_msa_index_finished[self._current_msa_index] = True
         return PanelReturn.NO_PRIMERPAIRS_IN_MSA
 
-    def calc_pp_score(self, msa: PanelMSA, pp: PrimerPair) -> int:
+    def calc_pp_score(self, msa: PanelMSA, pp: PrimerPair, bonus_ol=True) -> int:
         """
         Returns number of SNPs in the primertrimmed amplicon
         """
@@ -412,10 +447,36 @@ class Panel(Multiplex):
         score = score * (1 - gc_diff)
 
         # Apply a bonus if the primerpair spans a coverage break
-        coverage_slice = self._coverage[msa.msa_index][
-            pp.fprimer.end : pp.rprimer.start
-        ]
-        if True in coverage_slice and False in coverage_slice:
-            score = score * 10
+        if bonus_ol:
+            coverage_slice = self._coverage[msa.msa_index][
+                pp.fprimer.end : pp.rprimer.start
+            ]
+            if True in coverage_slice and False in coverage_slice:
+                score = score * 10
 
         return int(score)
+
+    def get_regions_with_group_overlap(self) -> list[Region]:
+        """
+        Finds all regions groups which are overlapping with the last primerpair added.
+        Returns all regions with the same groups.
+        """
+        last_primerpair = self._last_pp_added[-1]
+        current_msa = self._msa_dict[self._current_msa_index]
+        assert current_msa.regions is not None
+
+        ol_regions_groups = {
+            x.group
+            for x in current_msa.regions
+            if x.group
+            and does_overlap(
+                (
+                    last_primerpair.fprimer.region()[0],
+                    last_primerpair.rprimer.region()[1],
+                    self._current_msa_index,
+                ),
+                [(x.start, x.stop, self._current_msa_index)],
+            )
+        }
+        other_regions = [x for x in current_msa.regions if x.group in ol_regions_groups]
+        return other_regions
