@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml/badge.svg)](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml)
 
-This is a command-line interface tool that generates a primer scheme from a Multiple Sequence Alignment (MSA) file, utalising degenerate primers to handle variation in the genomes.
+This is a command-line interface tool that generates a primer scheme from a Multiple Sequence Alignment (MSA) file, utilising degenerate primers to handle variation in the genomes.
 
 ## Installation
 
@@ -21,7 +21,7 @@ poetry build
 **Usage**:
 
 ```console
-$ PrimalScheme3 [OPTIONS] COMMAND [ARGS]...
+$ primalscheme3 [OPTIONS] COMMAND [ARGS]...
 ```
 
 **Options**:
@@ -34,20 +34,21 @@ $ PrimalScheme3 [OPTIONS] COMMAND [ARGS]...
 **Commands**:
 
 * `interactions`: Shows all the primer-primer interactions...
-* `panel-create`: Creates a primerpanel
-* `remap-mode`: Remaps a primer scheme to a new reference...
+* `panel-create`: Creates a primer panel
 * `repair-mode`: Repairs a primer scheme via adding more...
 * `scheme-create`: Creates a tiling overlap scheme for each...
 * `scheme-replace`: Replaces a primerpair in a bedfile
+* `visualise-bedfile`: Visualise the bedfile
+* `visualise-primer-mismatches`: Visualise mismatches between primers and...
 
-## `PrimalScheme3 interactions`
+## `primalscheme3 interactions`
 
 Shows all the primer-primer interactions within a bedfile
 
 **Usage**:
 
 ```console
-$ PrimalScheme3 interactions [OPTIONS] BEDFILE
+$ primalscheme3 interactions [OPTIONS] BEDFILE
 ```
 
 **Arguments**:
@@ -59,59 +60,45 @@ $ PrimalScheme3 interactions [OPTIONS] BEDFILE
 * `--threshold FLOAT`: Only show interactions more severe (Lower score) than this value  [default: -26.0]
 * `--help`: Show this message and exit.
 
-## `PrimalScheme3 panel-create`
+## `primalscheme3 panel-create`
 
-Creates a primerpanel
+Creates a primer panel
 
 **Usage**:
 
 ```console
-$ PrimalScheme3 panel-create [OPTIONS]
+$ primalscheme3 panel-create [OPTIONS]
 ```
 
 **Options**:
 
 * `--msa PATH`: Paths to the MSA files  [required]
 * `--output PATH`: The output directory  [required]
-* `--regionbedfile PATH`: Path to the bedfile containing the wanted regions
-* `--inputbedfile PATH`: Path to a primer.bedfile containing the precalculated primers
-* `--mode [all|region-only|region-all]`: Select what mode for selecting regions in --regionbedfile  [default: region-only]
+* `--region-bedfile FILE`: Path to the bedfile containing the wanted regions
+* `--input-bedfile FILE`: Path to a primer.bedfile containing the pre-calculated primers
+* `--mode [entropy|region-only|equal]`: Select what run mode  [default: region-only]
 * `--amplicon-size INTEGER`: The size of an amplicon  [default: 400]
 * `--n-pools INTEGER RANGE`: Number of pools to use  [default: 2; x>=1]
 * `--dimer-score FLOAT`: Threshold for dimer interaction  [default: -26.0]
 * `--min-base-freq FLOAT RANGE`: Min freq to be included,[0<=x<=1]  [default: 0.0; 0.0<=x<=1.0]
 * `--mapping [first|consensus]`: How should the primers in the bedfile be mapped  [default: first]
-* `--maxamplicons INTEGER RANGE`: Max number of amplicons to create  [x>=1]
+* `--max-amplicons INTEGER RANGE`: Max number of amplicons to create  [x>=1]
+* `--max-amplicons-msa INTEGER RANGE`: Max number of amplicons for each MSA  [x>=1]
+* `--max-amplicons-region-group INTEGER RANGE`: Max number of amplicons for each region  [x>=1]
 * `--force / --no-force`: Override the output directory  [default: no-force]
 * `--high-gc / --no-high-gc`: Use high GC primers  [default: no-high-gc]
+* `--offline-plots / --no-offline-plots`: Includes 3Mb of dependencies into the plots, so they can be viewed offline  [default: offline-plots]
+* `--use-matchdb / --no-use-matchdb`: Create and use a mispriming database  [default: use-matchdb]
 * `--help`: Show this message and exit.
 
-## `PrimalScheme3 remap-mode`
-
-Remaps a primer scheme to a new reference genome
-
-**Usage**:
-
-```console
-$ PrimalScheme3 remap-mode [OPTIONS]
-```
-
-**Options**:
-
-* `--bedfile PATH`: Path to the bedfile  [required]
-* `--id-to-remap-to TEXT`: The ID of the reference genome to remap to  [required]
-* `--msa PATH`: Path to the MSA file  [required]
-* `--output PATH`: The output directory  [required]
-* `--help`: Show this message and exit.
-
-## `PrimalScheme3 repair-mode`
+## `primalscheme3 repair-mode`
 
 Repairs a primer scheme via adding more primers to account for new mutations
 
 **Usage**:
 
 ```console
-$ PrimalScheme3 repair-mode [OPTIONS]
+$ primalscheme3 repair-mode [OPTIONS]
 ```
 
 **Options**:
@@ -123,21 +110,21 @@ $ PrimalScheme3 repair-mode [OPTIONS]
 * `--force / --no-force`: Override the output directory  [default: no-force]
 * `--help`: Show this message and exit.
 
-## `PrimalScheme3 scheme-create`
+## `primalscheme3 scheme-create`
 
 Creates a tiling overlap scheme for each MSA file
 
 **Usage**:
 
 ```console
-$ PrimalScheme3 scheme-create [OPTIONS]
+$ primalscheme3 scheme-create [OPTIONS]
 ```
 
 **Options**:
 
-* `--msa PATH`: The name of the scheme  [required]
+* `--msa PATH`: The MSA to design against. To use multiple MSAs, use multiple --msa flags. (--msa 1.fasta --msa 2.fasta)  [required]
 * `--output PATH`: The output directory  [required]
-* `--amplicon-size INTEGER`: The size of an amplicon. Use single value for ± 10 percent [100<=x<=2000]  [default: 400]
+* `--amplicon-size INTEGER`: The size of an amplicon. Min / max size are ± 10 percent [100<=x<=2000]  [default: 400]
 * `--bedfile PATH`: An existing bedfile to add primers to
 * `--min-overlap INTEGER RANGE`: min amount of overlap between primers  [default: 10; x>=0]
 * `--n-pools INTEGER RANGE`: Number of pools to use  [default: 2; x>=1]
@@ -148,18 +135,20 @@ $ PrimalScheme3 scheme-create [OPTIONS]
 * `--backtrack / --no-backtrack`: Should the algorithm backtrack  [default: no-backtrack]
 * `--ignore-n / --no-ignore-n`: Should N in the input genomes be ignored  [default: no-ignore-n]
 * `--force / --no-force`: Override the output directory  [default: no-force]
-* `--input-bedfile PATH`: Path to a primer.bedfile containing the precalculated primers
+* `--input-bedfile PATH`: Path to a primer.bedfile containing the pre-calculated primers
 * `--high-gc / --no-high-gc`: Use high GC primers  [default: no-high-gc]
+* `--offline-plots / --no-offline-plots`: Includes 3Mb of dependencies into the plots, so they can be viewed offline  [default: offline-plots]
+* `--use-matchdb / --no-use-matchdb`: Create and use a mispriming database  [default: use-matchdb]
 * `--help`: Show this message and exit.
 
-## `PrimalScheme3 scheme-replace`
+## `primalscheme3 scheme-replace`
 
 Replaces a primerpair in a bedfile
 
 **Usage**:
 
 ```console
-$ PrimalScheme3 scheme-replace [OPTIONS] PRIMERNAME PRIMERBED MSA
+$ primalscheme3 scheme-replace [OPTIONS] PRIMERNAME PRIMERBED MSA
 ```
 
 **Arguments**:
@@ -170,10 +159,49 @@ $ PrimalScheme3 scheme-replace [OPTIONS] PRIMERNAME PRIMERBED MSA
 
 **Options**:
 
-* `--ampliconsize INTEGER`: The size of an amplicon. Use single value for ± 10 percent [100<=x<=2000]  [required]
+* `--amplicon-size INTEGER`: The size of an amplicon. Use single value for ± 10 percent [100<=x<=2000]  [required]
 * `--config PATH`: The config.json used to create the original primer scheme  [required]
 * `--help`: Show this message and exit.
 
-------------------------------------------------------------------------
+## `primalscheme3 visualise-bedfile`
 
-This work is licensed under GNU General Public License v3.
+Visualise the bedfile
+
+**Usage**:
+
+```console
+$ primalscheme3 visualise-bedfile [OPTIONS] BEDFILE REF_PATH
+```
+
+**Arguments**:
+
+* `BEDFILE`: The bedfile containing the primers  [required]
+* `REF_PATH`: The bedfile containing the primers  [required]
+
+**Options**:
+
+* `--ref-id TEXT`: The reference genome ID  [required]
+* `--output FILE`: Output location of the plot  [default: bedfile.html]
+* `--help`: Show this message and exit.
+
+## `primalscheme3 visualise-primer-mismatches`
+
+Visualise mismatches between primers and the input genomes
+
+**Usage**:
+
+```console
+$ primalscheme3 visualise-primer-mismatches [OPTIONS] MSA BEDFILE
+```
+
+**Arguments**:
+
+* `MSA`: The MSA used to design the scheme  [required]
+* `BEDFILE`: The bedfile containing the primers  [required]
+
+**Options**:
+
+* `--output FILE`: Output location of the plot  [default: primer.html]
+* `--include-seqs / --no-include-seqs`: Reduces plot filesize, by excluding primer sequences  [default: include-seqs]
+* `--offline-plots / --no-offline-plots`: Includes 3Mb of dependencies into the plots, so they can be viewed offline  [default: offline-plots]
+* `--help`: Show this message and exit.
