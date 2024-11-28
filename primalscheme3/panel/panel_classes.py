@@ -400,13 +400,11 @@ class Panel(Multiplex):
             for pospool in pos_pools_indexes:
                 # Check if the primerpair can be added
                 match self.check_primerpair_can_be_added(
-                    pospp, current_pool, seqs_in_each_pool[pospool]
+                    pospp, pospool, seqs_in_each_pool[pospool]
                 ):
                     case PrimerPairCheck.OK:
                         # _add_primerpair updates the score array for the added primerpair
-                        self._add_primerpair(
-                            pospp, current_pool, self._current_msa_index
-                        )
+                        self._add_primerpair(pospp, pospool, self._current_msa_index)
                         # Check for other regions in the same group
                         # Find regions with overlap
                         if current_msa.regions:
