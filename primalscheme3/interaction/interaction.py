@@ -105,13 +105,22 @@ def visualise_interactions(bedpath: pathlib.Path, threshold: float) -> None:
     for bedline in bedlines:
         pools[bedline.pool].append(bedline)
 
+    tested = 0
+    interactions = 0
+
     # Loop over the pools
     for pool in pools:
         # Loop over the bedlines in the pool
         for bedline1 in pool:
             for bedline2 in pool:
+                tested += 1
                 for line in interaction(
                     bedline1.sequence, bedline2.sequence, threshold
                 ):
+                    interactions += 1
                     print(bedline1.primername, bedline2.primername)
                     print(line)
+
+    print(
+        f"Tested {tested} possible combinations and found {interactions} interactions"
+    )
