@@ -124,6 +124,14 @@ class Config:
 
     def assign_kwargs(self, **kwargs: Any) -> None:
         for key, value in kwargs.items():
+            # Check if key is valid
+            if value is None:
+                continue
+
+            if key == "input_bedfile":
+                setattr(self, key, pathlib.Path(value))
+                continue
+
             if hasattr(self, key):
                 # Convert to expected type
                 if isinstance(getattr(self, key), MappingType):

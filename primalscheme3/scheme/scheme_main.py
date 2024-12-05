@@ -454,7 +454,7 @@ def schemecreate(
     for msa_index, msa_obj in msa_dict.items():
         # Set up the pm for the MSA
         scheme_pt = pm.create_sub_progress(
-            iter=None, chrom=msa_obj._chrom_name, process="Creating Scheme", leave=False
+            iter=None, chrom=msa_obj.name, process="Creating Scheme", leave=False
         )
         scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
 
@@ -601,6 +601,19 @@ def schemecreate(
         outfile.write(json.dumps(cfg_dict, sort_keys=True))
 
     upload_pt.manual_update(n=4, update=True)
+
+    # Create qc coverage data
+    qc_data = {}
+    for msa_index, msa_obj in msa_dict.items():
+        msa_data = {"coverage": scheme.get_coverage_percent(msa_index)}
+        msa_data["n_amplicons"] = len(
+            [x for x in scheme._last_pp_added if x.msa_index == msa_index]
+        )
+        msa_data["n_gaps"] = len(scheme.get_coverage_gaps(msa_index))
+        qc_data[msa_obj.name] = msa_data
+
+    with open(OUTPUT_DIR / "work" / "qc.json", "w") as outfile:
+        outfile.write(json.dumps(qc_data, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
     # Writing plot data
