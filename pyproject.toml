@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "primalscheme3"
-version = "3.0.0"
+version = "3.0.1"
 description = ""
 authors = ["ChrisKent <chrisgkent@gmail.com>"]
 readme = "README.md"

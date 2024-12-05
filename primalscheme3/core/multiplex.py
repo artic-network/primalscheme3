@@ -211,6 +211,28 @@ class Multiplex:
             self._coverage[msa_index].sum() / len(self._coverage[msa_index]) * 100, 2
         )
 
+    def get_coverage_gaps(self, msa_index: int) -> list[tuple[int, int]]:
+        """
+        Returns the coverage gaps for the specified MSA index
+        :param msa_index: int
+        :return: list[tuple[int, int]]
+        """
+        gaps = []
+        in_gap = False
+        gap_start = 0
+        for i, covered in enumerate(self._coverage[msa_index]):
+            if not covered:
+                if not in_gap:
+                    gap_start = i
+                    in_gap = True
+            else:
+                if in_gap:
+                    gaps.append((gap_start, i))
+                    in_gap = False
+        if in_gap:
+            gaps.append((gap_start, i))
+        return gaps
+
     def update_coverage(self, primerpair: PrimerPair, add: bool = True) -> None:
         """
         Updates the coverage for the specified MSA index
