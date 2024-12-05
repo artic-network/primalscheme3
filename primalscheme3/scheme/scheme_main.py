@@ -454,7 +454,7 @@ def schemecreate(
     for msa_index, msa_obj in msa_dict.items():
         # Set up the pm for the MSA
         scheme_pt = pm.create_sub_progress(
-            iter=None, chrom=msa_obj._chrom_name, process="Creating Scheme", leave=False
+            iter=None, chrom=msa_obj.name, process="Creating Scheme", leave=False
         )
         scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
 
