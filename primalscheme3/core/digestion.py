@@ -144,7 +144,7 @@ def generate_valid_primerpairs(
     ## Generate all primerpairs without checking
     checked_pp = []
     pt = progress_manager.create_sub_progress(
-        iter=fkmers, process="Generating PrimerPairs", chrom=chrom
+        iter=fkmers, process="Generating primer pairs", chrom=chrom
     )
     for fkmer in pt:
         fkmer_start = min(fkmer.starts())
