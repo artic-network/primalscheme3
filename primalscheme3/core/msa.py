@@ -51,13 +51,13 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         )
     except ValueError as e:
         raise MSAFileInvalidLength(
-            f"{msa_path.name}: contains sequences of different lengths"
+            f"MSA ({msa_path.name}): contains sequences of different lengths"
         ) from e
 
     # Check for empty MSA, caused by no records being parsed
     if array.size == 0:
         raise MSAFileInvalid(
-            "No sequences in MSA file. Please ensure the MSA uses .fasta format."
+            f"No sequences in MSA ({msa_path.name}). Please ensure the MSA uses .fasta format."
         )
 
     empty_set = {"", "-"}
@@ -72,7 +72,7 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         # Check for non DNA characters
         if slice.difference(IUPAC_ALL_ALLOWED_DNA):
             raise MSAFileInvalidBase(
-                f"MSA contains non DNA characters ({str(slice.difference(IUPAC_ALL_ALLOWED_DNA))}) at column: {col_index}"
+                f"MSA ({msa_path.name}) contains non DNA characters ({str(slice.difference(IUPAC_ALL_ALLOWED_DNA))}) at column: {col_index}"
             )
     # Remove empty columns
     array = np.delete(array, empty_col_indexes, axis=1)
