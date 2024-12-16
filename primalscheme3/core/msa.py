@@ -71,8 +71,9 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
             empty_col_indexes.append(col_index)
         # Check for non DNA characters
         if slice.difference(IUPAC_ALL_ALLOWED_DNA):
+            base_str = ", ".join(slice.difference(IUPAC_ALL_ALLOWED_DNA))
             raise MSAFileInvalidBase(
-                f"MSA ({msa_path.name}) contains non DNA characters ({str(slice.difference(IUPAC_ALL_ALLOWED_DNA))}) at column: {col_index}"
+                f"MSA ({msa_path.name}) contains non DNA characters ({base_str}) at column: {col_index}"
             )
     # Remove empty columns
     array = np.delete(array, empty_col_indexes, axis=1)
