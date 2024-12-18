@@ -2,7 +2,6 @@ import hashlib
 import json
 import pathlib
 import shutil
-import sys
 from time import sleep
 
 from Bio import Seq, SeqIO, SeqRecord
@@ -387,7 +386,7 @@ def schemecreate(
     # Check for collisions in the MSA._chrom_names names
     if len({msa_obj._chrom_name for msa_obj in msa_dict.values()}) != len(msa_dict):
         logger.critical("Duplicate chrom names found in MSA data. Exiting.")
-        sys.exit(1)
+        raise UsageError("Duplicate chrom names found in MSA data")
 
     # Read in all MSAs before digestion
     for msa_index, msa_obj in msa_dict.items():
