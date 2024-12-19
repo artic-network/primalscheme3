@@ -16,15 +16,10 @@ def setup_rich_logger(logfile: str | None = None):
                 omit_repeated_times=False,
             )
         )
+
     logging.basicConfig(
-        format="%(message)s",
-        datefmt="[%X]",
+        level="NOTSET", format="%(message)s", datefmt="[%X]", handlers=handlers
     )
     log = logging.getLogger(f"rich-{hash(logfile)}")
-    log.setLevel(logging.DEBUG)
-
-    # Add the handlers
-    for handler in handlers:
-        log.addHandler(handler)
 
     return log
