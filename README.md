@@ -1,5 +1,3 @@
-> Preprint comming soon
-
 # Primalscheme3
 
 [![CI](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml/badge.svg)](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml) [![Generic badge](https://img.shields.io/badge/DOI-10.1101/2024.12.20.629611-blue.svg)](https://doi.org/10.1101/2024.12.20.629611)
