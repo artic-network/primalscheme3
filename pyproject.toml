@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "primalscheme3"
-version = "3.0.2"
+version = "3.0.3"
 description = "Generation of highly multiplexed primer schemes"
 authors = ["ChrisKent <chrisgkent@gmail.com>"]
 readme = "README.md"
 license = "GPL-3.0-only"
-repository = "https://github.com/ChrisgKent/primalscheme3"
+repository = "https://github.com/artic-network/primalscheme3"
 
 [tool.poetry.dependencies]
 python = "^3.11"

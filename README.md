@@ -1,6 +1,6 @@
 # Primalscheme3
 
-[![CI](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml/badge.svg)](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml)
+[![CI](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml/badge.svg)](https://github.com/ChrisgKent/primalscheme3/actions/workflows/pytest.yml) [![Generic badge](https://img.shields.io/badge/DOI-10.1101/2024.12.20.629611-blue.svg)](https://doi.org/10.1101/2024.12.20.629611)
 
 This is a command-line interface tool that generates a primer scheme from a Multiple Sequence Alignment (MSA) file, utilising degenerate primers to handle variation in the genomes.
 
