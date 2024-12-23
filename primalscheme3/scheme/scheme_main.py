@@ -2,7 +2,6 @@ import hashlib
 import json
 import pathlib
 import shutil
-import sys
 from time import sleep
 
 from Bio import Seq, SeqIO, SeqRecord
@@ -358,15 +357,6 @@ def schemecreate(
             progress_manager=pm,
         )
 
-        if "/" in msa_obj._chrom_name:
-            new_chromname = msa_obj._chrom_name.split("/")[0]
-            logger.warning(
-                f"Having a '/' in the chromname {msa_obj._chrom_name} "
-                f"will cause issues with figure generation bedfile output. "
-                f"Parsing chromname [yellow]{msa_obj._chrom_name}[/yellow] -> [green]{new_chromname}[/green]"
-            )
-            msa_obj._chrom_name = new_chromname
-
         logger.info(
             f"Read in MSA: [blue]{msa_obj._chrom_name}[/blue]\t"
             f"seqs:[green]{msa_obj.array.shape[0]}[/green]\t"
@@ -387,7 +377,7 @@ def schemecreate(
     # Check for collisions in the MSA._chrom_names names
     if len({msa_obj._chrom_name for msa_obj in msa_dict.values()}) != len(msa_dict):
         logger.critical("Duplicate chrom names found in MSA data. Exiting.")
-        sys.exit(1)
+        raise UsageError("Duplicate chrom names found in MSA data")
 
     # Read in all MSAs before digestion
     for msa_index, msa_obj in msa_dict.items():

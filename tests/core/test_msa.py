@@ -4,7 +4,11 @@ import unittest
 import numpy as np
 from Bio import SeqIO
 
-from primalscheme3.core.errors import MSAFileInvalid, MSAFileInvalidLength
+from primalscheme3.core.errors import (
+    MSAFileInvalid,
+    MSAFileInvalidBase,
+    MSAFileInvalidLength,
+)
 from primalscheme3.core.msa import parse_msa
 
 
@@ -21,6 +25,9 @@ class TestParseMSA(unittest.TestCase):
         )
         self.msa_empty_col = pathlib.Path(
             "tests/test_data/test_msa/test_msa_empty_col.fasta"
+        )
+        self.msa_non_dna = pathlib.Path(
+            "tests/test_data/test_msa/test_msa_non_dna.fasta"
         )
 
     def test_parse_msa_diff_length(self):
@@ -67,6 +74,19 @@ class TestParseMSA(unittest.TestCase):
         for col_index in range(0, new_array.shape[1]):
             slice: set[str] = set(new_array[:, col_index])
             self.assertTrue(slice != {"", "-"})
+
+    def test_parse_msa_non_dna(self):
+        """
+        Checks if the MSA contains non-DNA characters
+        """
+        with self.assertRaises(MSAFileInvalidBase):
+            _ = parse_msa(self.msa_non_dna)
+
+    def test_valid_msa(self):
+        """
+        Checks if the MSA is valid
+        """
+        _ = parse_msa(pathlib.Path("tests/test_data/test_msa/test_msa_valid.fasta"))
 
 
 if __name__ == "__main__":

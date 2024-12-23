@@ -51,13 +51,13 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         )
     except ValueError as e:
         raise MSAFileInvalidLength(
-            f"{msa_path.name}: contains sequences of different lengths"
+            f"MSA ({msa_path.name}): contains sequences of different lengths"
         ) from e
 
     # Check for empty MSA, caused by no records being parsed
     if array.size == 0:
         raise MSAFileInvalid(
-            "No sequences in MSA file. Please ensure the MSA uses .fasta format."
+            f"No sequences in MSA ({msa_path.name}). Please ensure the MSA uses .fasta format."
         )
 
     empty_set = {"", "-"}
@@ -71,8 +71,9 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
             empty_col_indexes.append(col_index)
         # Check for non DNA characters
         if slice.difference(IUPAC_ALL_ALLOWED_DNA):
+            base_str = ", ".join(slice.difference(IUPAC_ALL_ALLOWED_DNA))
             raise MSAFileInvalidBase(
-                f"MSA contains non DNA characters ({str(slice.difference(IUPAC_ALL_ALLOWED_DNA))}) at column: {col_index}"
+                f"MSA ({msa_path.name}) contains non DNA characters ({base_str}) at column: {col_index}"
             )
     # Remove empty columns
     array = np.delete(array, empty_col_indexes, axis=1)
@@ -147,6 +148,27 @@ class MSA:
 
         # Assign a UUID
         self._uuid = str(uuid4())[:8]
+
+        if "/" in self._chrom_name:
+            new_chromname = self._chrom_name.replace("/", "_")
+            warning_str = (
+                f"Replacing '/' with '-'. '{self._chrom_name}' -> '{new_chromname}'"
+            )
+            if self.logger:
+                self.logger.warning(warning_str)
+            else:
+                print(warning_str)
+            self._chrom_name = new_chromname
+
+        # Check length
+        if len(self._chrom_name) > 200:  # limit is 255
+            new_chromname = self._chrom_name[:200]
+            if self.logger:
+                self.logger.warning(
+                    f"Chromname '{self._chrom_name}' is too long, "
+                    f"limit is 100 characters. Truncating to '{new_chromname}'"
+                )
+            self._chrom_name = new_chromname
 
     def digest(
         self,

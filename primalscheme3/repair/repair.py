@@ -2,7 +2,6 @@ import hashlib
 import json
 import pathlib
 import shutil
-import sys
 from enum import Enum
 
 from click import UsageError
@@ -199,7 +198,9 @@ def repair(
         logger.critical(
             f"No primerpairs found for {msa_obj._chrom_name} in {bedfile_path}",
         )
-        sys.exit(1)
+        raise UsageError(
+            f"No primerpairs found for {msa_obj._chrom_name} in {bedfile_path}"
+        )
 
     # Get all the seqs in each pool
     seqs_in_pools = [[] for _ in range(config.n_pools)]

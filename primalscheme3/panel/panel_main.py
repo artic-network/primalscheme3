@@ -174,15 +174,6 @@ def panelcreate(
         # Add the MSA to the dict
         msa_dict[msa_index] = msa_obj
 
-        if "/" in msa_obj._chrom_name:
-            new_chromname = msa_obj._chrom_name.split("/")[0]
-            logger.warning(
-                f"Having a '/' in the chromname {msa_obj._chrom_name} "
-                f"will cause issues with figure generation bedfile output. "
-                f"Parsing chromname [yellow]{msa_obj._chrom_name}[/yellow] -> [green]{new_chromname}[/green]"
-            )
-            msa_obj._chrom_name = new_chromname
-
         # Add some msa data to the dict
         msa_data[msa_index]["msa_name"] = msa_obj.name
         msa_data[msa_index]["msa_path"] = str(
