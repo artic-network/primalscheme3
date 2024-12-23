@@ -357,15 +357,6 @@ def schemecreate(
             progress_manager=pm,
         )
 
-        if "/" in msa_obj._chrom_name:
-            new_chromname = msa_obj._chrom_name.split("/")[0]
-            logger.warning(
-                f"Having a '/' in the chromname {msa_obj._chrom_name} "
-                f"will cause issues with figure generation bedfile output. "
-                f"Parsing chromname [yellow]{msa_obj._chrom_name}[/yellow] -> [green]{new_chromname}[/green]"
-            )
-            msa_obj._chrom_name = new_chromname
-
         logger.info(
             f"Read in MSA: [blue]{msa_obj._chrom_name}[/blue]\t"
             f"seqs:[green]{msa_obj.array.shape[0]}[/green]\t"

@@ -149,6 +149,27 @@ class MSA:
         # Assign a UUID
         self._uuid = str(uuid4())[:8]
 
+        if "/" in self._chrom_name:
+            new_chromname = self._chrom_name.replace("/", "_")
+            warning_str = (
+                f"Replacing '/' with '-'. '{self._chrom_name}' -> '{new_chromname}'"
+            )
+            if self.logger:
+                self.logger.warning(warning_str)
+            else:
+                print(warning_str)
+            self._chrom_name = new_chromname
+
+        # Check length
+        if len(self._chrom_name) > 200:  # limit is 255
+            new_chromname = self._chrom_name[:200]
+            if self.logger:
+                self.logger.warning(
+                    f"Chromname '{self._chrom_name}' is too long, "
+                    f"limit is 100 characters. Truncating to '{new_chromname}'"
+                )
+            self._chrom_name = new_chromname
+
     def digest(
         self,
         config: Config,
