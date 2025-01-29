@@ -19,7 +19,7 @@ from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import reverse_complement
-from primalscheme3.core.thermo import THERMORESULT, thermo_check
+from primalscheme3.core.thermo import THERMO_RESULT, thermo_check
 
 
 class NewPrimerStatus(Enum):
@@ -31,10 +31,13 @@ class NewPrimerStatus(Enum):
 class SeqStatus:
     seq: str | None
     count: int
-    thermo_status: THERMORESULT | DIGESTION_ERROR
+    thermo_status: THERMO_RESULT | DIGESTION_ERROR
 
     def __init__(
-        self, seq: str | None, count: int, thermo_status: THERMORESULT | DIGESTION_ERROR
+        self,
+        seq: str | None,
+        count: int,
+        thermo_status: THERMO_RESULT | DIGESTION_ERROR,
     ):
         self.seq = seq
         self.count = count
@@ -72,7 +75,7 @@ def report_check(
     report_seq = report_seq.rjust(config.primer_size_max + 5, " ")
 
     # Check it passed thermo
-    if seqstatus.thermo_status != THERMORESULT.PASS or seqstatus.seq is None:
+    if seqstatus.thermo_status != THERMO_RESULT.PASS or seqstatus.seq is None:
         logger.warning(
             f"{report_seq}\t{seqstatus.count}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {seqstatus.thermo_status}",
         )

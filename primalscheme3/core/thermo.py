@@ -8,8 +8,8 @@ from primer3 import calc_tm as p3_calc_tm
 from primalscheme3.core.config import Config
 
 
-class THERMORESULT(Enum):
-    # THERMORESULT.value == 0 is a pass
+class THERMO_RESULT(Enum):
+    # THERMO_RESULT.value == 0 is a pass
     PASS = 0
     HIGH_GC = 1
     LOW_GC = 2
@@ -91,7 +91,7 @@ def max_homo(kmer_seq) -> int:
     return max(sum(1 for _ in group) for _, group in groupby(kmer_seq))
 
 
-def thermo_check(kmer_seq: str, config: Config) -> THERMORESULT:
+def thermo_check(kmer_seq: str, config: Config) -> THERMO_RESULT:
     """Are all kmer thermo values below threshold?.
 
     Evaluation order.
@@ -106,14 +106,14 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMORESULT:
         cfg (dict): The configuration dictionary containing threshold values.
 
     Returns:
-        THERMORESULT: The result of the thermo checks.
+        THERMO_RESULT: The result of the thermo checks.
     """
     # Check for gc in range
     kmer_gc = gc(kmer_seq)
     if kmer_gc > config.primer_gc_max:
-        return THERMORESULT.HIGH_GC
+        return THERMO_RESULT.HIGH_GC
     elif kmer_gc < config.primer_gc_min:
-        return THERMORESULT.LOW_GC
+        return THERMO_RESULT.LOW_GC
 
     # Check for tm in range
     kmer_tm = calc_tm(
@@ -124,13 +124,13 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMORESULT:
         dntp_conc=config.dntp_conc,
     )
     if kmer_tm > config.primer_tm_max:
-        return THERMORESULT.HIGH_TM
+        return THERMO_RESULT.HIGH_TM
     elif kmer_tm < config.primer_tm_min:
-        return THERMORESULT.LOW_TM
+        return THERMO_RESULT.LOW_TM
 
     # Check for maxhomopolymer
     if max_homo(kmer_seq) > config.primer_homopolymer_max:
-        return THERMORESULT.MAX_HOMOPOLY
+        return THERMO_RESULT.MAX_HOMOPOLY
 
     # Check for hairpin
     if (
@@ -143,18 +143,18 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMORESULT:
         )
         > config.primer_hairpin_th_max
     ):
-        return THERMORESULT.HAIRPIN
+        return THERMO_RESULT.HAIRPIN
 
-    return THERMORESULT.PASS
+    return THERMO_RESULT.PASS
 
 
 def thermo_check_all_kmers(
     kmers: Iterable[str], config: Config
-) -> dict[str, THERMORESULT]:
+) -> dict[str, THERMO_RESULT]:
     return {kmer: thermo_check(kmer, config) for kmer in kmers}
 
 
-def thermo_check_kmers(kmers: Iterable[str], config: Config) -> THERMORESULT:
+def thermo_check_kmers(kmers: Iterable[str], config: Config) -> THERMO_RESULT:
     """
     Will call thermo_check on each kmer sequence in the kmers list
     Will stop evaluating on first error
@@ -164,14 +164,14 @@ def thermo_check_kmers(kmers: Iterable[str], config: Config) -> THERMORESULT:
         cfg (dict): A dictionary containing configuration settings.
 
     Returns:
-        THERMORESULT: The result of the thermo checks. THERMORESULT.PASS if all kmers pass the checks, otherwise the first encountered error.
+        THERMO_RESULT: The result of the thermo checks. THERMO_RESULT.PASS if all kmers pass the checks, otherwise the first encountered error.
 
     """
     for kmer in kmers:
         result = thermo_check(kmer, config)
-        if result == THERMORESULT.PASS:
+        if result == THERMO_RESULT.PASS:
             continue
         else:
             return result
 
-    return THERMORESULT.PASS
+    return THERMO_RESULT.PASS

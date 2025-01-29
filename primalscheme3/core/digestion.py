@@ -30,10 +30,12 @@ from primalscheme3.core.seq_functions import (
     reverse_complement,
 )
 from primalscheme3.core.thermo import (
-    THERMORESULT,
+    THERMO_RESULT,
     calc_tm,
     thermo_check_kmers,
 )
+
+EARLY_RETURN_FREQ = -1
 
 
 class DIGESTION_ERROR(Enum):
@@ -50,15 +52,34 @@ class DIGESTION_ERROR(Enum):
     DIMER_FAIL = "DimerFail"  # Interaction within the kmer
     WALK_TO_FAR = "WalkToFar"  # When indels causes the walk to go to far
     AMB_FAIL = "AmbFail"  # Generic error for when the error is unknown
-
-    # Thermo errors
-    THERMO_HIGH_GC = "HighGC"
-    THERMO_LOW_GC = "LowGC"
-    THERMO_HIGH_TM = "HighTM"
-    THERMO_LOW_TM = "LowTM"
-    THERMO_MAX_HOMOPOLY = "MaxHomopoly"
-    THERMO_HAIRPIN = "Hairpin"
     NO_SEQUENCES = "NoSequences"
+
+
+class DIGESTION_RESULT:
+    seq: str | DIGESTION_ERROR
+    count: float
+    status: THERMO_RESULT | None
+
+    def __init__(
+        self,
+        seq: str | DIGESTION_ERROR,
+        count: float,
+        status: THERMO_RESULT | None = None,
+    ):
+        self.seq = seq
+        self.count = count
+        self.status = status
+
+    def thermo_check(self, config: Config) -> THERMO_RESULT | DIGESTION_ERROR:
+        # If the seq is an error return the error
+        if isinstance(self.seq, DIGESTION_ERROR):
+            return self.seq
+
+        # TODO Add cache for thermo check
+
+        # Thermo check the sequence
+        self.status = thermo_check_kmers({self.seq}, config)
+        return self.status
 
 
 def parse_error(results: set[CustomErrors | str]) -> DIGESTION_ERROR:
@@ -81,27 +102,6 @@ def parse_error(results: set[CustomErrors | str]) -> DIGESTION_ERROR:
         return DIGESTION_ERROR.WALK_TO_FAR
     else:  # Return a generic error
         return DIGESTION_ERROR.AMB_FAIL
-
-
-def parse_thermo_error(result: THERMORESULT) -> DIGESTION_ERROR:
-    """
-    Parses the THERMORESULT for the error that occurred
-    """
-    match result:
-        case THERMORESULT.HIGH_GC:
-            return DIGESTION_ERROR.THERMO_HIGH_GC
-        case THERMORESULT.LOW_GC:
-            return DIGESTION_ERROR.THERMO_LOW_GC
-        case THERMORESULT.HIGH_TM:
-            return DIGESTION_ERROR.THERMO_HIGH_TM
-        case THERMORESULT.LOW_TM:
-            return DIGESTION_ERROR.THERMO_LOW_TM
-        case THERMORESULT.MAX_HOMOPOLY:
-            return DIGESTION_ERROR.THERMO_MAX_HOMOPOLY
-        case THERMORESULT.HAIRPIN:
-            return DIGESTION_ERROR.THERMO_HAIRPIN
-        case _:
-            raise ValueError("Unknown error occurred")
 
 
 def parse_error_list(
@@ -357,9 +357,9 @@ def wrap_walk(
     return return_list
 
 
-def r_digest_to_count(
+def r_digest_to_result(
     align_array: np.ndarray, config: Config, start_col: int, min_freq: float
-) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
+) -> tuple[int, list[DIGESTION_RESULT]]:
     """
     Returns the count of each sequence / error at a given index
     A value of -1 in the return dict means the function returned early, and not all seqs were counted. Only used for WALKS_OUT and GAP_ON_SET_BASE
@@ -368,7 +368,10 @@ def r_digest_to_count(
     ### Process early return conditions
     # If the initial slice is outside the range of the array
     if start_col + config.primer_size_min >= align_array.shape[1]:
-        return (start_col, {DIGESTION_ERROR.WALKS_OUT: -1})
+        return (
+            start_col,
+            [DIGESTION_RESULT(DIGESTION_ERROR.WALKS_OUT, EARLY_RETURN_FREQ, None)],
+        )
 
     # Check for gap frequency on first base
     base, counts = np.unique(align_array[:, start_col], return_counts=True)
@@ -380,7 +383,14 @@ def r_digest_to_count(
 
     # If the freq of gap is above minfreq
     if first_base_freq.get("-", 0) > min_freq:
-        return (start_col, {DIGESTION_ERROR.GAP_ON_SET_BASE: -1})
+        return (
+            start_col,
+            [
+                DIGESTION_RESULT(
+                    DIGESTION_ERROR.GAP_ON_SET_BASE, EARLY_RETURN_FREQ, None
+                )
+            ],
+        )
 
     ### Calculate the total number of sequences
     # Create a counter
@@ -416,19 +426,28 @@ def r_digest_to_count(
         )
         # If all mutations matter, return on any Error
         if min_freq == 0 and set(results) & ERROR_SET:
-            return (start_col, {parse_error(set(results)): -1})
+            return (
+                start_col,
+                [DIGESTION_RESULT(parse_error(set(results)), EARLY_RETURN_FREQ, None)],
+            )
 
         # Add the results to the Counter
         total_col_seqs.update(
             {seq: 1 / len(results) for seq in parse_error_list(results)}
         )
+    # parse total_col_seqs into DIGESTION_RESULT
+    digestion_result_list = [
+        DIGESTION_RESULT(seq=k, count=v) for k, v in total_col_seqs.items()
+    ]
 
-    return (start_col, dict(total_col_seqs))
+    return (start_col, digestion_result_list)
 
 
-def process_seqs(
-    seq_counts: dict[str | DIGESTION_ERROR, int], min_freq, ignore_n: bool = False
-) -> DIGESTION_ERROR | dict[str, float]:
+def process_results(
+    digestion_results: list[DIGESTION_RESULT],
+    min_freq,
+    ignore_n: bool = False,
+) -> DIGESTION_ERROR | list[DIGESTION_RESULT]:
     """
     Takes the output from *_digest_to_count and returns a set of valid sequences. Or the error that occurred.
 
@@ -438,38 +457,43 @@ def process_seqs(
         min_freq: The minimum frequency threshold.
 
     Returns:
-        DIGESTION_ERROR | dict[str, float]: either an error or a dictionary of parsed sequences.
+        DIGESTION_ERROR | list[DIGESTION_RESULT]: either an error or a dictionary of parsed sequences.
     """
     # Check for early return conditions
-    for error, count in seq_counts.items():
-        if count == -1 and isinstance(error, DIGESTION_ERROR):
-            return error
+    for dr in digestion_results:
+        if dr.count == EARLY_RETURN_FREQ and isinstance(dr.seq, DIGESTION_ERROR):
+            return dr.seq
 
     # Remove Ns if asked
     if ignore_n:
-        seq_counts.pop(DIGESTION_ERROR.CONTAINS_INVALID_BASE, None)
+        digestion_results = [
+            dr
+            for dr in digestion_results
+            if dr.seq != DIGESTION_ERROR.CONTAINS_INVALID_BASE
+        ]
 
-    total_values = sum(seq_counts.values())
     # Filter out values below the threshold freq
-    above_freq_seqs: dict[str | DIGESTION_ERROR, float] = {
-        k: v / total_values
-        for k, v in seq_counts.items()
-        if v / total_values > min_freq
-    }
-    parsed_seqs: dict[str, float] = {}
-    # Guard: If wanted_seqs contains errors return None
-    for seq in above_freq_seqs.keys():
-        if isinstance(seq, DIGESTION_ERROR):
-            return seq
-        elif isinstance(seq, str):
-            parsed_seqs[seq] = above_freq_seqs[seq]
+    total_values = sum([dr.count for dr in digestion_results])
 
-    return parsed_seqs
+    results_above_freq: list[DIGESTION_RESULT] = [
+        dr for dr in digestion_results if dr.count / total_values > min_freq
+    ]
+
+    # Check for Digestion Errors above the threshold
+    for dr in results_above_freq:
+        if isinstance(dr.seq, DIGESTION_ERROR):
+            return dr.seq
+
+    return results_above_freq
 
 
 def r_digest_index(
-    align_array: np.ndarray, config: Config, start_col: int, min_freq: float
-) -> RKmer | tuple[int, DIGESTION_ERROR]:
+    align_array: np.ndarray,
+    config: Config,
+    start_col: int,
+    min_freq: float,
+    early_return=False,
+) -> RKmer | tuple[int, DIGESTION_ERROR | THERMO_RESULT]:
     """
     This will try and create a RKmer started at the given index
     :align_array: The alignment array
@@ -480,40 +504,42 @@ def r_digest_index(
     :return: A RKmer object or a tuple of (start_col, error)
     """
     # Count how many times each sequence / error occurs
-    _start_col, seq_counts = r_digest_to_count(align_array, config, start_col, min_freq)
-    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=config.ignore_n)
-    if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
-        return (start_col, tmp_parsed_seqs)
-    elif isinstance(tmp_parsed_seqs, dict):
-        parsed_seqs = tmp_parsed_seqs
-    else:
-        raise ValueError("Unknown error occurred")
+    _start_col, digestion_results = r_digest_to_result(
+        align_array, config, start_col, min_freq
+    )
+    parsed_digestion_results = process_results(
+        digestion_results, min_freq, ignore_n=config.ignore_n
+    )
+    if isinstance(parsed_digestion_results, DIGESTION_ERROR):
+        return (start_col, parsed_digestion_results)
 
-    if not parsed_seqs:
+    if not parsed_digestion_results:
         return (start_col, DIGESTION_ERROR.NO_SEQUENCES)
 
-    # Create the Kmer
-    rc_seqs = [reverse_complement(seq) for seq in parsed_seqs.keys()]
-    tmp_kmer = RKmer(start_col, rc_seqs)
+    # Rc the sequences
+    for dr in parsed_digestion_results:
+        dr.seq = reverse_complement(dr.seq)  # type: ignore
 
-    # Thermo check the kmers
-    thermo_result = thermo_check_kmers(tmp_kmer.seqs, config)
-    match thermo_result:
-        case THERMORESULT.PASS:
-            pass
-        case _:
-            return (start_col, parse_thermo_error(thermo_result))
+    # Thermo check the results
+    for dr in parsed_digestion_results:
+        if dr.thermo_check(config) is not THERMO_RESULT.PASS and not early_return:
+            return (start_col, dr.status)  # type: ignore
 
     # Check for dimer
-    if do_pools_interact_py([*tmp_kmer.seqs], [*tmp_kmer.seqs], config.dimer_score):
+    seqs = [dr.seq for dr in parsed_digestion_results]
+    if do_pools_interact_py(seqs, seqs, config.dimer_score):
         return (start_col, DIGESTION_ERROR.DIMER_FAIL)
+
     # All checks pass return the kmer
-    return tmp_kmer
+    return RKmer(start_col, seqs)
 
 
-def f_digest_to_count(
-    align_array: np.ndarray, config: Config, end_col: int, min_freq: float
-) -> tuple[int, dict[str | DIGESTION_ERROR, int]]:
+def f_digest_to_result(
+    align_array: np.ndarray,
+    config: Config,
+    end_col: int,
+    min_freq: float,
+) -> tuple[int, list[DIGESTION_RESULT]]:
     """
     This will try and create a FKmer ended at the given index
     :return: A FKmer object or a tuple of (end_col, error)
@@ -532,11 +558,21 @@ def f_digest_to_count(
 
     # If the freq of gap is above minfreq
     if first_base_freq.get("-", 0) > min_freq:
-        return (end_col, {DIGESTION_ERROR.GAP_ON_SET_BASE: -1})
+        return (
+            end_col,
+            [
+                DIGESTION_RESULT(
+                    DIGESTION_ERROR.GAP_ON_SET_BASE, EARLY_RETURN_FREQ, None
+                )
+            ],
+        )
 
     # If the initial slice is outside the range of the array
     if end_col - config.primer_size_min < 0:
-        return (end_col, {DIGESTION_ERROR.WALKS_OUT: -1})
+        return (
+            end_col,
+            [DIGESTION_RESULT(DIGESTION_ERROR.WALKS_OUT, EARLY_RETURN_FREQ, None)],
+        )
 
     total_col_seqs: Counter[str | DIGESTION_ERROR] = Counter()
     for row_index in range(0, align_array.shape[0]):
@@ -567,20 +603,33 @@ def f_digest_to_count(
             seq_str=start_seq,
             config=config,
         )
+        # Early return if all errors matter
         if min_freq == 0 and set(results) & ERROR_SET:
-            return (end_col, {parse_error(set(results)): -1})
+            return (
+                end_col,
+                [DIGESTION_RESULT(parse_error(set(results)), EARLY_RETURN_FREQ, None)],
+            )
 
         # Add the results to the Counter
         total_col_seqs.update(
             {seq: 1 / len(results) for seq in parse_error_list(results)}
         )
 
-    return (end_col, dict(total_col_seqs))
+    # Parse total_col_seqs into DIGESTION_RESULT
+    digestion_result_list = [
+        DIGESTION_RESULT(seq=k, count=v) for k, v in total_col_seqs.items()
+    ]
+
+    return (end_col, digestion_result_list)
 
 
 def f_digest_index(
-    align_array: np.ndarray, config: Config, end_col: int, min_freq: float
-) -> FKmer | tuple[int, DIGESTION_ERROR]:
+    align_array: np.ndarray,
+    config: Config,
+    end_col: int,
+    min_freq: float,
+    early_return=False,
+) -> FKmer | tuple[int, DIGESTION_ERROR | THERMO_RESULT]:
     """
     This will try and create a FKmer ended at the given index
     :align_array: The alignment array
@@ -592,32 +641,31 @@ def f_digest_index(
     """
 
     # Count how many times each sequence / error occurs
-    _end_col, seq_counts = f_digest_to_count(align_array, config, end_col, min_freq)
-    tmp_parsed_seqs = process_seqs(seq_counts, min_freq, ignore_n=config.ignore_n)
-    if isinstance(tmp_parsed_seqs, DIGESTION_ERROR):
-        return (end_col, tmp_parsed_seqs)
-    elif isinstance(tmp_parsed_seqs, dict):
-        parsed_seqs = tmp_parsed_seqs
-    else:
-        raise ValueError("Unknown error occurred")
+    _end_col, digestion_results = f_digest_to_result(
+        align_array, config, end_col, min_freq
+    )
 
-    # Thermo check the kmers
-    thermo_result = thermo_check_kmers({*parsed_seqs.keys()}, config)
-    match thermo_result:
-        case THERMORESULT.PASS:
-            pass
-        case _:
-            return (end_col, parse_thermo_error(thermo_result))
+    parsed_digestion_results = process_results(
+        digestion_results, min_freq, ignore_n=config.ignore_n
+    )
 
-    if do_pools_interact_py(
-        [*parsed_seqs.keys()], [*parsed_seqs.keys()], config.dimer_score
-    ):
+    if isinstance(parsed_digestion_results, DIGESTION_ERROR):
+        return (end_col, parsed_digestion_results)
+
+    # Thermo check the results
+    for dr in parsed_digestion_results:
+        if dr.thermo_check(config) is not THERMO_RESULT.PASS and not early_return:
+            return (end_col, dr.status)  # type: ignore
+
+    # Check for dimer
+    seqs = [dr.seq for dr in parsed_digestion_results]
+    if do_pools_interact_py(seqs, seqs, config.dimer_score):
         return (end_col, DIGESTION_ERROR.DIMER_FAIL)
 
-    if not parsed_seqs:
+    if not parsed_digestion_results:
         return (end_col, DIGESTION_ERROR.NO_SEQUENCES)
 
-    return FKmer(end_col, list(parsed_seqs.keys()))
+    return FKmer(end_col, seqs)
 
 
 def hamming_dist(s1, s2) -> int:
