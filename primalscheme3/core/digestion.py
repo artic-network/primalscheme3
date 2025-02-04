@@ -762,9 +762,9 @@ def digest(
 
         if logger is not None:
             if isinstance(fkmer, tuple):
-                logger.debug(f"{chrom}:FKmer: {fkmer[0]}\t{fkmer[1].value}")
+                logger.debug(f"{chrom}:FKmer: {fkmer[0]}\t{fkmer[1]}")
             else:
-                logger.debug(f"{chrom}:FKmer: {fkmer.end}\tPass")
+                logger.debug(f"{chrom}:FKmer: {fkmer.end}\t{THERMO_RESULT.PASS}")
 
         # Append valid FKmers
         if isinstance(fkmer, FKmer) and fkmer.seqs:
