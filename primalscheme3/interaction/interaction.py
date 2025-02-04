@@ -6,6 +6,7 @@ from primaldimer_py import (
 )
 
 from primalscheme3.core.bedfiles import read_in_bedlines
+from primalscheme3.core.seq_functions import expand_all_ambs
 
 MATCHES: dict[tuple, bool] = {
     ("A", "T"): True,
@@ -66,7 +67,7 @@ def create_str(seq1: str, seq2: str, offset: int, score: float) -> str:
     # Create the cigar string
     cigar = create_cigar(seq1, seq2)
 
-    return f"score: {round(score,2)}\n{seq1}\n{cigar}\n{seq2}\n"
+    return f"score: {round(score, 2)}\n{seq1}\n{cigar}\n{seq2}\n"
 
 
 def interaction(seq1: str, seq2: str, threshold: float) -> list[str]:
@@ -114,12 +115,19 @@ def visualise_interactions(bedpath: pathlib.Path, threshold: float) -> None:
         for bedline1 in pool:
             for bedline2 in pool:
                 tested += 1
-                for line in interaction(
-                    bedline1.sequence, bedline2.sequence, threshold
-                ):
-                    interactions += 1
-                    print(bedline1.primername, bedline2.primername)
-                    print(line)
+
+                bedline1_seqs = list(expand_all_ambs([bedline1.sequence]))  # type: ignore
+                bedline2_seqs = list(expand_all_ambs([bedline2.sequence]))  # type: ignore
+
+                if bedline1_seqs is None or bedline2_seqs is None:
+                    continue
+
+                for bedline1_seq in bedline1_seqs:
+                    for bedline2_seq in bedline2_seqs:
+                        for line in interaction(bedline1_seq, bedline2_seq, threshold):
+                            interactions += 1
+                            print(bedline1.primername, bedline2.primername)
+                            print(line)
 
     print(
         f"Tested {tested} possible combinations and found {interactions} interactions"

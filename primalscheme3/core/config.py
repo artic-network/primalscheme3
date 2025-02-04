@@ -203,6 +203,23 @@ ALL_DNA: dict[str, str] = {
     "D": "AGT",
     "B": "CGT",
 }
+ALL_DNA_WITH_N: dict[str, str] = {
+    "A": "A",
+    "C": "C",
+    "G": "G",
+    "T": "T",
+    "M": "AC",
+    "R": "AG",
+    "W": "AT",
+    "S": "CG",
+    "Y": "CT",
+    "K": "GT",
+    "V": "ACG",
+    "H": "ACT",
+    "D": "AGT",
+    "B": "CGT",
+    "N": "ACGT",
+}
 ALL_BASES: set[str] = {
     "A",
     "C",
@@ -218,6 +235,23 @@ ALL_BASES: set[str] = {
     "H",
     "D",
     "B",
+}
+ALL_BASES_WITH_N: set[str] = {
+    "A",
+    "C",
+    "G",
+    "T",
+    "M",
+    "R",
+    "W",
+    "S",
+    "Y",
+    "K",
+    "V",
+    "H",
+    "D",
+    "B",
+    "N",
 }
 AMB_BASES = {"Y", "W", "R", "B", "H", "V", "D", "K", "M", "S"}
 AMBIGUOUS_DNA_COMPLEMENT = {
