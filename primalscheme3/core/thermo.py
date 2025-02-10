@@ -44,7 +44,7 @@ def calc_hairpin_tm(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
     ).tm
 
 
-def calc_hairpin_struct(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
+def calc_hairpin_struct(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> list:
     """
     Calculate the hairpin formation thermodynamics of a DNA sequence.
     Returns tm.
@@ -133,17 +133,24 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMORESULT:
         return THERMORESULT.MAX_HOMOPOLY
 
     # Check for hairpin
-    if (
-        calc_hairpin_tm(
-            kmer_seq,
-            mv_conc=config.mv_conc,
-            dv_conc=config.dv_conc,
-            dntp_conc=config.dntp_conc,
-            dna_conc=config.dna_conc,
-        )
-        > config.primer_hairpin_th_max
-    ):
-        return THERMORESULT.HAIRPIN
+    kmer_hp_tm = calc_hairpin_tm(
+        kmer_seq,
+        mv_conc=config.mv_conc,
+        dv_conc=config.dv_conc,
+        dna_conc=config.dna_conc,
+        dntp_conc=config.dntp_conc,
+    )
+    kmer_hp_struct = calc_hairpin_struct(
+        kmer_seq,
+        mv_conc=config.mv_conc,
+        dv_conc=config.dv_conc,
+        dna_conc=config.dna_conc,
+        dntp_conc=config.dntp_conc,
+    )
+    if kmer_hp_tm and kmer_hp_struct:
+        if kmer_hp_struct[0][-1] == '\\' and kmer_hp_tm > config.primer_hairpin_th_max:
+            #print(kmer_hp_tm, kmer_hp_struct)
+            return THERMORESULT.HAIRPIN
 
     return THERMORESULT.PASS
 

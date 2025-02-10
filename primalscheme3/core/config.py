@@ -46,7 +46,7 @@ class Config:
     _primer_size_hgc_min: int = 17
     _primer_size_hgc_max: int = 30
     _primer_gc_default_min: int = 30
-    _primer_gc_default_max: int = 55
+    _primer_gc_default_max: int = 65
     _primer_gc_hgc_min: int = 40
     _primer_gc_hgc_max: int = 65
     primer_tm_min: float = 59.5
