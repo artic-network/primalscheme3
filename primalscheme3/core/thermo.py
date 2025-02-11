@@ -80,13 +80,11 @@ def forms_hairpin(seq: str, config: Config) -> bool:
     kmer_hp_tm = p3_hairpin.tm
     kmer_hp_struct = p3_hairpin.ascii_structure_lines
 
-    # If error in tm or struct return True
     if kmer_hp_tm and kmer_hp_struct:
-        pass
-    else:
-        return True
-
-    return kmer_hp_struct[0][-1] == "\\" and kmer_hp_tm > config.primer_hairpin_th_max
+        return (
+            kmer_hp_struct[0][-1] == "\\" and kmer_hp_tm > config.primer_hairpin_th_max
+        )
+    return False
 
 
 def gc(kmer_seq: str) -> float:
