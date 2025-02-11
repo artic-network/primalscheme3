@@ -45,7 +45,7 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
 
     try:
         array = np.array(
-            [record.seq._data.upper() for record in records_index.values()],
+            [record.seq.upper() for record in records_index.values()],
             dtype="U1",
             ndmin=2,  # Enforce 2D array even if one genome
         )
