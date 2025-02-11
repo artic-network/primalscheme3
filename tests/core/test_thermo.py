@@ -1,7 +1,13 @@
 import unittest
 
 from primalscheme3.core.config import Config
-from primalscheme3.core.thermo import THERMORESULT, gc, max_homo, thermo_check
+from primalscheme3.core.thermo import (
+    THERMORESULT,
+    forms_hairpin,
+    gc,
+    max_homo,
+    thermo_check,
+)
 
 
 class Test_GC(unittest.TestCase):
@@ -45,6 +51,32 @@ class Test_PassesThermoCHecks(unittest.TestCase):
 
         for seq, truth in test_data.items():
             self.assertEqual(thermo_check(seq, config=self.config), truth)
+
+
+class Test_Forms_Hairpin(unittest.TestCase):
+    config = Config()
+
+    def test_no_hairpin(self):
+        # Non hairpin seq
+        seq = "CTCTTGTAGATCTGTTCTCTAAACGAACTTT"
+        self.assertFalse(forms_hairpin(seq, self.config))
+
+    def test_hairpin_mismatches(self):
+        # Hairpin seq with 3' match
+        seq = "GGGGGGGTAGATCTGTTCTCTAAACGCCCCC"
+        self.assertTrue(forms_hairpin(seq, self.config))
+
+        # Test that adding a two 3' mismatch will prevent hairpin formation
+        mismatch_single_3p = seq + "T"
+        self.assertFalse(forms_hairpin(mismatch_single_3p, self.config))
+
+        # Test that adding a two 3' mismatch will prevent hairpin formation
+        mismatch_double_3p = seq + "TT"
+        self.assertFalse(forms_hairpin(mismatch_double_3p, self.config))
+
+        # Test a 5' mismatch still triggers hairpin
+        mismatch_5p = "T" + seq
+        self.assertTrue(forms_hairpin(mismatch_5p, self.config))
 
 
 if __name__ == "__main__":

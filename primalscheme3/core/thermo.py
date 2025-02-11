@@ -59,25 +59,34 @@ def calc_hairpin_struct(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> list
     ).ascii_structure_lines
 
 
-def forms_hairpin(seqs: Iterable[str], config: Config) -> bool:
+def forms_hairpin(seq: str, config: Config) -> bool:
     """
     Given a iterable of strings it will check the hairpin tm of all seqs
     If any form hairpins it will return True
     If all clear it will return False
     """
-    for seq in seqs:
-        if (
-            calc_hairpin_tm(
-                seq,
-                mv_conc=config.mv_conc,
-                dv_conc=config.dv_conc,
-                dntp_conc=config.dntp_conc,
-                dna_conc=config.dna_conc,
-            )
-            > config.primer_hairpin_th_max
-        ):
-            return True
-    return False
+
+    # Single thermo check
+    p3_hairpin = p3_calc_hairpin(
+        seq,
+        mv_conc=config.mv_conc,
+        dv_conc=config.dv_conc,
+        dntp_conc=config.dntp_conc,
+        dna_conc=config.dna_conc,
+        output_structure=True,
+    )
+
+    # Grab tm and structure
+    kmer_hp_tm = p3_hairpin.tm
+    kmer_hp_struct = p3_hairpin.ascii_structure_lines
+
+    # If error in tm or struct return True
+    if kmer_hp_tm and kmer_hp_struct:
+        pass
+    else:
+        return True
+
+    return kmer_hp_struct[0][-1] == "\\" and kmer_hp_tm > config.primer_hairpin_th_max
 
 
 def gc(kmer_seq: str) -> float:
@@ -133,24 +142,8 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMORESULT:
         return THERMORESULT.MAX_HOMOPOLY
 
     # Check for hairpin
-    kmer_hp_tm = calc_hairpin_tm(
-        kmer_seq,
-        mv_conc=config.mv_conc,
-        dv_conc=config.dv_conc,
-        dna_conc=config.dna_conc,
-        dntp_conc=config.dntp_conc,
-    )
-    kmer_hp_struct = calc_hairpin_struct(
-        kmer_seq,
-        mv_conc=config.mv_conc,
-        dv_conc=config.dv_conc,
-        dna_conc=config.dna_conc,
-        dntp_conc=config.dntp_conc,
-    )
-    if kmer_hp_tm and kmer_hp_struct:
-        if kmer_hp_struct[0][-1] == '\\' and kmer_hp_tm > config.primer_hairpin_th_max:
-            #print(kmer_hp_tm, kmer_hp_struct)
-            return THERMORESULT.HAIRPIN
+    if forms_hairpin(kmer_seq, config):
+        return THERMORESULT.HAIRPIN
 
     return THERMORESULT.PASS
 
