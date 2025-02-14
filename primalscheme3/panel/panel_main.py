@@ -147,9 +147,20 @@ def panelcreate(
     msa_data: dict = {}
     for msa_index, msa_path in enumerate(ARG_MSA):
         msa_data[msa_index] = {}
+
+        # Read in the MSA
+        msa_obj = PanelMSA(
+            name=msa_path.stem,
+            path=msa_path,
+            msa_index=msa_index,
+            mapping=config.mapping.value,
+            logger=logger,
+            progress_manager=pm,
+        )
+
         # copy the msa into the output / work dir
         local_msa_path = OUTPUT_DIR / "work" / msa_path.name
-        shutil.copy(msa_path, local_msa_path)
+        msa_obj.write_msa_to_file(local_msa_path)
 
         # Create MSA checksum
         with open(local_msa_path, "rb") as f:
@@ -157,15 +168,6 @@ def panelcreate(
                 f, "md5"
             ).hexdigest()
 
-        # Read in the MSA
-        msa_obj = PanelMSA(
-            name=local_msa_path.stem,
-            path=local_msa_path,
-            msa_index=msa_index,
-            mapping=config.mapping.value,
-            logger=logger,
-            progress_manager=pm,
-        )
         logger.info(
             f"Read in MSA: [blue]{local_msa_path.name}[/blue] ({msa_obj._chrom_name})\t"
             f"seqs:[green]{msa_obj.array.shape[0]}[/green]\t"
@@ -340,7 +342,7 @@ def panelcreate(
 
     # Read in the input_bedfile if given
     if input_bedfile is not None:
-        for bedpp in bedprimerpairs:
+        for bedpp in bedprimerpairs:  # type: ignore
             bedpp.msa_index = msa_chromname_to_index.get(
                 bedpp.chrom_name,  # type: ignore
                 -1,
