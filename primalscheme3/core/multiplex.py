@@ -230,7 +230,7 @@ class Multiplex:
                     gaps.append((gap_start, i))
                     in_gap = False
         if in_gap:
-            gaps.append((gap_start, i))
+            gaps.append((gap_start, i))  # type: ignore
         return gaps
 
     def update_coverage(self, primerpair: PrimerPair, add: bool = True) -> None:

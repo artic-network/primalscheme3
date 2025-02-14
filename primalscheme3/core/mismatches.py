@@ -22,7 +22,7 @@ class MatchDB:
     """
 
     def __init__(self, path, msas_paths: list[str], kmer_size: int) -> None:
-        self.db = dbm.ndbm.open(path, "n")
+        self.db = dbm.ndbm.open(str(path), "n")
 
         # Read in and digest each MSA
         for msa_index, msa_path in enumerate(msas_paths):
