@@ -1,4 +1,5 @@
 import pathlib
+import tempfile
 import unittest
 
 from primalscheme3.core.config import Config
@@ -14,35 +15,59 @@ class TestMain(unittest.TestCase):
     """
 
     msa_paths = [pathlib.Path("./tests/core/test_mismatch.fasta").absolute()]
-    outpath = pathlib.Path("./tests/integration/output").absolute()
 
     # Avoid using matchdb
     config = Config()
     config.use_matchdb = False
 
-    def setUp(self) -> None:
-        self.outpath.mkdir(exist_ok=True, parents=True)
-        return super().setUp()
+    def check_file(self, path):
+        self.assertTrue(path.is_file())
+        self.assertTrue(path.stat().st_size > 0)
 
     def test_schemecreate(self):
-        # Run Scheme Create
-        pm = ProgressManager()
-        schemecreate(
-            msa=self.msa_paths,
-            output_dir=self.outpath / "schemecreate",
-            pm=pm,
-            config=self.config,
-            force=True,
-            offline_plots=False,
-        )
+        with tempfile.TemporaryDirectory(
+            dir="tests/integration", suffix="schemecreate"
+        ) as tempdir:
+            tempdir_path = pathlib.Path(tempdir)
+
+            # test_empty_path = tempdir_path / "empty"
+            # test_empty_path.touch()
+            # self.check_file(test_empty_path)
+
+            # Run Scheme Create
+            pm = ProgressManager()
+            schemecreate(
+                msa=self.msa_paths,
+                output_dir=tempdir_path,
+                pm=pm,
+                config=self.config,
+                force=True,
+                offline_plots=False,
+            )
+            # Check for output files
+            self.check_file(tempdir_path / "primer.bed")
+            self.check_file(tempdir_path / "reference.fasta")
+            self.check_file(tempdir_path / "plot.html")
+            self.check_file(tempdir_path / "primer.html")
+            self.check_file(tempdir_path / "config.json")
 
     def test_panelcreate_all(self):
-        # Run Panel Create
-        pm = ProgressManager()
-        panelcreate(
-            msa=self.msa_paths,
-            output_dir=self.outpath / "panelcreate_all",
-            config=self.config,
-            pm=pm,
-            force=True,
-        )
+        with tempfile.TemporaryDirectory(
+            dir="tests/integration", suffix="panelcreate"
+        ) as tempdir:
+            tempdir_path = pathlib.Path(tempdir)
+            # Run Panel Create
+            pm = ProgressManager()
+            panelcreate(
+                msa=self.msa_paths,
+                output_dir=tempdir_path,
+                config=self.config,
+                pm=pm,
+                force=True,
+            )
+            # Check for output files
+            self.check_file(tempdir_path / "primer.bed")
+            self.check_file(tempdir_path / "reference.fasta")
+            self.check_file(tempdir_path / "plot.html")
+            self.check_file(tempdir_path / "primer.html")
+            self.check_file(tempdir_path / "config.json")

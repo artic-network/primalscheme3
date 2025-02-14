@@ -39,7 +39,10 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         MSAFileInvalidBase: If the MSA contains non-DNA characters.
     """
     try:
-        records_index = SeqIO.index(str(msa_path), "fasta")
+        records_index = SeqIO.index(
+            str(msa_path),
+            "fasta",
+        )
     except ValueError as e:
         raise MSAFileInvalid(f"{msa_path.name}: {e}") from e
 
@@ -227,3 +230,15 @@ class MSA:
         for primerpair in self.primerpairs:
             primerpair.chrom_name = self._chrom_name
             primerpair.amplicon_prefix = self._uuid
+
+    def write_msa_to_file(self, path: pathlib.Path):
+        # Writes the msa to file with parsed chrom names
+        with open(path, "w") as outfile:
+            for r in self._seq_dict.values():
+                # Format each record
+                r.id = "_".join(r.id.split("/"))
+                r.description = ""
+                r.seq = r.seq.upper()
+                # Write
+                record_str = r.format("fasta")
+                outfile.write(record_str)

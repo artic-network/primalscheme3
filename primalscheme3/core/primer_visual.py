@@ -2,6 +2,7 @@ import pathlib
 
 import numpy as np
 import plotly.graph_objects as go
+from click import UsageError
 from plotly.subplots import make_subplots
 
 # Create in the classes from primalscheme3
@@ -132,6 +133,7 @@ def primer_mismatch_heatmap(
     :param seqdict: The sequence dictionary.
     :param bedfile: The bedfile of primers.
     :param include_seqs: Reduces plot size by removing hovertext.
+    :raises: click.UsageError
     """
     # Read in the bedfile
     bedlines, _header = read_in_bedlines(bedfile)
@@ -144,15 +146,18 @@ def primer_mismatch_heatmap(
 
     if len(primary_ref) == 0:
         # Try to fix a common issue with Jalview
-        parsed_seqdict = {k.split("/")[0]: v for k, v in seqdict.items()}
+        parsed_seqdict = {"_".join(k.split("/")): v for k, v in seqdict.items()}
         primary_ref = bed_chrom_names.intersection(parsed_seqdict.keys())
         seqdict = parsed_seqdict
 
     # Filter the bedlines for only the reference genome
     bedlines = [bedline for bedline in bedlines if bedline.chrom_name in primary_ref]
 
+    # handle errors
     if len(bedlines) == 0:
-        return ""
+        raise UsageError(
+            f"Primer chrom names ({', '.join(bed_chrom_names)}) not found in MSA ({', '.join(seqdict.keys())})"
+        )
 
     kmers_names = [bedline.primername for bedline in bedlines]
 

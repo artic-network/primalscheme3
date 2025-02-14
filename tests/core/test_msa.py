@@ -9,7 +9,17 @@ from primalscheme3.core.errors import (
     MSAFileInvalidBase,
     MSAFileInvalidLength,
 )
-from primalscheme3.core.msa import parse_msa
+from primalscheme3.core.msa import MSA, parse_msa
+from primalscheme3.core.progress_tracker import ProgressManager
+
+
+class TestMSA(unittest.TestCase):
+    msa_path = pathlib.Path("tests/test_data/test_msa/test_msa_valid.fasta").absolute()
+
+    def test_create_msa(self):
+        # Should not raise anything
+        pm = ProgressManager()
+        _ = MSA("test", self.msa_path, 0, "first", pm)
 
 
 class TestParseMSA(unittest.TestCase):
