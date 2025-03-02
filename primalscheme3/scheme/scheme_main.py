@@ -1,7 +1,6 @@
 import hashlib
 import json
 import pathlib
-import shutil
 from time import sleep
 
 from Bio import Seq, SeqIO, SeqRecord
@@ -337,25 +336,25 @@ def schemecreate(
     for msa_index, msa_path in enumerate(ARG_MSA):
         msa_data[msa_index] = {}
 
-        # copy the msa into the output / work dir
-        local_msa_path = OUTPUT_DIR / "work" / msa_path.name
-        shutil.copy(msa_path, local_msa_path)
-
-        # Create MSA checksum
-        with open(local_msa_path, "rb") as f:
-            msa_data[msa_index]["msa_checksum"] = hashlib.file_digest(
-                f, "md5"
-            ).hexdigest()
-
         # Read in the MSA
         msa_obj = MSA(
-            name=local_msa_path.stem,
+            name=msa_path.stem,
             path=msa_path,
             msa_index=msa_index,
             mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
         )
+
+        # copy the msa into the output / work dir
+        local_msa_path = OUTPUT_DIR / "work" / msa_path.name
+        msa_obj.write_msa_to_file(local_msa_path)
+
+        # Create MSA checksum
+        with open(local_msa_path, "rb") as f:
+            msa_data[msa_index]["msa_checksum"] = hashlib.file_digest(
+                f, "md5"
+            ).hexdigest()
 
         logger.info(
             f"Read in MSA: [blue]{msa_obj._chrom_name}[/blue]\t"
@@ -431,7 +430,8 @@ def schemecreate(
         msa._chrom_name: msa_index for msa_index, msa in msa_dict.items()
     }
     # Add the bedprimerpairs into the scheme
-    if input_bedfile is not None and bedprimerpairs:
+    if input_bedfile is not None and bedprimerpairs:  # type: ignore
+        # if input_bedfile != None then bedprimerpairs is assigned
         for bedpp in bedprimerpairs:
             # Map the primerpair to the msa via chromname
             bedpp.msa_index = msa_chrom_to_index.get(bedpp.chrom_name, -1)  # type: ignore
