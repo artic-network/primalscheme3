@@ -8,7 +8,7 @@ from click import UsageError
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
 # Core imports
-from primalscheme3.core.bedfiles import read_in_bedprimerpairs
+from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
 from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import (
     DIGESTION_ERROR,
@@ -81,34 +81,34 @@ def report_check(
         or seqstatus.seq is None
     ):
         logger.warning(
-            f"{report_seq}\t{seqstatus.count}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {seqstatus.thermo_check(config=config)}",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {seqstatus.thermo_check(config=config)}",
         )
         return False
 
     # Check it is a new seq
     if seqstatus.seq in current_primer_seqs:
         logger.info(
-            f"{report_seq}\t{seqstatus.count}\t[blue]{NewPrimerStatus.PRESENT.value}[/blue]: In scheme",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[blue]{NewPrimerStatus.PRESENT.value}[/blue]: In scheme",
         )
         return False
 
     # Check for minor allele
     if seqstatus.count < config.min_base_freq:
         logger.warning(
-            f"{report_seq}\t{seqstatus.count}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Minor allele",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Minor allele",
         )
         return False
 
     # Check for dimer with pool
     if do_pools_interact_py([seqstatus.seq], seqs_in_pools[pool], dimerscore):
         logger.warning(
-            f"{report_seq}\t{seqstatus.count}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
         )
         return False
 
     # Log the seq
     logger.info(
-        f"{report_seq}\t{seqstatus.count}\t[green]{NewPrimerStatus.VALID.value}[/green]: Can be added",
+        f"{report_seq}\t{round(seqstatus.count, 4)}\t[green]{NewPrimerStatus.VALID.value}[/green]: Can be added",
     )
 
     return True
@@ -194,7 +194,7 @@ def repair(
     shutil.copy(msa_path, local_msa_path)
 
     # Read in the bedfile
-    all_primerpairs, _header = read_in_bedprimerpairs(bedfile_path)
+    all_primerpairs, _header = read_bedlines_to_bedprimerpairs(bedfile_path)
 
     # Get the primerpairs for this new MSA
     primerpairs_in_msa = [
@@ -212,7 +212,7 @@ def repair(
     # Get all the seqs in each pool
     seqs_in_pools = [[] for _ in range(config.n_pools)]
     for pp in primerpairs_in_msa:
-        seqs_in_pools[pp.pool].extend([*pp.fprimer.seqs, *pp.rprimer.seqs])
+        seqs_in_pools[pp.pool].extend([*pp.fprimer.seqs(), *pp.rprimer.seqs()])
 
     # Find the indexes in the MSA that the primerbed refer to
     assert msa_obj._mapping_array is not None
@@ -250,7 +250,7 @@ def repair(
         for seqstatus in seqstatuss:
             if not report_check(
                 seqstatus=seqstatus,
-                current_primer_seqs=pp.fprimer.seqs,
+                current_primer_seqs=pp.fprimer.seqs(),
                 seqs_in_pools=seqs_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,
@@ -292,7 +292,7 @@ def repair(
         for rseqstatus in rseq_counts:
             if not report_check(
                 seqstatus=rseqstatus,
-                current_primer_seqs=pp.rprimer.seqs,
+                current_primer_seqs=pp.rprimer.seqs(),
                 seqs_in_pools=seqs_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,

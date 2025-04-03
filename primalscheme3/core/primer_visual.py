@@ -4,13 +4,10 @@ import numpy as np
 import plotly.graph_objects as go
 from click import UsageError
 from plotly.subplots import make_subplots
+from primalbedtools.bedfiles import BedLine, BedLineParser
 
 # Create in the classes from primalscheme3
-from primalscheme3.core.bedfiles import (
-    BedLine,
-    read_in_bedlines,
-    read_in_bedprimerpairs,
-)
+from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
 from primalscheme3.core.create_report_data import calc_gc
 from primalscheme3.core.mapping import (
     check_for_end_on_gap,
@@ -49,7 +46,7 @@ class PlotlyText:
             else:
                 cigar.append(".")
         cigar = "".join(cigar)[::-1]
-        return f"5'{self.primer_seq}: {self.primer_name}<br>5'{cigar}<br>5'{self.genome_seq[-len(self.primer_seq):]}"
+        return f"5'{self.primer_seq}: {self.primer_name}<br>5'{cigar}<br>5'{self.genome_seq[-len(self.primer_seq) :]}"
 
 
 def get_primers_from_msa(
@@ -136,10 +133,11 @@ def primer_mismatch_heatmap(
     :raises: click.UsageError
     """
     # Read in the bedfile
-    bedlines, _header = read_in_bedlines(bedfile)
+
+    _header, bedlines = BedLineParser.from_file(bedfile)
 
     # Find the mapping genome
-    bed_chrom_names = {bedline.chrom_name for bedline in bedlines}
+    bed_chrom_names = {bedline.chrom for bedline in bedlines}
 
     # Reference genome
     primary_ref = bed_chrom_names.intersection(seqdict.keys())
@@ -151,7 +149,7 @@ def primer_mismatch_heatmap(
         seqdict = parsed_seqdict
 
     # Filter the bedlines for only the reference genome
-    bedlines = [bedline for bedline in bedlines if bedline.chrom_name in primary_ref]
+    bedlines = [bedline for bedline in bedlines if bedline.chrom in primary_ref]
 
     # handle errors
     if len(bedlines) == 0:
@@ -285,6 +283,7 @@ def primer_mismatch_heatmap(
         font=dict(family="Courier New, monospace"),
         hoverlabel=dict(font_family="Courier New, monospace"),
         title_text=f"Primer Mismatches: {list(primary_ref)[0]}",
+        coloraxis=dict(cmax=10, cmin=0),
     )
     fig.update_yaxes(autorange="reversed")
 
@@ -312,7 +311,7 @@ def bedfile_plot_html(
     Create a plotly heatmap from a bedfile.
     """
     # Read in the bedfile
-    primerpairs, _header = read_in_bedprimerpairs(bedfile)
+    primerpairs, _header = read_bedlines_to_bedprimerpairs(bedfile)
 
     # Filter primerpairs for the reference genome
     wanted_primerspairs = [pp for pp in primerpairs if pp.chrom_name == ref_name]

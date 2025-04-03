@@ -6,12 +6,9 @@ from typing import Callable, Union
 import numpy as np
 
 # Submodules
-from primaldimer_py import (
-    do_pools_interact_py,  # type: ignore
-    which_kmers_pools_interact,  # type: ignore
-)
+from primalschemers._core import FKmer, RKmer, do_pool_interact  # type: ignore
 
-from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
 from primalscheme3.core.errors import (
     ERROR_SET,
@@ -156,9 +153,7 @@ def generate_valid_primerpairs(
         )
         for rkmer in pos_rkmer:
             # Check for interactions
-            if not which_kmers_pools_interact(
-                [fkmer], [rkmer], dimerscore, calc_all=False
-            ):
+            if not do_pool_interact(fkmer.seqs_bytes(), rkmer.seqs_bytes(), dimerscore):
                 checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
 
         # Update the count
@@ -526,12 +521,12 @@ def r_digest_index(
             return (start_col, dr.status)  # type: ignore
 
     # Check for dimer
-    seqs = [dr.seq for dr in parsed_digestion_results]
-    if do_pools_interact_py(seqs, seqs, config.dimer_score):
+    seqs = [dr.seq.encode() for dr in parsed_digestion_results]  # type: ignore
+    if do_pool_interact(seqs, seqs, config.dimer_score):
         return (start_col, DIGESTION_ERROR.DIMER_FAIL)
 
     # All checks pass return the kmer
-    return RKmer(start_col, seqs)
+    return RKmer(seqs, start_col)
 
 
 def f_digest_to_result(
@@ -658,14 +653,14 @@ def f_digest_index(
             return (end_col, dr.status)  # type: ignore
 
     # Check for dimer
-    seqs = [dr.seq for dr in parsed_digestion_results]
-    if do_pools_interact_py(seqs, seqs, config.dimer_score):
+    seqs = [dr.seq.encode() for dr in parsed_digestion_results]  # type: ignore
+    if do_pool_interact(seqs, seqs, config.dimer_score):
         return (end_col, DIGESTION_ERROR.DIMER_FAIL)
 
     if not parsed_digestion_results:
         return (end_col, DIGESTION_ERROR.NO_SEQUENCES)
 
-    return FKmer(end_col, seqs)
+    return FKmer(seqs, end_col)
 
 
 def hamming_dist(s1, s2) -> int:
@@ -683,7 +678,7 @@ def f_digest(
         fkmer = f_digest_index(msa_array, config, findex, config.min_base_freq)
 
         # Append valid FKmers
-        if isinstance(fkmer, FKmer) and fkmer.seqs:
+        if isinstance(fkmer, FKmer) and fkmer.all_seqs():  # type: ignore
             fkmers.append(fkmer)
 
         # Log the Digestion
@@ -704,7 +699,7 @@ def r_digest(
         rkmer = r_digest_index(msa_array, config, rindex, config.min_base_freq)
 
         # Append valid RKmers
-        if isinstance(rkmer, RKmer) and rkmer.seqs:
+        if isinstance(rkmer, RKmer) and rkmer.all_seqs():  # type: ignore
             rkmers.append(rkmer)
 
         # Log the Digestion
@@ -767,7 +762,7 @@ def digest(
                 logger.debug(f"{chrom}:FKmer: {fkmer.end}\t{THERMO_RESULT.PASS}")
 
         # Append valid FKmers
-        if isinstance(fkmer, FKmer) and fkmer.seqs:
+        if isinstance(fkmer, FKmer) and fkmer.seqs_bytes():  # type: ignore
             fkmers.append(fkmer)
 
         # Update the count
@@ -783,12 +778,12 @@ def digest(
 
         if logger is not None:
             if isinstance(rkmer, tuple):
-                logger.debug(f"{chrom}:RKmer: {rkmer[0]}\t{rkmer[1].value}")
+                logger.debug(f"{chrom}:RKmer: {rkmer[0]}\t{rkmer[1]}")
             else:
-                logger.debug(f"{chrom}:RKmer: {rkmer.start}\tPass")
+                logger.debug(f"{chrom}:RKmer: {rkmer.start}\t{THERMO_RESULT.PASS}")
 
         # Append valid RKmers
-        if isinstance(rkmer, RKmer) and rkmer.seqs:
+        if isinstance(rkmer, RKmer) and rkmer.seqs_bytes():  # type: ignore
             rkmers.append(rkmer)
 
         # Update the count

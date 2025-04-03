@@ -155,11 +155,11 @@ def generate_thermo_pass_primer_data(msa: MSA | PanelMSA) -> dict[int, str]:
 
     fprimer_data = dict()
     for fkmer in msa.fkmers:
-        fprimer_data[fkmer.end] = len(fkmer.seqs)
+        fprimer_data[fkmer.end] = fkmer.num_seqs()
     primer_data["F"] = fprimer_data
     rprimer_data = dict()
     for rkmer in msa.rkmers:
-        rprimer_data[rkmer.start] = len(rkmer.seqs)
+        rprimer_data[rkmer.start] = rkmer.num_seqs()
     primer_data["R"] = rprimer_data
     return primer_data
 
@@ -231,11 +231,9 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     # Remap the included primers to the MSA if they have been mapped to an genome
     if msa._mapping_array is not None:
         for fkmer in msa.fkmers:
-            fkmer.end = msa._ref_to_msa[fkmer.end]
-            fkmer._starts = {fkmer.end - len(x) for x in fkmer.seqs}
+            fkmer.remap(msa._ref_to_msa[fkmer.end])
         for rkmer in msa.rkmers:
-            rkmer.start = msa._ref_to_msa[rkmer.start]
-            rkmer._ends = {rkmer.start + len(x) for x in rkmer.seqs}
+            rkmer.remap(msa._ref_to_msa[rkmer.start])
 
     # Write all data to a single json file
     data = dict()

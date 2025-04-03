@@ -1,11 +1,11 @@
 # Core imports
 import pathlib
 
+from primalbedtools.bedfiles import BedLineParser
 from primaldimer_py import (
     calc_at_offset_py,  # type: ignore
 )
 
-from primalscheme3.core.bedfiles import read_in_bedlines
 from primalscheme3.core.seq_functions import expand_all_ambs
 
 MATCHES: dict[tuple, bool] = {
@@ -99,12 +99,12 @@ def visualise_interactions(bedpath: pathlib.Path, threshold: float) -> None:
     """
 
     # Read in the bedfile
-    bedlines, header = read_in_bedlines(bedpath)
+    _header, bedlines = BedLineParser.from_file(bedpath)
 
     # Split the bedfile into pools
     pools = [[] for _ in {bedline.pool for bedline in bedlines}]
     for bedline in bedlines:
-        pools[bedline.pool].append(bedline)
+        pools[bedline.ipool].append(bedline)
 
     tested = 0
     interactions = 0

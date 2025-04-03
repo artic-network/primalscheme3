@@ -17,6 +17,7 @@ class THERMO_RESULT(Enum):
     LOW_TM = 4
     MAX_HOMOPOLY = 5
     HAIRPIN = 6
+    TO_LONG = 7
 
 
 def calc_tm(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
@@ -59,7 +60,7 @@ def calc_hairpin_struct(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> floa
     ).ascii_structure_lines
 
 
-def forms_hairpin(seqs: Iterable[str], config: Config) -> bool:
+def forms_hairpin(seqs: list[str], config: Config) -> bool:
     """
     Given a iterable of strings it will check the hairpin tm of all seqs
     If any form hairpins it will return True
@@ -114,6 +115,10 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMO_RESULT:
         return THERMO_RESULT.HIGH_GC
     elif kmer_gc < config.primer_gc_min:
         return THERMO_RESULT.LOW_GC
+
+    # Check length
+    if len(kmer_seq) > config.primer_size_max:
+        return THERMO_RESULT.TO_LONG
 
     # Check for tm in range
     kmer_tm = calc_tm(

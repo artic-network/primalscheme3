@@ -10,7 +10,7 @@ from click import UsageError
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
 from primalscheme3.core.bedfiles import (
-    read_in_bedprimerpairs,
+    read_bedlines_to_bedprimerpairs,
     read_in_extra_primers,
 )
 from primalscheme3.core.config import Config, MappingType
@@ -74,7 +74,7 @@ def schemereplace(
     }
 
     # Read in the bedfile
-    bedprimerpairs, headers = read_in_bedprimerpairs(primerbed)
+    bedprimerpairs, headers = read_bedlines_to_bedprimerpairs(primerbed)
     # Map each primer to an MSA index
     for primerpair in bedprimerpairs:
         msa_index = msa_chrom_to_index.get(str(primerpair.chrom_name), None)
@@ -159,7 +159,9 @@ def schemereplace(
 
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
-    msa.digest(config, (findexes, rindexes))  ## Primer are remapped at this point.
+    msa.digest_rs(
+        config, (findexes, rindexes), ncores=1
+    )  ## Primer are remapped at this point.
     print(f"Found {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
@@ -381,7 +383,7 @@ def schemecreate(
     # Read in all MSAs before digestion
     for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
-        msa_obj.digest(config)
+        msa_obj.digest_rs(config, None)  # Default to one core
         logger.info(
             f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
             f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "

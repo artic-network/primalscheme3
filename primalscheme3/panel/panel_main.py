@@ -267,9 +267,9 @@ def panelcreate(
         )
         match mode:
             case PanelRunModes.REGION_ONLY:
-                msa_obj.digest(config=config, indexes=(findexes, rindexes))  # type: ignore
+                msa_obj.digest_rs(config=config, indexes=(findexes, rindexes), ncores=1)  # type: ignore
             case _:
-                msa_obj.digest(config=config, indexes=None)
+                msa_obj.digest_rs(config=config, indexes=None, ncores=1)
 
         # Log the digestion
         logger.info(
@@ -353,8 +353,7 @@ def panelcreate(
                 msa_index=bedpp.msa_index,  # type: ignore
             )
             logger.debug(
-                f"Added {bedpp.amplicon_prefix} from "
-                f"[blue]{input_bedfile.name}[/blue]",
+                f"Added {bedpp.amplicon_prefix} from [blue]{input_bedfile.name}[/blue]",
             )
 
     # Add the first primerpair

@@ -8,9 +8,9 @@ from primalscheme3.core.bedfiles import (
     create_amplicon_str,
     create_bedfile_str,
 )
-from primalscheme3.core.classes import MatchDB, PrimerPair
+from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
-from primalscheme3.core.mismatches import detect_new_products
+from primalscheme3.core.mismatches import MatchDB, detect_new_products
 from primalscheme3.core.msa import MSA
 
 
