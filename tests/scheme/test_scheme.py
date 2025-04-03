@@ -1,8 +1,11 @@
 import pathlib
 import unittest
 
-from primalscheme3.core.classes import FKmer, MatchDB, PrimerPair, RKmer
+from primalschemers._core import FKmer, RKmer  # type: ignore
+
+from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
+from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 from primalscheme3.scheme.classes import Scheme
 
@@ -23,7 +26,11 @@ class TestScheme(unittest.TestCase):
         scheme = Scheme(
             config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
-        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(20, ["T"]), 0)
+        primerpair = PrimerPair(
+            FKmer([b"A"], 10),
+            RKmer([b"T"], 20),
+            0,
+        )
 
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
@@ -41,7 +48,7 @@ class TestScheme(unittest.TestCase):
         scheme = Scheme(
             config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
-        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), 0)
+        primerpair = PrimerPair(FKmer([b"AA"], 10), RKmer([b"TT"], 20), 0)
 
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
@@ -59,13 +66,13 @@ class TestScheme(unittest.TestCase):
         scheme = Scheme(
             config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
-        primerpair = PrimerPair(FKmer(10, ["AA"]), RKmer(20, ["TT"]), 0)
+        primerpair = PrimerPair(FKmer([b"AA"], 10), RKmer([b"TT"], 20), 0)
         # Add a primerpair to pool 0
         scheme.add_primer_pair_to_pool(primerpair, 0, 0)
 
         # Create some overlapping primerpairs
         all_ol_primerpair = [
-            PrimerPair(FKmer(x, ["AAA"]), RKmer(x + 100, ["TTT"]), 0)
+            PrimerPair(FKmer([b"AAA"], x), RKmer([b"TTT"], x + 100), 0)
             for x in range(50, 300, 10)
         ]
         # See which primers could ol
