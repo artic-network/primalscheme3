@@ -1,10 +1,9 @@
 #!/usr/bin/python3
 import argparse
 import pathlib
-from typing import Optional
+from typing import Annotated, Optional
 
 import typer
-from typing_extensions import Annotated
 
 # Module imports
 from primalscheme3.__init__ import __version__
