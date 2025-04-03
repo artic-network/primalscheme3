@@ -1,8 +1,8 @@
 import unittest
 
 import numpy as np
+from primalschemers._core import FKmer, RKmer  # type: ignore
 
-from primalscheme3.core.classes import FKmer, RKmer
 from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import (
     DIGESTION_ERROR,
@@ -237,7 +237,7 @@ class Test_WalkRight(unittest.TestCase):
 
     def test_walk_right(self):
         """
-        Ensure the Tm prodvided is greater than the min
+        Ensure the Tm provided is greater than the min
         """
         seqs = [
             "CCAATGGTGCAAAAGGTATAATCATTAATGTCCAATGGTGCAAAAGGTATAATCATTAATGT",
@@ -431,7 +431,7 @@ class Test_MPRDigest(unittest.TestCase):
         # The Expected Sequence
         expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
 
-        self.assertEqual(result.seqs, expected)  # type: ignore
+        self.assertEqual(result.seqs(), expected)  # type: ignore
 
     def test_r_digest_index_one_invalid_0(self):
         """The invalid base and min_freq 0 should return None"""
@@ -460,7 +460,7 @@ class Test_MPRDigest(unittest.TestCase):
         # The Expected Sequence
         expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
 
-        self.assertEqual(result.seqs, expected)  # type: ignore
+        self.assertEqual(result.seqs(), expected)  # type: ignore
 
     def test_r_digest_index_walkout(self):
         """
@@ -535,7 +535,7 @@ class Test_MPFDigest(unittest.TestCase):
         # The Expected Sequence
         expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
 
-        self.assertEqual(result.seqs, expected)  # type: ignore
+        self.assertEqual(result.seqs(), expected)  # type: ignore
 
     def test_f_digest_index_one_invalid(self):
         """The invalid base and min_freq 0 should return None"""
@@ -563,7 +563,7 @@ class Test_MPFDigest(unittest.TestCase):
         # The Expected Sequence
         expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
 
-        self.assertEqual(result.seqs, expected)  # type: ignore
+        self.assertEqual(result.seqs(), expected)  # type: ignore
 
     def test_f_digest_index_walkout(self):
         """
@@ -643,10 +643,11 @@ class TestDigest(unittest.TestCase):
             indexes=([60], [1]),
             progress_manager=PM(),
         )
-        expected_fkmer = FKmer(60, ["GTCCAATGGTGCAAAAGGTATAATCATTAAT"])
+        expected_fkmer = FKmer([b"GTCCAATGGTGCAAAAGGTATAATCATTAAT"], 60)
 
         fkmer = results[0][0]
-        self.assertEqual(fkmer, expected_fkmer)
+        self.assertEqual(fkmer.seqs(), expected_fkmer.seqs())
+        self.assertEqual(fkmer.end, expected_fkmer.end)
 
     def test_digestion_valid_rkmer(self):
         """Test the digestion"""
@@ -664,12 +665,12 @@ class TestDigest(unittest.TestCase):
             indexes=([1], [25]),
             progress_manager=PM(),
         )
-        expected_rkmer = RKmer(25, ["TGATTATACCTTTTGCACCATTGGACATTA"])
+        expected_rkmer = RKmer([b"TGATTATACCTTTTGCACCATTGGACATTA"], 25)
 
         rkmer = results[1][0]
-        print(rkmer.start)
-        print(rkmer.seqs)
-        self.assertEqual(rkmer, expected_rkmer)
+
+        self.assertEqual(rkmer.seqs(), expected_rkmer.seqs())
+        self.assertEqual(rkmer.start, expected_rkmer.start)
 
 
 if __name__ == "__main__":

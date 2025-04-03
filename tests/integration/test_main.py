@@ -26,7 +26,7 @@ class TestMain(unittest.TestCase):
 
     def test_schemecreate(self):
         with tempfile.TemporaryDirectory(
-            dir="tests/integration", suffix="schemecreate"
+            dir="tests/integration", suffix="-schemecreate"
         ) as tempdir:
             tempdir_path = pathlib.Path(tempdir)
 
@@ -53,7 +53,7 @@ class TestMain(unittest.TestCase):
 
     def test_panelcreate_all(self):
         with tempfile.TemporaryDirectory(
-            dir="tests/integration", suffix="panelcreate"
+            dir="tests/integration", suffix="-panelcreate"
         ) as tempdir:
             tempdir_path = pathlib.Path(tempdir)
             # Run Panel Create

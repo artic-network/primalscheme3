@@ -32,7 +32,7 @@ class Test_PassesThermoCHecks(unittest.TestCase):
 
     def test_thermo_check(self):
         """
-        Valution order.
+        Valuation order.
         """
         test_data = {
             "GTAATTCAGATACTGGTTGCAAAGTTTTTATGA": THERMO_RESULT.PASS,
@@ -40,7 +40,7 @@ class Test_PassesThermoCHecks(unittest.TestCase):
             "AAAATTTAATATATAT": THERMO_RESULT.LOW_GC,
             "GTAATTCAGATACTGGTTGCAAAGTTTTTTTGA": THERMO_RESULT.MAX_HOMOPOLY,
             "AG": THERMO_RESULT.LOW_TM,
-            "AGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGA": THERMO_RESULT.HIGH_TM,
+            "AGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGA": THERMO_RESULT.TO_LONG,
         }
 
         for seq, truth in test_data.items():
