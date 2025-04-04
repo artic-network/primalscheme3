@@ -630,6 +630,7 @@ def schemecreate(
                     seqdict=msa_obj._seq_dict,
                     bedfile=OUTPUT_DIR / "primer.bed",
                     offline_plots=True if offline_plots and i == 0 else False,
+                    mapping=config.mapping,
                 )
             )
     upload_pt.manual_update(n=7, update=True)

@@ -79,10 +79,6 @@ def panelcreate(
     config_dict["max_amplicons_msa"] = max_amplicons_msa
     config_dict["max_amplicons_region_group"] = max_amplicons_region_group
 
-    # Enforce mapping
-    if config.mapping != MappingType.FIRST:
-        raise UsageError("mapping must be 'first'")
-
     # Enforce region only has a region bedfile
     if mode == PanelRunModes.REGION_ONLY and region_bedfile is None:
         raise UsageError(
@@ -508,6 +504,7 @@ def panelcreate(
                     seqdict=msa_obj._seq_dict,
                     bedfile=OUTPUT_DIR / "primer.bed",
                     offline_plots=True if offline_plots and i == 0 else False,
+                    mapping=config.mapping,
                 )
             )
 
