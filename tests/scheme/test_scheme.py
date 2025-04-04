@@ -7,17 +7,19 @@ from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
-from primalscheme3.scheme.classes import Scheme
+from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 
 class TestScheme(unittest.TestCase):
-    db_path = pathlib.Path("./tests/core/mulitplex").absolute()
-    matchdb = MatchDB(db_path, [], 30)  # Create an empty matchdb
-    inputfile_path = pathlib.Path("./tests/core/test_mismatch.fasta").absolute()
-    msa = MSA("test", inputfile_path, 0, "first", None)
-
-    # Create a config dict
-    config = Config()
+    def setUp(self) -> None:
+        self.db_path = pathlib.Path("./tests/core/mulitplex").absolute()
+        self.matchdb = MatchDB(self.db_path, [], 30)  # Create an empty matchdb
+        self.inputfile_path = pathlib.Path(
+            "./tests/core/test_mismatch.fasta"
+        ).absolute()
+        self.msa = MSA("test", self.inputfile_path, 0, "first", None)
+        self.config = Config()
+        return super().setUp()
 
     def test_get_leading_coverage_edge(self):
         """
@@ -87,6 +89,46 @@ class TestScheme(unittest.TestCase):
                 for x in pos_ol_primerpair
             )
         )
+
+    def test_backtrack(self):
+        self.config.min_overlap = 0
+        scheme = Scheme(
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
+        )
+        primerpair = PrimerPair(
+            FKmer([b"ACCAACGATGGTGTGTCCAT"], 10),
+            RKmer([b"CTTGTCGAACCGCATACCCT"], 50),
+            0,
+        )
+        all_ol_primerpair = [
+            PrimerPair(
+                FKmer([b"GCGACGGGTACGAGTGGTCT"], x),
+                RKmer([b"CGTTCCATTGCATCGCGATCTC"], x + 100),
+                0,
+            )
+            for x in range(40, 300, 10)
+        ]
+        # Add the first primerpair
+        scheme.add_primer_pair_to_pool(primerpair, 0, 0)
+
+        # Add second blocking primerpair.
+        # Same right end prevents ol
+        block_pp = PrimerPair(FKmer([b"AA"], 15), RKmer([b"TT"], 50), 0)
+        scheme.add_primer_pair_to_pool(block_pp, 1, 0)
+
+        # Show no ol primerpairs can be added
+        self.assertEqual(
+            scheme.try_ol_primerpairs(all_ol_primerpair, 0),
+            SchemeReturn.NO_OL_PRIMERPAIR,
+        )
+
+        # Show bt can solve it
+        self.assertEqual(
+            scheme.try_backtrack(all_ol_primerpair, 0), SchemeReturn.ADDED_BACKTRACKED
+        )
+        # Blocking as been replaced with new pp
+        self.assertTrue(scheme._last_pp_added[-1] != block_pp)
+        self.assertTrue(scheme._last_pp_added[-1] in all_ol_primerpair)
 
 
 if __name__ == "__main__":
