@@ -77,6 +77,33 @@ class TestMain(unittest.TestCase):
             self.check_file(tempdir_path / "primer.html")
             self.check_file(tempdir_path / "config.json")
 
+    def test_schemecreate_circular(self):
+        with tempfile.TemporaryDirectory(
+            dir="tests/integration", suffix="-schemecreate"
+        ) as tempdir:
+            tempdir_path = pathlib.Path(tempdir)
+
+            # Modify config
+            self.config.mapping = MappingType.FIRST
+            self.config.circular = True
+
+            # Run Scheme Create
+            pm = ProgressManager()
+            schemecreate(
+                msa=self.msa_paths,
+                output_dir=tempdir_path,
+                pm=pm,
+                config=self.config,
+                force=True,
+                offline_plots=False,
+            )
+            # Check for output files
+            self.check_file(tempdir_path / "primer.bed")
+            self.check_file(tempdir_path / "reference.fasta")
+            self.check_file(tempdir_path / "plot.html")
+            self.check_file(tempdir_path / "primer.html")
+            self.check_file(tempdir_path / "config.json")
+
     def test_schemecreate_first_input_bed(self):
         with tempfile.TemporaryDirectory(
             dir="tests/integration", suffix="-schemecreate"
