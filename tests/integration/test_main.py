@@ -2,9 +2,9 @@ import pathlib
 import tempfile
 import unittest
 
-from primalscheme3.core.config import Config
+from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.progress_tracker import ProgressManager
-from primalscheme3.panel.panel_main import panelcreate
+from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
 from primalscheme3.scheme.scheme_main import schemecreate
 
 
@@ -15,24 +15,25 @@ class TestMain(unittest.TestCase):
     """
 
     msa_paths = [pathlib.Path("./tests/core/test_mismatch.fasta").absolute()]
+    region_path = pathlib.Path("./tests/core/test_mismatch.fasta.bed").absolute()
 
-    # Avoid using matchdb
-    config = Config()
-    config.use_matchdb = False
+    def setUp(self) -> None:
+        self.config = Config()
+        self.config.use_matchdb = False
+        return super().setUp()
 
     def check_file(self, path):
         self.assertTrue(path.is_file())
         self.assertTrue(path.stat().st_size > 0)
 
-    def test_schemecreate(self):
+    def test_schemecreate_first(self):
         with tempfile.TemporaryDirectory(
             dir="tests/integration", suffix="-schemecreate"
         ) as tempdir:
             tempdir_path = pathlib.Path(tempdir)
 
-            # test_empty_path = tempdir_path / "empty"
-            # test_empty_path.touch()
-            # self.check_file(test_empty_path)
+            # Modify config
+            self.config.mapping = MappingType.FIRST
 
             # Run Scheme Create
             pm = ProgressManager()
@@ -51,11 +52,41 @@ class TestMain(unittest.TestCase):
             self.check_file(tempdir_path / "primer.html")
             self.check_file(tempdir_path / "config.json")
 
-    def test_panelcreate_all(self):
+    def test_schemecreate_consensus(self):
+        with tempfile.TemporaryDirectory(
+            dir="tests/integration", suffix="-schemecreate"
+        ) as tempdir:
+            tempdir_path = pathlib.Path(tempdir)
+
+            # Modify config
+            self.config.mapping = MappingType.CONSENSUS
+
+            # Run Scheme Create
+            pm = ProgressManager()
+            schemecreate(
+                msa=self.msa_paths,
+                output_dir=tempdir_path,
+                pm=pm,
+                config=self.config,
+                force=True,
+                offline_plots=False,
+            )
+            # Check for output files
+            self.check_file(tempdir_path / "primer.bed")
+            self.check_file(tempdir_path / "reference.fasta")
+            self.check_file(tempdir_path / "plot.html")
+            self.check_file(tempdir_path / "primer.html")
+            self.check_file(tempdir_path / "config.json")
+
+    def test_panelcreate_consensus_entropy(self):
         with tempfile.TemporaryDirectory(
             dir="tests/integration", suffix="-panelcreate"
         ) as tempdir:
             tempdir_path = pathlib.Path(tempdir)
+
+            # Modify config
+            self.config.mapping = MappingType.CONSENSUS
+            mode = PanelRunModes.ENTROPY
             # Run Panel Create
             pm = ProgressManager()
             panelcreate(
@@ -64,6 +95,60 @@ class TestMain(unittest.TestCase):
                 config=self.config,
                 pm=pm,
                 force=True,
+                mode=mode,
+            )
+            # Check for output files
+            self.check_file(tempdir_path / "primer.bed")
+            self.check_file(tempdir_path / "reference.fasta")
+            self.check_file(tempdir_path / "plot.html")
+            self.check_file(tempdir_path / "primer.html")
+            self.check_file(tempdir_path / "config.json")
+
+    def test_panelcreate_consensus_equal(self):
+        with tempfile.TemporaryDirectory(
+            dir="tests/integration", suffix="-panelcreate"
+        ) as tempdir:
+            tempdir_path = pathlib.Path(tempdir)
+
+            # Modify config
+            self.config.mapping = MappingType.CONSENSUS
+            mode = PanelRunModes.EQUAL
+            # Run Panel Create
+            pm = ProgressManager()
+            panelcreate(
+                msa=self.msa_paths,
+                output_dir=tempdir_path,
+                config=self.config,
+                pm=pm,
+                force=True,
+                mode=mode,
+            )
+            # Check for output files
+            self.check_file(tempdir_path / "primer.bed")
+            self.check_file(tempdir_path / "reference.fasta")
+            self.check_file(tempdir_path / "plot.html")
+            self.check_file(tempdir_path / "primer.html")
+            self.check_file(tempdir_path / "config.json")
+
+    def test_panelcreate_first_region_only(self):
+        with tempfile.TemporaryDirectory(
+            dir="tests/integration", suffix="-panelcreate"
+        ) as tempdir:
+            tempdir_path = pathlib.Path(tempdir)
+
+            # Modify config
+            self.config.mapping = MappingType.FIRST
+            mode = PanelRunModes.REGION_ONLY
+            # Run Panel Create
+            pm = ProgressManager()
+            panelcreate(
+                msa=self.msa_paths,
+                output_dir=tempdir_path,
+                config=self.config,
+                pm=pm,
+                force=True,
+                mode=mode,
+                region_bedfile=self.region_path,
             )
             # Check for output files
             self.check_file(tempdir_path / "primer.bed")
