@@ -263,9 +263,13 @@ def panelcreate(
         )
         match mode:
             case PanelRunModes.REGION_ONLY:
-                msa_obj.digest_rs(config=config, indexes=(findexes, rindexes), ncores=1)  # type: ignore
+                msa_obj.digest_rs(
+                    config=config,
+                    indexes=(findexes, rindexes),  # type: ignore
+                    ncores=config.ncores,
+                )
             case _:
-                msa_obj.digest_rs(config=config, indexes=None, ncores=1)
+                msa_obj.digest_rs(config=config, indexes=None, ncores=config.ncores)
 
         # Log the digestion
         logger.info(

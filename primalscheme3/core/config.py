@@ -28,6 +28,7 @@ class Config:
     high_gc: bool = False
     input_bedfile: pathlib.Path | None = None
     version: str = __version__
+    ncores = 1
     # Scheme Settings
     n_pools: int = 2
     min_overlap: int = 10

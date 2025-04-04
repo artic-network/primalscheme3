@@ -157,6 +157,10 @@ def scheme_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    ncores: Annotated[
+        int,
+        typer.Option(help="Number of CPU cores to use during digestion", min=1),
+    ] = Config.ncores,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -323,6 +327,10 @@ def panel_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    ncores: Annotated[
+        int,
+        typer.Option(help="Number of CPU cores to use during digestion", min=1),
+    ] = Config.ncores,
 ):
     """
     Creates a primer panel
