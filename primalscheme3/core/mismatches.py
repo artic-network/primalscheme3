@@ -1,4 +1,9 @@
-import dbm.ndbm
+# Does this work?
+try:
+    import dbm.ndbm as db
+except ImportError:
+    import dbm.dumb as db
+
 from typing import Iterable
 
 from Bio import SeqIO
@@ -22,7 +27,7 @@ class MatchDB:
     """
 
     def __init__(self, path, msas_paths: list[str], kmer_size: int) -> None:
-        self.db = dbm.ndbm.open(str(path), "n")
+        self.db = db.open(str(path), "n")
 
         # Read in and digest each MSA
         for msa_index, msa_path in enumerate(msas_paths):
