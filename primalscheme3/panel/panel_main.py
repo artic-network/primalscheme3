@@ -79,10 +79,6 @@ def panelcreate(
     config_dict["max_amplicons_msa"] = max_amplicons_msa
     config_dict["max_amplicons_region_group"] = max_amplicons_region_group
 
-    # Enforce mapping
-    if config.mapping != MappingType.FIRST:
-        raise UsageError("mapping must be 'first'")
-
     # Enforce region only has a region bedfile
     if mode == PanelRunModes.REGION_ONLY and region_bedfile is None:
         raise UsageError(
@@ -267,9 +263,13 @@ def panelcreate(
         )
         match mode:
             case PanelRunModes.REGION_ONLY:
-                msa_obj.digest(config=config, indexes=(findexes, rindexes))  # type: ignore
+                msa_obj.digest_rs(
+                    config=config,
+                    indexes=(findexes, rindexes),  # type: ignore
+                    ncores=config.ncores,
+                )
             case _:
-                msa_obj.digest(config=config, indexes=None)
+                msa_obj.digest_rs(config=config, indexes=None, ncores=config.ncores)
 
         # Log the digestion
         logger.info(
@@ -353,8 +353,7 @@ def panelcreate(
                 msa_index=bedpp.msa_index,  # type: ignore
             )
             logger.debug(
-                f"Added {bedpp.amplicon_prefix} from "
-                f"[blue]{input_bedfile.name}[/blue]",
+                f"Added {bedpp.amplicon_prefix} from [blue]{input_bedfile.name}[/blue]",
             )
 
     # Add the first primerpair
@@ -509,6 +508,7 @@ def panelcreate(
                     seqdict=msa_obj._seq_dict,
                     bedfile=OUTPUT_DIR / "primer.bed",
                     offline_plots=True if offline_plots and i == 0 else False,
+                    mapping=config.mapping,
                 )
             )
 

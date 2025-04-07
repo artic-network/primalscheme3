@@ -1,14 +1,15 @@
 from collections import Counter
 from itertools import product
 from math import log2
-from typing import Iterable
 
 import numpy as np
 
 # Module Imports
 from primalscheme3.core.config import (
     ALL_BASES,
+    ALL_BASES_WITH_N,
     ALL_DNA,
+    ALL_DNA_WITH_N,
     AMB_BASES,
     AMBIGUOUS_DNA_COMPLEMENT,
     SIMPLE_BASES,
@@ -48,7 +49,7 @@ def remove_end_insertion(msa_array: np.ndarray) -> np.ndarray:
     return tmp_array
 
 
-def expand_ambs(seqs: Iterable[str]) -> set[str] | None:
+def expand_ambs(seqs: list[str] | set[str]) -> set[str] | None:
     """
     Takes a list / set of strings and returns a set with all ambs expanded
     Return None on invalid bases (Including N)
@@ -69,6 +70,28 @@ def expand_ambs(seqs: Iterable[str]) -> set[str] | None:
                 returned_seq.add(exp_seq)
         else:
             returned_seq.add(seq)
+    return returned_seq
+
+
+def expand_all_ambs(seqs: list[str] | set[str]) -> set[str] | None:
+    """
+    Expands all ambiguous bases in a sequence. Including N
+    """
+    returned_seq = set()
+
+    for seq in seqs:
+        bases = {*seq}
+
+        # if invalid bases are in sequence return None
+        if not bases.issubset(ALL_BASES_WITH_N):
+            return None
+
+        # If there is any amb_bases in the seq
+
+        expanded_seqs = set(map("".join, product(*map(ALL_DNA_WITH_N.get, seq))))  # type: ignore
+        for exp_seq in expanded_seqs:
+            returned_seq.add(exp_seq)
+
     return returned_seq
 
 

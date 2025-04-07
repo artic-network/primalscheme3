@@ -1,31 +1,18 @@
 import logging
 import pathlib
-import re
 import sys
 
-from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+import primalbedtools.bedfiles as bf
+from primalschemers._core import FKmer, RKmer  # type: ignore
+
+from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
-
-# Module imports
-from primalscheme3.core.seq_functions import expand_ambs
-
-REGEX_PATTERN_PRIMERNAME = re.compile("\\d+(_RIGHT|_LEFT|_R|_L)")
-
-
-def re_primer_name(string) -> list[str] | None:
-    """
-    Will return (amplicon_number, R/L) or None
-    """
-    match = REGEX_PATTERN_PRIMERNAME.search(string)
-    if match:
-        return match.group().split("_")
-    return None
 
 
 class BedPrimerPair(PrimerPair):
     """Class to contain a single primercloud from a bedfile, which contains the extra info parsed from the bedfile"""
 
-    amplicon_prefix: str
+    amplicon_prefix: str | None
     # Calc values
     _primername: str
 
@@ -54,148 +41,40 @@ class BedPrimerPair(PrimerPair):
         return self._primername == primernamestem
 
 
-class BedLine:
+def read_bedlines_to_bedprimerpairs(
+    path: pathlib.Path,
+) -> tuple[list[BedPrimerPair], list[str]]:
     """
-    Contains a single line from a bedfile
-    self.pool is stored as a 0 based index
+    uses primalbedtools to read in the bedlines. Parses all bedlines into primerclouds.
     """
+    _headers, bedlines = bf.BedLineParser.from_file(path)
+    grouped_bedlines = bf.group_primer_pairs(bedlines)
 
-    chrom_name: str
-    _start: int
-    _end: int
-    primername: str
-    pool: int
-    direction: str
-    sequence: str
-    # Calc values
-    amplicon_number: int
-
-    def __init__(self, bedline: list[str]) -> None:
-        self.chrom_name = bedline[0]
-        self._start = int(bedline[1])
-        self._end = int(bedline[2])
-        self.primername = bedline[3]
-        self.pool = int(bedline[4]) - 1
-        self.direction = bedline[5]
-        self.sequence = bedline[6]
-
-        # Check primername is valid
-        if len(self.primername.split("_")) != 4:
-            raise ValueError(
-                f"Invalid primername: {self.primername} in bedline: {bedline}"
-            )
-
-        # Calc values
-        self.amplicon_number = int(self.primername.split("_")[1])
-
-    def all_seqs(self) -> set[str] | None:
-        "Expands ambs bases"
-        return expand_ambs([self.sequence])
-
-    @property
-    def msa_index(self) -> str:
-        return self.chrom_name
-
-    @property
-    def start(self) -> int:
-        return self._start
-
-    @property
-    def end(self) -> int:
-        return self._end
-
-    def __str__(self, *kwargs) -> str:
-        # I use *kwargs so that it can have the same behaviour as PrimerPairs
-        return f"{self.chrom_name}\t{self.start}\t{self.end}\t{self.primername}\t{self.pool + 1}\t{self.direction}\t{self.sequence}"
-
-
-def read_in_bedlines(path: pathlib.Path) -> tuple[list[BedLine], list[str]]:
-    """
-    Read in bedlines from a file.
-
-    :param path: The path to the bed file.
-    :type path: pathlib.Path
-    :return: A list of BedLine objects.
-    :rtype: tuple(list[BedLine], list[str])
-    """
-    bed_primers: list[BedLine] = []
-    bed_headers: list[str] = []
-    with open(path) as bedfile:
-        for line in bedfile.readlines():
-            line = line.strip()
-            if not line:  # Skip empty lines
-                continue
-            elif line.startswith("#"):  # Store header lines
-                bed_headers.append(line.strip())
-            else:  # Store primer lines
-                line = line.strip().split()
-                bed_primers.append(BedLine(line))
-    return (bed_primers, bed_headers)
-
-
-def read_in_bedprimerpairs(path: pathlib.Path) -> tuple[list[BedPrimerPair], list[str]]:
-    """
-    Read in a bedfile and return a list of BedPrimerPairs, MSA index is set to None as it is not known at this point
-
-    :param path: The path to the bed file.
-    :type path: pathlib.Path
-    :return: A list of BedPrimerPair objects, and the header lines from the bedfile.
-    :rtype: tuple(list[BedPrimerPair], list[str])
-    """
-
-    # Read in the bedfile
     primerpairs = []
-    primerlines, _headers = read_in_bedlines(path)  # Ignore headers for now
 
-    # Group primers by reference
-    ref_to_bedlines: dict[str, list[BedLine]] = dict()
-    for ref in {bedline.chrom_name for bedline in primerlines}:
-        ref_to_bedlines[ref] = [x for x in primerlines if x.chrom_name == ref]
+    for fks, rks in grouped_bedlines:
+        fk_end = {fk.end for fk in fks}
+        if len(fk_end) != 1:
+            raise ValueError("Cannot combine into Single FP")
 
-    for ref, ref_bed_lines in ref_to_bedlines.items():
-        # Group the bedlines by amplicon number
-        for ampliconnumber in {
-            int(bedline.amplicon_number) for bedline in ref_bed_lines
-        }:
-            amplicon_prefix = ref_bed_lines[0].primername.split("_")[0]
-            ampliconlines = [
-                x for x in ref_bed_lines if x.amplicon_number == ampliconnumber
-            ]
-            pool = ampliconlines[0].pool
+        rk_start = {rk.start for rk in rks}
+        if len(rk_start) != 1:
+            raise ValueError("Cannot combine into Single RP")
 
-            fp = [x for x in ampliconlines if x.direction == "+"]
-            rp = [x for x in ampliconlines if x.direction == "-"]
-
-            if len(fp) == 0:
-                raise ValueError(
-                    f"Primer {ampliconlines[0].primername} has no forward primer"
-                )
-            if len(rp) == 0:
-                raise ValueError(
-                    f"Primer {ampliconlines[0].primername} has no reverse primer"
-                )
-            # Group the ampliconlines by direction
-            fkmer = FKmer(
-                max([x.end for x in fp]),
-                [x.sequence for x in fp],
+        primerpairs.append(
+            BedPrimerPair(
+                fprimer=FKmer([fk.sequence.encode() for fk in fks], fk_end.pop()),
+                rprimer=RKmer([rk.sequence.encode() for rk in rks], rk_start.pop()),
+                msa_index=None,  # This is set later # type: ignore
+                chrom_name=fks[0].chrom,
+                amplicon_number=fks[0].amplicon_number,
+                amplicon_prefix=fks[0].amplicon_prefix,
+                pool=fks[0].ipool,
             )
-            rkmer = RKmer(
-                min([x.start for x in rp]),
-                [x.sequence for x in rp],
-            )
-            primerpairs.append(
-                BedPrimerPair(
-                    fprimer=fkmer,
-                    rprimer=rkmer,
-                    msa_index=None,  # This is set later # type: ignore
-                    chrom_name=ref,
-                    amplicon_number=int(ampliconnumber),
-                    amplicon_prefix=amplicon_prefix,
-                    pool=pool,
-                )
-            )
+        )
 
     primerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
+
     return (primerpairs, _headers)
 
 
@@ -245,7 +124,7 @@ def read_in_extra_primers(
     """
     Reads in Primers from a bedfile, and QC checks them for Tm and Pools
     """
-    bedprimerpairs, _headers = read_in_bedprimerpairs(input_bedfile)
+    bedprimerpairs, _headers = read_bedlines_to_bedprimerpairs(input_bedfile)
 
     logger.info(
         f"Read in bedfile: [blue]{input_bedfile.name}[/blue]: "
@@ -259,7 +138,7 @@ def read_in_extra_primers(
     ]
     if min(primer_tms) < config.primer_tm_min or max(primer_tms) > config.primer_tm_max:
         logger.warning(
-            f"Primer Tm outside range: {round(min(primer_tms), 2)} : {round(max(primer_tms),2)} (range: {config.primer_tm_min} : {config.primer_tm_max})"
+            f"Primer Tm outside range: {round(min(primer_tms), 2)} : {round(max(primer_tms), 2)} (range: {config.primer_tm_min} : {config.primer_tm_max})"
         )
 
     else:

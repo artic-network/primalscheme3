@@ -8,18 +8,19 @@ from click import UsageError
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
 # Core imports
-from primalscheme3.core.bedfiles import read_in_bedprimerpairs
+from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
 from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import (
     DIGESTION_ERROR,
-    f_digest_to_count,
-    r_digest_to_count,
+    DIGESTION_RESULT,
+    f_digest_to_result,
+    r_digest_to_result,
 )
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import reverse_complement
-from primalscheme3.core.thermo import THERMORESULT, thermo_check
+from primalscheme3.core.thermo import THERMO_RESULT
 
 
 class NewPrimerStatus(Enum):
@@ -31,10 +32,13 @@ class NewPrimerStatus(Enum):
 class SeqStatus:
     seq: str | None
     count: int
-    thermo_status: THERMORESULT | DIGESTION_ERROR
+    thermo_status: THERMO_RESULT | DIGESTION_ERROR
 
     def __init__(
-        self, seq: str | None, count: int, thermo_status: THERMORESULT | DIGESTION_ERROR
+        self,
+        seq: str | None,
+        count: int,
+        thermo_status: THERMO_RESULT | DIGESTION_ERROR,
     ):
         self.seq = seq
         self.count = count
@@ -44,19 +48,19 @@ class SeqStatus:
         return f"{self.seq}\t{self.count}\t{self.thermo_status}"
 
 
-def detect_early_return(seq_counts: dict[str | DIGESTION_ERROR, int]) -> bool:
+def detect_early_return(seq_counts: list[DIGESTION_RESULT]) -> bool:
     """
     Checks for an early return condition, will return True condition is met
     """
     # Check for early return conditions
-    for error, count in seq_counts.items():
-        if count == -1 and type(error) == DIGESTION_ERROR:
+    for dr in seq_counts:
+        if dr.count == -1:
             return True
     return False
 
 
 def report_check(
-    seqstatus: SeqStatus,
+    seqstatus: DIGESTION_RESULT,
     current_primer_seqs: set[str],
     seqs_in_pools: list[list[str]],
     pool: int,
@@ -68,40 +72,43 @@ def report_check(
     Will carry out the checks and report the results via the logger. Will return False if the seq should not be added
     """
 
-    report_seq = seqstatus.seq if seqstatus.seq is not None else "DIGESTION_ERROR"
+    report_seq = seqstatus.seq if isinstance(seqstatus.seq, str) else "DIGESTION_ERROR"
     report_seq = report_seq.rjust(config.primer_size_max + 5, " ")
 
     # Check it passed thermo
-    if seqstatus.thermo_status != THERMORESULT.PASS or seqstatus.seq is None:
+    if (
+        seqstatus.thermo_check(config=config) != THERMO_RESULT.PASS
+        or seqstatus.seq is None
+    ):
         logger.warning(
-            f"{report_seq}\t{seqstatus.count}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {seqstatus.thermo_status}",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {seqstatus.thermo_check(config=config)}",
         )
         return False
 
     # Check it is a new seq
     if seqstatus.seq in current_primer_seqs:
         logger.info(
-            f"{report_seq}\t{seqstatus.count}\t[blue]{NewPrimerStatus.PRESENT.value}[/blue]: In scheme",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[blue]{NewPrimerStatus.PRESENT.value}[/blue]: In scheme",
         )
         return False
 
     # Check for minor allele
-    if seqstatus.count < 0:
+    if seqstatus.count < config.min_base_freq:
         logger.warning(
-            f"{report_seq}\t{seqstatus.count}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Minor allele",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Minor allele",
         )
         return False
 
     # Check for dimer with pool
     if do_pools_interact_py([seqstatus.seq], seqs_in_pools[pool], dimerscore):
         logger.warning(
-            f"{report_seq}\t{seqstatus.count}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
+            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
         )
         return False
 
     # Log the seq
     logger.info(
-        f"{report_seq}\t{seqstatus.count}\t[green]{NewPrimerStatus.VALID.value}[/green]: Can be added",
+        f"{report_seq}\t{round(seqstatus.count, 4)}\t[green]{NewPrimerStatus.VALID.value}[/green]: Can be added",
     )
 
     return True
@@ -187,7 +194,7 @@ def repair(
     shutil.copy(msa_path, local_msa_path)
 
     # Read in the bedfile
-    all_primerpairs, _header = read_in_bedprimerpairs(bedfile_path)
+    all_primerpairs, _header = read_bedlines_to_bedprimerpairs(bedfile_path)
 
     # Get the primerpairs for this new MSA
     primerpairs_in_msa = [
@@ -205,7 +212,7 @@ def repair(
     # Get all the seqs in each pool
     seqs_in_pools = [[] for _ in range(config.n_pools)]
     for pp in primerpairs_in_msa:
-        seqs_in_pools[pp.pool].extend([*pp.fprimer.seqs, *pp.rprimer.seqs])
+        seqs_in_pools[pp.pool].extend([*pp.fprimer.seqs(), *pp.rprimer.seqs()])
 
     # Find the indexes in the MSA that the primerbed refer to
     assert msa_obj._mapping_array is not None
@@ -221,9 +228,14 @@ def repair(
         if msa_fkmer_end is None:
             continue
 
-        _end_col, fseq_counts = f_digest_to_count(
+        _end_col, fseq_counts = f_digest_to_result(
             msa_obj.array, config, msa_fkmer_end, config.min_base_freq
         )
+
+        # Change count to freq
+        fseq_total_count = sum([dr.count for dr in fseq_counts])
+        for dr in fseq_counts:
+            dr.count = dr.count / fseq_total_count
 
         # Check for early return conditions
         if detect_early_return(fseq_counts):
@@ -232,22 +244,13 @@ def repair(
             )
             continue
 
-        # Thermo check each sequence
-        seqstatuss: list[SeqStatus] = []
-        for seq, count in fseq_counts.items():
-            if isinstance(seq, DIGESTION_ERROR):
-                thermo_status = seq
-                seq = None
-            else:
-                thermo_status = thermo_check(seq, config=config)
-            seqstatuss.append(SeqStatus(seq, count, thermo_status))
-        seqstatuss = sorted(seqstatuss, key=lambda x: x.count, reverse=True)
+        seqstatuss = sorted(fseq_counts, key=lambda x: x.count, reverse=True)
 
         # Decide if the new seqs should be added
         for seqstatus in seqstatuss:
             if not report_check(
                 seqstatus=seqstatus,
-                current_primer_seqs=pp.fprimer.seqs,
+                current_primer_seqs=pp.fprimer.seqs(),
                 seqs_in_pools=seqs_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,
@@ -264,7 +267,7 @@ def repair(
             f"Checking {pp.amplicon_prefix}_{pp.amplicon_number}_RIGHT",
         )
         msa_rkmer_start = mapping_list.index(pp.rprimer.start)
-        _start_col, rseq_counts = r_digest_to_count(
+        _start_col, rseq_counts = r_digest_to_result(
             msa_obj.array, config, msa_rkmer_start, config.min_base_freq
         )
         # Check for early return conditions
@@ -273,30 +276,23 @@ def repair(
                 "Early return for {pp.amplicon_prefix}_{pp.amplicon_number}_RIGHT",
             )
             continue
-
         # Valid seqs
-        valid_rseqs = {
-            reverse_complement(seq): count
-            for seq, count in rseq_counts.items()
-            if isinstance(seq, str)
-        }
 
-        # Thermo check each sequence
-        rseqstatuss: list[SeqStatus] = []
-        for seq, count in valid_rseqs.items():
-            if isinstance(seq, DIGESTION_ERROR):
-                thermo_status = seq
-                seq = None
-            else:
-                thermo_status = thermo_check(seq, config=config)
-            rseqstatuss.append(SeqStatus(seq, count, thermo_status))
-        rseqstatuss = sorted(rseqstatuss, key=lambda x: x.count, reverse=True)
+        rseq_total_count = sum([dr.count for dr in rseq_counts])
+        for dr in rseq_counts:
+            dr.count = dr.count / rseq_total_count
+
+        for dr in rseq_counts:
+            if dr.seq is not None and not isinstance(dr.seq, DIGESTION_ERROR):
+                dr.seq = reverse_complement(dr.seq)
+
+        rseq_counts = sorted(rseq_counts, key=lambda x: x.count, reverse=True)
 
         # Decide if the new seqs should be added
-        for rseqstatus in rseqstatuss:
+        for rseqstatus in rseq_counts:
             if not report_check(
                 seqstatus=rseqstatus,
-                current_primer_seqs=pp.rprimer.seqs,
+                current_primer_seqs=pp.rprimer.seqs(),
                 seqs_in_pools=seqs_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,

@@ -2,10 +2,12 @@ import pathlib
 import unittest
 
 import numpy as np
+from primalschemers._core import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.bedfiles import BedPrimerPair
-from primalscheme3.core.classes import FKmer, MatchDB, PrimerPair, RKmer
+from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
+from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 
@@ -65,7 +67,7 @@ class TestMultiplex(unittest.TestCase):
         )
         pp_msa_index = 0
 
-        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(20, ["T"]), pp_msa_index)
+        primerpair = PrimerPair(FKmer([b"A"], 10), RKmer([b"T"], 20), pp_msa_index)
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, 0, pp_msa_index)
 
@@ -88,7 +90,7 @@ class TestMultiplex(unittest.TestCase):
         multiplex = Multiplex(
             config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
         )
-        primerpair = PrimerPair(FKmer(100, ["AA"]), RKmer(200, ["TT"]), 0)
+        primerpair = PrimerPair(FKmer([b"AA"], 100), RKmer([b"TT"], 200), 0)
 
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, multiplex._current_pool, 0)
@@ -119,7 +121,7 @@ class TestMultiplex(unittest.TestCase):
         )
 
         # Create a primerpair
-        primerpair = PrimerPair(FKmer(100, ["A"]), RKmer(200, ["T"]), 0)
+        primerpair = PrimerPair(FKmer([b"A"], 100), RKmer([b"T"], 200), 0)
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, multiplex._current_pool, 0)
 
@@ -129,14 +131,14 @@ class TestMultiplex(unittest.TestCase):
         # Check that very non-overlapping primerpair in the same msa do not does not overlap
         self.assertFalse(
             multiplex.does_overlap(
-                PrimerPair(FKmer(300, ["A"]), RKmer(400, ["T"]), 0), 0
+                PrimerPair(FKmer([b"A"], 300), RKmer([b"T"], 400), 0), 0
             )
         )
 
         # Check that overlapping primerpair in differnt msas do not overlap
         self.assertFalse(
             multiplex.does_overlap(
-                PrimerPair(FKmer(100, ["A"]), RKmer(200, ["T"]), 1), 0
+                PrimerPair(FKmer([b"A"], 100), RKmer([b"T"], 200), 1), 0
             )
         )
 
@@ -146,12 +148,12 @@ class TestMultiplex(unittest.TestCase):
         # Check that circular overlapping primerpair overlap
         self.assertTrue(
             multiplex.does_overlap(
-                PrimerPair(FKmer(900, ["A"]), RKmer(200, ["T"]), 0), 0
+                PrimerPair(FKmer([b"A"], 900), RKmer([b"T"], 200), 0), 0
             )
         )
 
         # Check that circular non-overlapping primerpair doesn't overlap
-        primerpair_circular = PrimerPair(FKmer(900, ["A"]), RKmer(50, ["T"]), 0)
+        primerpair_circular = PrimerPair(FKmer([b"A"], 900), RKmer([b"T"], 50), 0)
         self.assertFalse(multiplex.does_overlap(primerpair_circular, 0))
 
         # Check for off-by-one error with linear overlapping primerpair
@@ -159,7 +161,7 @@ class TestMultiplex(unittest.TestCase):
         #       A    T
         self.assertFalse(
             multiplex.does_overlap(
-                PrimerPair(FKmer(202, ["A"]), RKmer(300, ["T"]), 0), 0
+                PrimerPair(FKmer([b"A"], 202), RKmer([b"T"], 300), 0), 0
             )
         )
 
@@ -173,7 +175,7 @@ class TestMultiplex(unittest.TestCase):
         )
 
         # Create a primerpair
-        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(200, ["T"]), 0)
+        primerpair = PrimerPair(FKmer([b"A"], 10), RKmer([b"T"], 200), 0)
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, multiplex._current_pool, 0)
 
@@ -191,7 +193,7 @@ class TestMultiplex(unittest.TestCase):
         )
 
         # Create a primerpair
-        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(200, ["T"]), 0)
+        primerpair = PrimerPair(FKmer([b"A"], 10), RKmer([b"T"], 200), 0)
 
         # Check coverage is created correctly
         self.assertEqual(multiplex._coverage[0].sum(), 0)
@@ -220,7 +222,7 @@ class TestMultiplex(unittest.TestCase):
 
         # Create a primerpair
         primerpair = PrimerPair(
-            FKmer(len(self.msa.array[0]) - 100, ["A"]), RKmer(10, ["T"]), 0
+            FKmer([b"A"], len(self.msa.array[0]) - 100), RKmer([b"T"], 10), 0
         )
 
         # Check coverage is created correctly
@@ -251,7 +253,7 @@ class TestMultiplex(unittest.TestCase):
         msa_index = 0
         pool = 0
         # Create a primerpair
-        primerpair = PrimerPair(FKmer(10, ["A"]), RKmer(200, ["T"]), 0)
+        primerpair = PrimerPair(FKmer([b"A"], 10), RKmer([b"T"], 200), 0)
         primerpair.pool = pool
 
         # Check lookup is created empty, in the correct shape
@@ -287,7 +289,7 @@ class TestMultiplex(unittest.TestCase):
         pool = 0
         # Create a primerpair
         primerpair = PrimerPair(
-            FKmer(len(self.msa.array[0]) - 100, ["A"]), RKmer(10, ["T"]), 0
+            FKmer([b"A"], len(self.msa.array[0]) - 100), RKmer([b"T"], 10), 0
         )
         primerpair.pool = pool
 
@@ -317,8 +319,8 @@ class TestMultiplex(unittest.TestCase):
         )
         # Create a primerpair
         bedprimerpair = BedPrimerPair(
-            FKmer(10, ["A"]),
-            RKmer(100, ["T"]),
+            FKmer([b"A"], 10),
+            RKmer([b"T"], 100),
             msa_index=-1,
             chrom_name="test",
             amplicon_prefix="test",
@@ -362,7 +364,7 @@ class TestMultiplex(unittest.TestCase):
         pool = 0
         # Create a primerpair
         primerpair = PrimerPair(
-            FKmer(50, [self.nCoV_2019_18_LEFT_0]), RKmer(100, ["TA"]), 0
+            FKmer([self.nCoV_2019_18_LEFT_0.encode()], 50), RKmer([b"TA"], 100), 0
         )
         primerpair.pool = pool
 
@@ -377,7 +379,7 @@ class TestMultiplex(unittest.TestCase):
 
         # Check a primerpair with a different msa_index can be added
         primerpair2 = PrimerPair(
-            FKmer(50, [self.nCoV_2019_18_LEFT_0]), RKmer(100, ["TA"]), 1
+            FKmer([self.nCoV_2019_18_LEFT_0.encode()], 50), RKmer([b"TA"], 100), 1
         )
         self.assertEqual(
             multiplex.check_primerpair_can_be_added(primerpair2, pool),
@@ -392,7 +394,7 @@ class TestMultiplex(unittest.TestCase):
 
         # Check an interacting primerpair cannot be added
         interacting_primerpair = PrimerPair(
-            FKmer(150, [self.nCoV_2019_76_RIGHT_0]), RKmer(200, ["TA"]), 0
+            FKmer([self.nCoV_2019_76_RIGHT_0.encode()], 150), RKmer([b"TA"], 200), 0
         )
         self.assertEqual(
             multiplex.check_primerpair_can_be_added(interacting_primerpair, pool),

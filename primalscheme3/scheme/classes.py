@@ -2,7 +2,6 @@ from enum import Enum
 
 from primaldimer_py import (
     do_pools_interact_py,  # type: ignore
-    which_kmers_pools_interact,  # type: ignore
 )
 
 from primalscheme3.core.bedfiles import BedPrimerPair
@@ -369,8 +368,10 @@ class Scheme(Multiplex):
                     continue
 
                 # Check for interactions
-                if not which_kmers_pools_interact(
-                    [fkmer], [rkmer], self.config.dimer_score, calc_all=False
+                if not do_pools_interact_py(
+                    fkmer.seqs(),
+                    rkmer.seqs(),
+                    self.config.dimer_score,
                 ):
                     pp = PrimerPair(fkmer, rkmer, msa.msa_index)
                     pp.chrom_name = msa._chrom_name

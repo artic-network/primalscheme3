@@ -3,8 +3,13 @@ from uuid import uuid4
 
 import numpy as np
 from Bio import SeqIO
+from primalschemers._core import (
+    FKmer,  # type: ignore
+    RKmer,  # type: ignore
+    digest_seq,  # type: ignore
+)
 
-from primalscheme3.core.classes import FKmer, PrimerPair, RKmer
+from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
 from primalscheme3.core.errors import (
@@ -14,6 +19,7 @@ from primalscheme3.core.errors import (
 )
 from primalscheme3.core.mapping import create_mapping, ref_index_to_msa
 from primalscheme3.core.seq_functions import remove_end_insertion
+from primalscheme3.core.thermo import forms_hairpin
 
 
 def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
@@ -172,6 +178,44 @@ class MSA:
                     f"limit is 100 characters. Truncating to '{new_chromname}'"
                 )
             self._chrom_name = new_chromname
+
+    def digest_rs(
+        self,
+        config: Config,
+        indexes: tuple[list[int], list[int]] | None = None,  # type: ignore
+        ncores: int = 1,
+    ) -> None:
+        if indexes is None:
+            indexes: tuple[None, None] = (None, None)
+
+        self.fkmers, self.rkmers, logs = digest_seq(
+            self.path,
+            ncores,
+            True,
+            indexes[0],
+            indexes[1],
+            config.primer_size_min,
+            config.primer_size_max,
+            config.primer_gc_max / 100,
+            config.primer_gc_min / 100,
+            config.primer_tm_max,
+            config.primer_tm_min,
+            config.primer_max_walk,
+            config.primer_homopolymer_max,
+            config.min_base_freq,
+            config.ignore_n,
+        )
+
+        # Log
+        if self.logger:
+            for s in logs:
+                self.logger.debug(s)
+
+            self.logger.info("Starting Primer Hairpin Check")
+
+        ## Hairpin check the kmers
+        self.fkmers = [x for x in self.fkmers if not forms_hairpin(x.seqs(), config)]
+        self.rkmers = [x for x in self.rkmers if not forms_hairpin(x.seqs(), config)]
 
     def digest(
         self,

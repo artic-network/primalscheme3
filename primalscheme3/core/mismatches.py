@@ -1,4 +1,9 @@
-import dbm.ndbm
+# Does this work?
+try:
+    import dbm.ndbm as db
+except ImportError:
+    import dbm.dumb as db
+
 from typing import Iterable
 
 from Bio import SeqIO
@@ -22,7 +27,7 @@ class MatchDB:
     """
 
     def __init__(self, path, msas_paths: list[str], kmer_size: int) -> None:
-        self.db = dbm.ndbm.open(str(path), "n")
+        self.db = db.open(str(path), "n")
 
         # Read in and digest each MSA
         for msa_index, msa_path in enumerate(msas_paths):
@@ -118,7 +123,7 @@ class MatchDB:
         :param remove_expected: If True, remove expected matches.
         :return: A set of unexpected matches for the FKmer.
         """
-        kmer_seqs = {x[-kmersize:] for x in fkmer.seqs}
+        kmer_seqs = {x[-kmersize:] for x in fkmer.seqs()}
         matches = self.find_matches(kmer_seqs, fuzzy)
 
         # Filter out expected matches
@@ -149,7 +154,7 @@ class MatchDB:
         :param remove_expected: If True, remove expected matches.
         :return: A set of unexpected matches for the RKmer.
         """
-        kmer_seqs = {x[:kmersize] for x in rkmer.seqs}
+        kmer_seqs = {x[:kmersize] for x in rkmer.seqs()}
         matches = self.find_matches(kmer_seqs, fuzzy)
 
         # Filter out expected matches

@@ -1,10 +1,9 @@
 #!/usr/bin/python3
 import argparse
 import pathlib
-from typing import Optional
+from typing import Annotated, Optional
 
 import typer
-from typing_extensions import Annotated
 
 # Module imports
 from primalscheme3.__init__ import __version__
@@ -92,6 +91,8 @@ def scheme_create(
         int,
         typer.Option(
             help="The size of an amplicon. Min / max size are ± 10 percent [100<=x<=2000]",
+            min=100,
+            max=2000,
         ),
     ] = Config.amplicon_size,
     bedfile: Annotated[
@@ -158,6 +159,10 @@ def scheme_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    ncores: Annotated[
+        int,
+        typer.Option(help="Number of CPU cores to use during digestion", min=1),
+    ] = Config.ncores,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -204,10 +209,16 @@ def scheme_replace(
             resolve_path=True,
         ),
     ],
-    amplicon_size: Annotated[
+    amplicon_size_max: Annotated[
         int,
         typer.Option(
-            help="The size of an amplicon. Use single value for ± 10 percent [100<=x<=2000]",
+            help="The max size of an amplicon [100<=x<=2000]", min=100, max=2000
+        ),
+    ],
+    amplicon_size_min: Annotated[
+        int,
+        typer.Option(
+            help="The min size of an amplicon. [100<=x<=2000]", min=100, max=2000
         ),
     ],
     config: Annotated[
@@ -223,8 +234,6 @@ def scheme_replace(
     """
     Replaces a primerpair in a bedfile
     """
-    ampliconsizemin = int(amplicon_size * 0.9)
-    ampliconsizemax = int(amplicon_size * 1.1)
 
     # Set up the progress manager
     pm = ProgressManager()
@@ -232,8 +241,8 @@ def scheme_replace(
     schemereplace(
         config_path=config,
         primername=primername,
-        ampliconsizemax=ampliconsizemax,
-        ampliconsizemin=ampliconsizemin,
+        ampliconsizemax=amplicon_size_max,
+        ampliconsizemin=amplicon_size_min,
         primerbed=primerbed,
         msapath=msa,
         pm=pm,
@@ -324,6 +333,10 @@ def panel_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    ncores: Annotated[
+        int,
+        typer.Option(help="Number of CPU cores to use during digestion", min=1),
+    ] = Config.ncores,
 ):
     """
     Creates a primer panel

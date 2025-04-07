@@ -1,6 +1,8 @@
 import hashlib
 import json
 import pathlib
+from collections import Counter
+from enum import Enum
 from time import sleep
 
 from Bio import Seq, SeqIO, SeqRecord
@@ -10,7 +12,7 @@ from click import UsageError
 from primaldimer_py import do_pools_interact_py  # type: ignore
 
 from primalscheme3.core.bedfiles import (
-    read_in_bedprimerpairs,
+    read_bedlines_to_bedprimerpairs,
     read_in_extra_primers,
 )
 from primalscheme3.core.config import Config, MappingType
@@ -31,6 +33,12 @@ from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 
+class ReplaceErrors(Enum):
+    SamePrimer = "SamePrimer"
+    ClashWithPool = "ClashWithPool"
+    InteractWithPool = "InteractWithPool"
+
+
 def schemereplace(
     config_path: pathlib.Path,
     ampliconsizemax: int,
@@ -39,6 +47,7 @@ def schemereplace(
     primername: str,
     msapath: pathlib.Path,
     pm: ProgressManager | None,
+    ncores: int = 1,
 ):
     """
     List all replacements primers
@@ -46,7 +55,9 @@ def schemereplace(
     # Read in the config file
     with open(config_path) as file:
         _cfg: dict = json.load(file)
-    config = Config(**_cfg)
+    config = Config()
+    config.assign_kwargs(**_cfg)
+    config.min_overlap = 0
 
     if pm is None:
         pm = ProgressManager()
@@ -57,7 +68,7 @@ def schemereplace(
     # Update the amplicon size if it is provided
     if ampliconsizemax:
         logger.info(
-            f"Updating amplicon size max to {ampliconsizemax} and min to {ampliconsizemin}"
+            f"Updated min/max amplicon size to {ampliconsizemin}/{ampliconsizemax}"
         )
 
         config.amplicon_size_max = ampliconsizemax
@@ -74,7 +85,7 @@ def schemereplace(
     }
 
     # Read in the bedfile
-    bedprimerpairs, headers = read_in_bedprimerpairs(primerbed)
+    bedprimerpairs, headers = read_bedlines_to_bedprimerpairs(primerbed)
     # Map each primer to an MSA index
     for primerpair in bedprimerpairs:
         msa_index = msa_chrom_to_index.get(str(primerpair.chrom_name), None)
@@ -106,7 +117,8 @@ def schemereplace(
     if wanted_pp is None:
         raise UsageError(f"ERROR: {primername} not found in bedfile")
     else:
-        print(wanted_pp.__str__())
+        logger.info("Found amplicon to replace:")
+        logger.info(wanted_pp.to_bed())
 
     # Read in the MSAs from config["msa_data"]
     msa_data = _cfg["msa_data"].get(wanted_pp.msa_index)
@@ -128,9 +140,9 @@ def schemereplace(
     with open(msa.path, "rb") as f:
         msa_checksum = hashlib.file_digest(f, "md5").hexdigest()
     if msa_checksum != msa_data["msa_checksum"]:
-        raise ValueError("ERROR: MSA checksums do not match.")
+        raise UsageError("ERROR: MSA checksums do not match.")
     else:
-        print("MSA checksums match")
+        logger.info("MSA checksums match")
 
     # Target digest the MSA
     msa_fp_end = msa._ref_to_msa[wanted_pp.fprimer.region()[1]]
@@ -159,8 +171,10 @@ def schemereplace(
 
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
-    msa.digest(config, (findexes, rindexes))  ## Primer are remapped at this point.
-    print(f"Found {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
+    msa.digest_rs(
+        config, (findexes, rindexes), ncores=config.ncores
+    )  ## Primer are remapped at this point.
+    logger.info(f"Digested into {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
     msa.generate_primerpairs(
@@ -168,6 +182,8 @@ def schemereplace(
         amplicon_size_min=config.amplicon_size_min,
         dimerscore=config.dimer_score,
     )
+
+    logger.info(f"Generated {len(msa.primerpairs)} possible amplicons")
 
     # Find the primers on either side of the wanted primer
     if wanted_pp.amplicon_number == 0:
@@ -203,7 +219,9 @@ def schemereplace(
     if len(spanning_primerpairs) > 0:
         logger.info(f"Spanning amplicons found: {len(spanning_primerpairs)}")
     else:
-        raise ValueError("ERROR: No spanning primers found")
+        raise UsageError(
+            "ERROR: No spanning primers found. Please increase amplicon size"
+        )
 
     # Sort for number of primer pairs
     spanning_primerpairs.sort(key=lambda x: len(x.all_seqs()))
@@ -222,12 +240,16 @@ def schemereplace(
     ]
 
     accepted_primerpairs = []
+
+    # Keep a counter to see what goes wrong
+    result_counter = Counter()
     for pos_primerpair in spanning_primerpairs:
         # Make sure the new primerpair doesn't contain the primers we want to replace
         if (
             pos_primerpair.fprimer == wanted_pp.fprimer
             or pos_primerpair.rprimer == wanted_pp.rprimer
         ):
+            result_counter.update([ReplaceErrors.SamePrimer])
             continue
 
         # Check for all clashes
@@ -243,13 +265,15 @@ def schemereplace(
                 clash = True
                 break
         if clash:
+            result_counter.update([ReplaceErrors.ClashWithPool])
             continue
 
         # If they dont overlap
         # Check for interactions
         if do_pools_interact_py(
-            list(pos_primerpair.all_seqs()), seqs_in_same_pool, config.dimer_score
+            pos_primerpair.all_seqs(), seqs_in_same_pool, config.dimer_score
         ):
+            result_counter.update([ReplaceErrors.InteractWithPool])
             continue
 
         pos_primerpair.pool = wanted_pp.pool
@@ -263,6 +287,12 @@ def schemereplace(
     for pp_number, pp in enumerate(accepted_primerpairs, 1):
         print(f"Amplicon {pp_number}: {len(pp.all_seqs())} Primers")
         print(pp.to_bed())
+
+    # If No valid primerpairs
+    if len(accepted_primerpairs) == 0:
+        logger.info("The following errors prevented primerpairs being added:")
+        for k, v in result_counter.items():
+            logger.info(f"\t- {k.value}:\t{v}")
 
 
 def schemecreate(
@@ -381,7 +411,7 @@ def schemecreate(
     # Read in all MSAs before digestion
     for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
-        msa_obj.digest(config)
+        msa_obj.digest_rs(config, None, ncores=config.ncores)  # Default to one core
         logger.info(
             f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
             f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
@@ -509,7 +539,7 @@ def schemecreate(
                     break
 
         if config.circular:
-            match scheme.try_circular(msa):
+            match scheme.try_circular(msa_obj):
                 case SchemeReturn.ADDED_CIRCULAR:
                     last_pp_added = scheme._last_pp_added[-1]
                     logger.info(
@@ -628,6 +658,7 @@ def schemecreate(
                     seqdict=msa_obj._seq_dict,
                     bedfile=OUTPUT_DIR / "primer.bed",
                     offline_plots=True if offline_plots and i == 0 else False,
+                    mapping=config.mapping,
                 )
             )
     upload_pt.manual_update(n=7, update=True)

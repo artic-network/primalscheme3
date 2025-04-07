@@ -4,13 +4,11 @@ import numpy as np
 import plotly.graph_objects as go
 from click import UsageError
 from plotly.subplots import make_subplots
+from primalbedtools.bedfiles import BedLine, BedLineParser
 
 # Create in the classes from primalscheme3
-from primalscheme3.core.bedfiles import (
-    BedLine,
-    read_in_bedlines,
-    read_in_bedprimerpairs,
-)
+from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
+from primalscheme3.core.config import MappingType
 from primalscheme3.core.create_report_data import calc_gc
 from primalscheme3.core.mapping import (
     check_for_end_on_gap,
@@ -49,7 +47,7 @@ class PlotlyText:
             else:
                 cigar.append(".")
         cigar = "".join(cigar)[::-1]
-        return f"5'{self.primer_seq}: {self.primer_name}<br>5'{cigar}<br>5'{self.genome_seq[-len(self.primer_seq):]}"
+        return f"5'{self.primer_seq}: {self.primer_name}<br>5'{cigar}<br>5'{self.genome_seq[-len(self.primer_seq) :]}"
 
 
 def get_primers_from_msa(
@@ -126,6 +124,7 @@ def primer_mismatch_heatmap(
     bedfile: pathlib.Path,
     include_seqs: bool = True,
     offline_plots: bool = True,
+    mapping: MappingType = MappingType.FIRST,
 ) -> str:
     """
     Create a heatmap of primer mismatches in an MSA.
@@ -136,10 +135,11 @@ def primer_mismatch_heatmap(
     :raises: click.UsageError
     """
     # Read in the bedfile
-    bedlines, _header = read_in_bedlines(bedfile)
+
+    _header, bedlines = BedLineParser.from_file(bedfile)
 
     # Find the mapping genome
-    bed_chrom_names = {bedline.chrom_name for bedline in bedlines}
+    bed_chrom_names = {bedline.chrom for bedline in bedlines}
 
     # Reference genome
     primary_ref = bed_chrom_names.intersection(seqdict.keys())
@@ -150,24 +150,34 @@ def primer_mismatch_heatmap(
         primary_ref = bed_chrom_names.intersection(parsed_seqdict.keys())
         seqdict = parsed_seqdict
 
-    # Filter the bedlines for only the reference genome
-    bedlines = [bedline for bedline in bedlines if bedline.chrom_name in primary_ref]
-
-    # handle errors
-    if len(bedlines) == 0:
+    # handle errors if mapping is set to first
+    if len(primary_ref) == 0 and mapping == MappingType.FIRST:
         raise UsageError(
             f"Primer chrom names ({', '.join(bed_chrom_names)}) not found in MSA ({', '.join(seqdict.keys())})"
         )
+    # If consensus mapping ensure only one chrom in bedfile
+    elif mapping == MappingType.CONSENSUS:
+        primary_ref = ["Consensus"]
+        if len(bed_chrom_names) > 1:
+            raise UsageError(
+                f"Primer chrom names ({', '.join(bed_chrom_names)}) not found in MSA ({', '.join(seqdict.keys())})"
+            )
+    else:  # mapping == MappingType.FIRST & len(primary_ref) > 0
+        # Filter the bedlines for only the reference genome
+        bedlines = [bedline for bedline in bedlines if bedline.chrom in primary_ref]
 
     kmers_names = [bedline.primername for bedline in bedlines]
 
     # Create mapping array
     # Find index of primary ref
-    mapping_index = [i for i, (k, v) in enumerate(seqdict.items()) if k in primary_ref][
-        0
-    ]
+    if mapping == MappingType.FIRST:
+        mapping_index = [
+            i for i, (k, v) in enumerate(seqdict.items()) if k in primary_ref
+        ][0]
+        mapping_array, array = create_mapping(array, mapping_index)
+    else:
+        mapping_array = np.array([x for x in range(array.shape[1])])
 
-    mapping_array, array = create_mapping(array, mapping_index)
     ref_index_to_msa_dict = ref_index_to_msa(mapping_array)
 
     # Group Primers by basename
@@ -285,6 +295,7 @@ def primer_mismatch_heatmap(
         font=dict(family="Courier New, monospace"),
         hoverlabel=dict(font_family="Courier New, monospace"),
         title_text=f"Primer Mismatches: {list(primary_ref)[0]}",
+        coloraxis=dict(cmax=10, cmin=0),
     )
     fig.update_yaxes(autorange="reversed")
 
@@ -312,7 +323,7 @@ def bedfile_plot_html(
     Create a plotly heatmap from a bedfile.
     """
     # Read in the bedfile
-    primerpairs, _header = read_in_bedprimerpairs(bedfile)
+    primerpairs, _header = read_bedlines_to_bedprimerpairs(bedfile)
 
     # Filter primerpairs for the reference genome
     wanted_primerspairs = [pp for pp in primerpairs if pp.chrom_name == ref_name]

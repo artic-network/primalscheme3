@@ -91,7 +91,17 @@ class TestConfig(unittest.TestCase):
 
     def test_json_round_trip(self):
         config = Config(
-            amplicon_size=1000, circular=True, mapping="first", output="test"
+            amplicon_size=1000,
+            output="test",
+            ncores=1,
+            high_gc=True,
+            n_pools=3,
+            min_overlap=20,
+            mapping="first",
+            circular=True,
+            backtrack=True,
+            min_base_freq=0.1,
+            ignore_n=True,
         )
 
         json_str = json.dumps(config.to_dict())
