@@ -193,6 +193,7 @@ class Test_RefIndexToMsa(unittest.TestCase):
             7: 12,
             8: 13,
             9: 14,
+            10: 15,
         }
         result = ref_index_to_msa(mapping_array)
         self.assertEqual(result, expected_answer)

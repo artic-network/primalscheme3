@@ -74,7 +74,12 @@ def ref_index_to_msa(mapping_array: np.ndarray) -> dict[int, int]:
     """
     Convert a reference index to an MSA index
     """
-    return {x: i for i, x in enumerate(list(mapping_array)) if x is not None}
+    ref_dict = {x: i for i, x in enumerate(list(mapping_array)) if x is not None}
+    ref_dict[max(ref_dict.keys()) + 1] = (
+        max(ref_dict.values()) + 1
+    )  # This ensures that an fprimer with non-inclusive end will not cause key error.
+
+    return ref_dict
 
 
 def check_for_end_on_gap(ref_index_to_msa: dict[int, int], ref_index) -> bool:
