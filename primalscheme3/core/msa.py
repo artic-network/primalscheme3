@@ -10,7 +10,7 @@ from primalschemers._core import (
 )
 
 from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config
+from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config, MappingType
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
 from primalscheme3.core.errors import (
     MSAFileInvalid,
@@ -60,7 +60,7 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         )
     except ValueError as e:
         raise MSAFileInvalidLength(
-            f"MSA ({msa_path.name}): contains sequences of different lengths"
+            f"MSA ({msa_path.name}): contains sequences of different lengths. Please ensure MSA is aligned!"
         ) from e
 
     # Check for empty MSA, caused by no records being parsed
@@ -85,7 +85,7 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
                 f"MSA ({msa_path.name}) contains non DNA characters ({base_str}) at column: {col_index}"
             )
     # Remove empty columns
-    array = np.delete(array, empty_col_indexes, axis=1)
+    # array = np.delete(array, empty_col_indexes, axis=1)
 
     # Remove end insertions
     array = remove_end_insertion(array)
@@ -191,7 +191,7 @@ class MSA:
         self.fkmers, self.rkmers, logs = digest_seq(
             self.path,
             ncores,
-            True,
+            config.mapping == MappingType.FIRST,  # only remap if asked for
             indexes[0],
             indexes[1],
             config.primer_size_min,

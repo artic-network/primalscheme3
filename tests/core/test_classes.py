@@ -36,11 +36,24 @@ class Test_PrimerPair(unittest.TestCase):
         rkmer = RKmer([b"ATCGATCGGTAC"], 1000)
         msa_index = 0
 
-        # Test case 1: Valid input
         primerpair = PrimerPair(fprimer=fkmer, rprimer=rkmer, msa_index=msa_index)
 
         # Test asignments
         self.assertEqual(primerpair.all_seqs(), ["ACTAGCTAGCTAGCA", "ATCGATCGGTAC"])
+
+    def test_all_seqs_bytes(self):
+        fkmer = FKmer([b"ACTAGCTAGCTAGCA"], 100)
+        rkmer = RKmer([b"ATCGATCGGTAC"], 1000)
+        msa_index = 0
+
+        primerpair = PrimerPair(fprimer=fkmer, rprimer=rkmer, msa_index=msa_index)
+
+        # Test asignments
+        seqs = primerpair.all_seqs()
+        seqs_bytes = primerpair.all_seq_bytes()
+
+        for s, sb in zip(seqs, seqs_bytes):
+            self.assertEqual(s.encode(), sb)
 
     def test_to_bed(self):
         fkmer = FKmer([b"ACTAGCTAGCTAGCA"], 100)

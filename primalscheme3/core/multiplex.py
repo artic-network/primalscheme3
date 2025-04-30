@@ -1,7 +1,7 @@
 from enum import Enum
 
 import numpy as np
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primalschemers._core import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
@@ -135,8 +135,23 @@ class Multiplex:
             for seq in ppseq
         ]
 
+    def get_seqs_bytes_in_pool(self, pool: int) -> list[bytes]:
+        """
+        Returns a list of all the sequences in the pool
+        :param pool: int
+        :return: list[str]
+        """
+        return [
+            seq
+            for ppseq in (pp.all_seq_bytes() for pp in self._pools[pool])
+            for seq in ppseq
+        ]
+
     def check_primerpair_can_be_added(
-        self, primerpair: PrimerPair, pool: int, otherseqs: list[str] | None = None
+        self,
+        primerpair: PrimerPair,
+        pool: int,
+        otherseqs_bytes: list[bytes] | None = None,
     ) -> PrimerPairCheck:
         """
         Checks if the primerpair can be added to the multiplex
@@ -151,11 +166,11 @@ class Multiplex:
             return PrimerPairCheck.OVERLAP
 
         # Check for interactions with other sequences
-        if otherseqs is None:
-            otherseqs = self.get_seqs_in_pool(pool)
-        if do_pools_interact_py(
-            primerpair.all_seqs(),
-            otherseqs,
+        if otherseqs_bytes is None:
+            otherseqs_bytes = self.get_seqs_bytes_in_pool(pool)
+        if do_pool_interact(
+            primerpair.all_seq_bytes(),
+            otherseqs_bytes,
             self.config.dimer_score,
         ):
             return PrimerPairCheck.INTERACTING

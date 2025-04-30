@@ -9,7 +9,7 @@ from Bio import Seq, SeqIO, SeqRecord
 from click import UsageError
 
 # Interaction checker
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primalschemers._core import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
@@ -228,8 +228,8 @@ def schemereplace(
 
     # Find all primerpairs that in the same pool as the wanted primer
     same_pool_primerpairs = [x for x in bedprimerpairs if x.pool == wanted_pp.pool]
-    seqs_in_same_pool = [
-        seq for seq in (x.all_seqs() for x in same_pool_primerpairs) for seq in seq
+    seqs_bytes_in_same_pool = [
+        seq for seq in (x.all_seq_bytes() for x in same_pool_primerpairs) for seq in seq
     ]
 
     # Find all primerpairs that in the same pool and same msa as the wanted primer
@@ -270,8 +270,8 @@ def schemereplace(
 
         # If they dont overlap
         # Check for interactions
-        if do_pools_interact_py(
-            pos_primerpair.all_seqs(), seqs_in_same_pool, config.dimer_score
+        if do_pool_interact(
+            pos_primerpair.all_seq_bytes(), seqs_bytes_in_same_pool, config.dimer_score
         ):
             result_counter.update([ReplaceErrors.InteractWithPool])
             continue
