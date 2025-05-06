@@ -332,7 +332,7 @@ def bedfile_plot_html(
 
     # Calculate the GC data
     ref_array = np.array(
-        [ref_seq.upper()],
+        [list(ref_seq.upper())],
         dtype="U1",
         ndmin=2,
     )

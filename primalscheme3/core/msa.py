@@ -1,8 +1,8 @@
 import pathlib
 from uuid import uuid4
 
+import dnaio
 import numpy as np
-from Bio import SeqIO
 from primalschemers._core import (
     FKmer,  # type: ignore
     RKmer,  # type: ignore
@@ -45,16 +45,21 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         MSAFileInvalidBase: If the MSA contains non-DNA characters.
     """
     try:
-        records_index = SeqIO.index(
-            str(msa_path),
-            "fasta",
-        )
-    except ValueError as e:
+        records_index = {}
+        with dnaio.open(msa_path) as input_msa:
+            for record in input_msa:
+                parsed_record = record.id.replace("/", "_")
+                # Deal with duplicates
+                if parsed_record in records_index:
+                    raise ValueError(f"Duplicate ID ({parsed_record})")
+                records_index[parsed_record] = record.sequence.upper()
+
+    except (ValueError, dnaio.exceptions.FastaFormatError) as e:
         raise MSAFileInvalid(f"{msa_path.name}: {e}") from e
 
     try:
         array = np.array(
-            [record.seq.upper() for record in records_index.values()],
+            [list(record) for record in records_index.values()],
             dtype="U1",
             ndmin=2,  # Enforce 2D array even if one genome
         )
@@ -90,7 +95,7 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
     # Remove end insertions
     array = remove_end_insertion(array)
 
-    return array, dict(records_index)
+    return array, records_index
 
 
 class MSA:
@@ -161,7 +166,7 @@ class MSA:
         if "/" in self._chrom_name:
             new_chromname = self._chrom_name.replace("/", "_")
             warning_str = (
-                f"Replacing '/' with '-'. '{self._chrom_name}' -> '{new_chromname}'"
+                f"Replacing '/' with '_'. '{self._chrom_name}' -> '{new_chromname}'"
             )
             if self.logger:
                 self.logger.warning(warning_str)
@@ -276,13 +281,7 @@ class MSA:
             primerpair.amplicon_prefix = self._uuid
 
     def write_msa_to_file(self, path: pathlib.Path):
-        # Writes the msa to file with parsed chrom names
-        with open(path, "w") as outfile:
-            for r in self._seq_dict.values():
-                # Format each record
-                r.id = "_".join(r.id.split("/"))
-                r.description = ""
-                r.seq = r.seq.upper()
-                # Write
-                record_str = r.format("fasta")
-                outfile.write(record_str)
+        # Write all the consensus sequences to a single file
+        with dnaio.FastaWriter(path, line_length=60) as msa_outfile:
+            for id, seq in self._seq_dict.items():
+                msa_outfile.write(dnaio.SequenceRecord(name=id, sequence=seq))

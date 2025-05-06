@@ -526,13 +526,23 @@ def visualise_bedfile(
     """
     Visualise the bedfile
     """
-    from Bio import SeqIO
+    import dnaio
 
-    ref_file = SeqIO.index(ref_path, "fasta")
-    ref_genome = ref_file.get(ref_id)
+    refs = []
+    ref_genome: str | None = None
+
+    # Find the wanted file
+    with dnaio.open(ref_path, mode="r") as ref_file:
+        for record in ref_file:
+            refs.append(record.id)
+
+            # See if wanted genome
+            if record.id == ref_id:
+                ref_genome = record.sequence
+
     if ref_genome is None:
         raise typer.BadParameter(
-            f"Reference genome ID '{ref_id}' not found in '{ref_path}'"
+            f"Reference genome ID '{ref_id}' not found in '{ref_path}'. Options: {', '.join(refs)}"
         )
 
     with open(output, "w") as outfile:

@@ -10,7 +10,6 @@ repository = "https://github.com/artic-network/primalscheme3"
 [tool.poetry.dependencies]
 python = "^3.11"
 primer3-py = "^1.2.2"
-biopython = "^1.80"
 numpy = "^1.24.2"
 networkx = "^3.1"
 kaleido = "0.2.1"
@@ -19,6 +18,7 @@ tqdm = "^4.66.1"
 typer = "^0.12.3"
 primalbedtools = "^0.6.2"
 primalschemers = "^0.1.5"
+dnaio = "^1.2.3"
 
 
 [tool.poetry.group.dev.dependencies]

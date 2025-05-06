@@ -7,7 +7,7 @@ import pathlib
 import shutil
 import sys
 
-from Bio import Seq, SeqIO, SeqRecord
+import dnaio
 from click import UsageError
 
 # version import
@@ -446,8 +446,10 @@ def panelcreate(
         outfile.write(panel.to_amplicons(trim_primers=True))
 
     # Write all the consensus sequences to a single file
-    with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
-        reference_records = []
+    # Write all the consensus sequences to a single file
+    with dnaio.FastaWriter(
+        OUTPUT_DIR / "reference.fasta", line_length=60
+    ) as reference_outfile:
         for msa_obj in msa_dict.values():
             if config.mapping == MappingType.FIRST:
                 seq_str = generate_reference(msa_obj.array)
@@ -456,14 +458,9 @@ def panelcreate(
             else:
                 raise ValueError("Mapping must be 'first' or 'consensus'")
 
-            reference_records.append(
-                SeqRecord.SeqRecord(
-                    seq=Seq.Seq(seq_str),
-                    id=msa_obj._chrom_name,
-                )
+            reference_outfile.write(
+                dnaio.SequenceRecord(name=msa_obj._chrom_name, sequence=seq_str)
             )
-
-        SeqIO.write(reference_records, reference_outfile, "fasta")
 
     # Generate all the hashes
     ## Generate the bedfile hash, and add it into the config
@@ -502,14 +499,19 @@ def panelcreate(
 
     with open(OUTPUT_DIR / "primer.html", "w") as outfile:
         for i, msa_obj in enumerate(msa_dict.values()):
-            outfile.write(
-                primer_mismatch_heatmap(
-                    array=msa_obj.array,
-                    seqdict=msa_obj._seq_dict,
-                    bedfile=OUTPUT_DIR / "primer.bed",
-                    offline_plots=True if offline_plots and i == 0 else False,
-                    mapping=config.mapping,
+            try:
+                outfile.write(
+                    primer_mismatch_heatmap(
+                        array=msa_obj.array,
+                        seqdict=msa_obj._seq_dict,
+                        bedfile=OUTPUT_DIR / "primer.bed",
+                        offline_plots=True if offline_plots and i == 0 else False,
+                        mapping=config.mapping,
+                    )
                 )
-            )
+            except UsageError:
+                logger.warning(
+                    f"No Primers found for {msa_obj._chrom_name}. Skipping Plot!"
+                )
 
     logger.info("Completed Successfully")
