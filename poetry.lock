@@ -895,6 +895,36 @@ files = [
 ]
 
 [[package]]
+name = "primaldimer-py"
+version = "1.1.0"
+description = ""
+optional = false
+python-versions = ">=3.11"
+files = [
+    {file = "primaldimer_py-1.1.0-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:5d2fd8ef3ac65eb262e7295b5edb08e8a0903d84b0d9cf95b49809a6f1d8351f"},
+    {file = "primaldimer_py-1.1.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:72099f495e97b2810020507d07c6c3fe3276d9e9bc2c0c0bde79fbccbd520641"},
+    {file = "primaldimer_py-1.1.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:31de4aa5eae4e1fc5df339c8353009b7c01847f9700bde66acee85379f2399f5"},
+    {file = "primaldimer_py-1.1.0-cp311-cp311-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:273c42005fb873d97d6db00a5aef9ad0bc85c07d191280d574e35b47f5da2fd9"},
+    {file = "primaldimer_py-1.1.0-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:3c34d87b37529c030b8cf40d63bf79a1313b8e92be24d7fe5ab34d7b9f9005a2"},
+    {file = "primaldimer_py-1.1.0-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:a6825274700384a6f70c7e096c59f83825787f83ddd1e96e8e6620d3ea3675ec"},
+    {file = "primaldimer_py-1.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cba3f23a262176bfa458c6dfafe57c13757cf7093117f0fc66fdd52e82044517"},
+    {file = "primaldimer_py-1.1.0-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:312c4373cf9a18f658026f4841ced08c1f4671f453674e21485d18ce86bb08cd"},
+    {file = "primaldimer_py-1.1.0-cp311-none-win32.whl", hash = "sha256:986b20ee12d802620b4f02ecb8637764ca36fa0fe16e734be2c20d3b7f971149"},
+    {file = "primaldimer_py-1.1.0-cp311-none-win_amd64.whl", hash = "sha256:36770ef073a16673ead37f8ac5a8b27e8d631c273aa2c57728e8cbd233180208"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:ba4208ad6e8aaf86daea5fb4bdee7a9463a6af5dee0b85b3848a47f8b7b6f367"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4f6700c56e75efe5e4c4dba9a4d9b30ca62ac26e93aaae91b3425749692efbfd"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c2529caf17ec144cbea9849e828f94aba466c18c688c919ff52f5fcfe179aab6"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:b460d86a5e7f6f86985c18a7a38b0a547ac489bccd378bfafae89a12e25e070d"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:3f1a19a943dd06092d2de1020894bd6cda0e3968bc32508f782da46ec28d8e24"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:c78c927205c19d2fefb14bc5487978e8428af7dab628405d595d259313f2fb2d"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a92dba177067ddba053b4329522aa060df394af8edd19a912f0c27a11ebb8d88"},
+    {file = "primaldimer_py-1.1.0-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:021cba87ea547c4eca6c0d6a0ba3bcaca748051b34a1391f0fe28be99c4dae6f"},
+    {file = "primaldimer_py-1.1.0-cp312-none-win32.whl", hash = "sha256:708f752121885593b15a6716b75c2677e36b6d52094d88066af37a09dde6b2e5"},
+    {file = "primaldimer_py-1.1.0-cp312-none-win_amd64.whl", hash = "sha256:7747afe05f0cb7c785d84f61b164342a46939c2bc86add22f05d8e83e4bc0531"},
+    {file = "primaldimer_py-1.1.0.tar.gz", hash = "sha256:f47ccc7aca5ac64d438ef383fd0c346ec0c61a446307f18ec0f3d1a926deeee7"},
+]
+
+[[package]]
 name = "primalschemers"
 version = "0.1.5"
 description = "Rust code base for PrimalScheme3"
@@ -1527,4 +1557,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "16f869a1dc97c309573db8660d20602e73db4c4e31ebab4dee4aef7c796524e8"
+content-hash = "c588a36bfd2b5590439b080c3fc8cdce49ae13f812b2a3395063d3066c5533b4"
