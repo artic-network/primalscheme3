@@ -5,9 +5,9 @@ import plotly.graph_objects as go
 from click import UsageError
 from plotly.subplots import make_subplots
 from primalbedtools.bedfiles import BedLine, BedLineParser
+from primalbedtools.primerpairs import create_primerpairs
 
 # Create in the classes from primalscheme3
-from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
 from primalscheme3.core.config import MappingType
 from primalscheme3.core.create_report_data import calc_gc
 from primalscheme3.core.mapping import (
@@ -323,10 +323,11 @@ def bedfile_plot_html(
     Create a plotly heatmap from a bedfile.
     """
     # Read in the bedfile
-    primerpairs, _header = read_bedlines_to_bedprimerpairs(bedfile)
+    _header, bedlines = BedLineParser.from_file(bedfile)
+    primerpairs = create_primerpairs(bedlines)
 
     # Filter primerpairs for the reference genome
-    wanted_primerspairs = [pp for pp in primerpairs if pp.chrom_name == ref_name]
+    wanted_primerspairs = [pp for pp in primerpairs if pp.chrom == ref_name]
     if len(wanted_primerspairs) == 0:
         raise ValueError(f"No primers found for {ref_name}")
 
@@ -366,13 +367,13 @@ def bedfile_plot_html(
 
     # Add the primer lines
     for pp in wanted_primerspairs:
-        print(f"Adding primer: {pp._primername}")
+        print(f"Adding primer: {pp.amplicon_name}")
         fig.add_shape(
             type="rect",
-            y0=pp.pool + 1 - 0.05,
-            y1=pp.pool + 1 + 0.05,
-            x0=pp.fprimer.region()[0],
-            x1=pp.fprimer.region()[1],
+            y0=pp.pool - 0.05,
+            y1=pp.pool + 0.05,
+            x0=pp.amplicon_start,
+            x1=pp.coverage_start,
             fillcolor="LightSalmon",
             line=dict(color="darksalmon", width=2),
             row=1,
@@ -380,23 +381,24 @@ def bedfile_plot_html(
         )
         fig.add_shape(
             type="rect",
-            y0=pp.pool + 1 - 0.05,
-            y1=pp.pool + 1 + 0.05,
-            x0=pp.rprimer.region()[0],
-            x1=pp.rprimer.region()[1],
+            y0=pp.pool - 0.05,
+            y1=pp.pool + 0.05,
+            x0=pp.coverage_end,
+            x1=pp.amplicon_end,
             fillcolor="LightSalmon",
             line=dict(color="darksalmon", width=2),
             row=1,
             col=1,
         )
         # Handle circular genomes
-        is_circular = pp.fprimer.region()[0] > pp.rprimer.region()[1]
+        is_circular = pp.is_circular
+
         fig.add_shape(
             type="line",
-            y0=pp.pool + 1,
-            y1=pp.pool + 1,
-            x0=pp.fprimer.region()[1],
-            x1=pp.rprimer.region()[0] if not is_circular else len(ref_seq),
+            y0=pp.pool,
+            y1=pp.pool,
+            x0=pp.coverage_start,
+            x1=pp.coverage_end if not is_circular else len(ref_seq),
             line=dict(color="LightSeaGreen", width=5),
             row=1,
             col=1,
@@ -404,10 +406,10 @@ def bedfile_plot_html(
         if is_circular:
             fig.add_shape(
                 type="line",
-                y0=pp.pool + 1,
-                y1=pp.pool + 1,
+                y0=pp.pool,
+                y1=pp.pool,
                 x0=0,
-                x1=pp.rprimer.region()[0],
+                x1=pp.coverage_end,
                 line=dict(color="LightSeaGreen", width=5),
                 row=1,
                 col=1,
@@ -434,7 +436,7 @@ def bedfile_plot_html(
         title_font=dict(size=18, family="Arial", color="Black"),
     )
     # Update the top plot
-    pools = sorted({x.pool + 1 for x in wanted_primerspairs})
+    pools = sorted({x.pool for x in wanted_primerspairs})
     fig.update_yaxes(
         range=[pools[0] - 0.5, pools[-1] + 0.5],
         title="pool",
