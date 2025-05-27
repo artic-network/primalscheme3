@@ -17,8 +17,14 @@ from primalscheme3.core.config import (
 
 
 def reverse_complement(kmer_seq: str) -> str:
+    """Return the reverse complement of a DNA sequence."""
     rev_seq = kmer_seq[::-1]
-    return "".join(AMBIGUOUS_DNA_COMPLEMENT[base.upper()] for base in rev_seq)
+    return complement(rev_seq)
+
+
+def complement(seq: str) -> str:
+    """Return the complement of a DNA sequence."""
+    return "".join(AMBIGUOUS_DNA_COMPLEMENT[base.upper()] for base in seq)
 
 
 def get_most_common_base(array: np.ndarray, col_index: int) -> str:

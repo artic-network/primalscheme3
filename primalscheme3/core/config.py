@@ -50,8 +50,12 @@ class Config:
     _primer_gc_default_max: int = 55
     _primer_gc_hgc_min: int = 40
     _primer_gc_hgc_max: int = 65
+    # Thermo
     primer_tm_min: float = 59.5
     primer_tm_max: float = 62.5
+    primer_annealing_tempc = 65
+    primer_annealing_prop = None
+
     primer_hairpin_th_max: float = 47.0
     primer_homopolymer_max: int = 5
     primer_max_walk: int = 80

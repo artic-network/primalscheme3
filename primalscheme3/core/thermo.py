@@ -1,11 +1,16 @@
 from enum import Enum
 from itertools import groupby
+from math import exp, sqrt
 from typing import Iterable
 
 from primer3 import calc_hairpin as p3_calc_hairpin
+from primer3 import calc_heterodimer as p3_calc_heterodimer
 from primer3 import calc_tm as p3_calc_tm
 
 from primalscheme3.core.config import Config
+from primalscheme3.core.seq_functions import reverse_complement
+
+T_KELVIN = 273.15
 
 
 class THERMO_RESULT(Enum):
@@ -18,6 +23,39 @@ class THERMO_RESULT(Enum):
     MAX_HOMOPOLY = 5
     HAIRPIN = 6
     TO_LONG = 7
+
+
+def calc_thermo(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c):
+    """Returns ThermoResult for the kmer binding to rc of itself."""
+    return p3_calc_heterodimer(
+        seq1=kmer_seq,
+        seq2=reverse_complement(kmer_seq),
+        mv_conc=mv_conc,
+        dv_conc=dv_conc,
+        dntp_conc=dntp_conc,
+        dna_conc=dna_conc,
+        temp_c=temp_c,
+        output_structure=True,
+    )
+
+
+def calc_annealing(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c) -> float:
+    tr = calc_thermo(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c)
+    ka = exp(-tr.dg / (1.987 * (temp_c + T_KELVIN)))
+    return (1 / (1 + sqrt(1 / ((dna_conc / 4000000000.0) * ka)))) * 100
+
+
+def calc_annealing_profile(
+    kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, min_temp=40, max_temp=80
+) -> dict[int, float]:
+    tr = calc_thermo(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, 60)
+
+    results = {}
+    for temp_c in range(min_temp, max_temp + 1):
+        dg = tr.dh - (temp_c + T_KELVIN) * tr.ds
+        ka = exp(-dg / (1.987 * (temp_c + T_KELVIN)))
+        results[temp_c] = (1 / (1 + sqrt(1 / ((dna_conc / 4000000000.0) * ka)))) * 100
+    return results
 
 
 def calc_tm(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
