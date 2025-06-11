@@ -18,7 +18,10 @@ from primalscheme3.core.create_reports import generate_all_plots_html
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.primer_visual import primer_mismatch_heatmap
+from primalscheme3.core.primer_visual import (
+    plot_primer_thermo_profile_html,
+    primer_mismatch_heatmap,
+)
 from primalscheme3.core.progress_tracker import ProgressManager
 
 # Module imports
@@ -152,6 +155,7 @@ def panelcreate(
             mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
+            config=config,
         )
 
         # copy the msa into the output / work dir
@@ -266,10 +270,12 @@ def panelcreate(
                 msa_obj.digest_rs(
                     config=config,
                     indexes=(findexes, rindexes),  # type: ignore
-                    ncores=config.ncores,
                 )
             case _:
-                msa_obj.digest_rs(config=config, indexes=None, ncores=config.ncores)
+                msa_obj.digest_rs(
+                    config=config,
+                    indexes=None,
+                )
 
         # Log the digestion
         logger.info(
@@ -484,6 +490,17 @@ def panelcreate(
         outfile.write(json.dumps(config_dict, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
+
+    # Create primer thermo profiles
+    with open(OUTPUT_DIR / "work" / "primer_thermo.html", "w") as outfile:
+        outfile.write(
+            plot_primer_thermo_profile_html(
+                OUTPUT_DIR / "primer.bed",
+                config,
+                offline_plots=offline_plots,
+            )
+        )
+
     # Writing plot data
     plot_data = generate_all_plotdata(
         list(msa_dict.values()),

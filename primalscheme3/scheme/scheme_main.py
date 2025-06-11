@@ -28,7 +28,10 @@ from primalscheme3.core.mapping import (
 )
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
-from primalscheme3.core.primer_visual import primer_mismatch_heatmap
+from primalscheme3.core.primer_visual import (
+    plot_primer_thermo_profile_html,
+    primer_mismatch_heatmap,
+)
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
@@ -135,6 +138,7 @@ def schemereplace(
         mapping=config.mapping.value,
         logger=None,
         progress_manager=pm,
+        config=config,
     )
     # Check the hashes match
     with open(msa.path, "rb") as f:
@@ -171,9 +175,7 @@ def schemereplace(
 
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
-    msa.digest_rs(
-        config, (findexes, rindexes), ncores=config.ncores
-    )  ## Primer are remapped at this point.
+    msa.digest_rs(config, (findexes, rindexes))  ## Primer are remapped at this point.
     logger.info(f"Digested into {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
@@ -374,6 +376,7 @@ def schemecreate(
             mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
+            config=config,
         )
 
         # copy the msa into the output / work dir
@@ -411,7 +414,10 @@ def schemecreate(
     # Read in all MSAs before digestion
     for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
-        msa_obj.digest_rs(config, None, ncores=config.ncores)  # Default to one core
+        msa_obj.digest_rs(
+            config,
+            None,
+        )  # Default to one core
         logger.info(
             f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
             f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
@@ -633,6 +639,17 @@ def schemecreate(
         outfile.write(json.dumps(qc_data, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
+
+    # Create primer thermo profiles
+    with open(OUTPUT_DIR / "work" / "primer_thermo.html", "w") as outfile:
+        outfile.write(
+            plot_primer_thermo_profile_html(
+                OUTPUT_DIR / "primer.bed",
+                config,
+                offline_plots=offline_plots,
+            )
+        )
+
     # Writing plot data
     plot_data = generate_all_plotdata(
         list(msa_dict.values()),
