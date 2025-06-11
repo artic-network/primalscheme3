@@ -54,7 +54,9 @@ class Config:
     primer_tm_min: float = 59.5
     primer_tm_max: float = 62.5
     primer_annealing_tempc = 65
-    primer_annealing_prop = None
+    primer_annealing_prop: float | None = None
+    _primer_annealing_prop_default = 10
+    use_annealing: bool = False
 
     primer_hairpin_th_max: float = 47.0
     primer_homopolymer_max: int = 5
@@ -91,6 +93,9 @@ class Config:
             self.primer_gc_max = self._primer_gc_default_max
         # Set MisMatch Kmer Size
         self.mismatch_kmersize = self.primer_size_min
+        # Set annealing
+        if self.use_annealing:
+            self.primer_annealing_prop = self._primer_annealing_prop_default
 
     def items(self) -> dict[str, Any]:
         """

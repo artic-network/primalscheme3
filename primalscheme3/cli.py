@@ -150,7 +150,8 @@ def scheme_create(
     offline_plots: Annotated[
         bool,
         typer.Option(
-            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+            "--offline-plots/--online-plots",
+            help="Offline plots includes 3Mb of dependencies, so they can be viewed offline",
         ),
     ] = True,
     use_matchdb: Annotated[
@@ -163,6 +164,13 @@ def scheme_create(
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),
     ] = Config.ncores,
+    use_annealing: Annotated[
+        bool,
+        typer.Option(
+            "--use-annealing/--use-tm",
+            help="Using annealing proportion rather than Tm to calculate primers",
+        ),
+    ] = Config.use_annealing,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -324,7 +332,8 @@ def panel_create(
     offline_plots: Annotated[
         bool,
         typer.Option(
-            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+            "--offline-plots/--online-plots",
+            help="Offline plots includes 3Mb of dependencies, so they can be viewed offline",
         ),
     ] = True,
     use_matchdb: Annotated[
@@ -337,6 +346,13 @@ def panel_create(
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),
     ] = Config.ncores,
+    use_annealing: Annotated[
+        bool,
+        typer.Option(
+            "--use-annealing/--use-tm",
+            help="Using annealing proportion rather than Tm to calculate primers",
+        ),
+    ] = Config.use_annealing,
 ):
     """
     Creates a primer panel

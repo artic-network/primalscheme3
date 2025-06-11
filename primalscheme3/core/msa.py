@@ -4,9 +4,9 @@ from uuid import uuid4
 import dnaio
 import numpy as np
 from primalschemers._core import (
+    Digester,  # type: ignore
     FKmer,  # type: ignore
     RKmer,  # type: ignore
-    digest_seq,  # type: ignore
 )
 
 from primalscheme3.core.classes import PrimerPair
@@ -117,6 +117,9 @@ class MSA:
     rkmers: list[RKmer]
     primerpairs: list[PrimerPair]
 
+    # Rust Nonsense
+    _digester: Digester
+
     def __init__(
         self,
         name: str,
@@ -124,6 +127,7 @@ class MSA:
         msa_index: int,
         mapping: str,
         progress_manager,
+        config: Config,
         logger=None,
     ) -> None:
         self.name = name
@@ -136,6 +140,13 @@ class MSA:
         self.primerpairs = []
         self.fkmers = []
         self.rkmers = []
+
+        # digester
+        self._digester = Digester(
+            msa_path=str(path.absolute()),
+            ncores=config.ncores,
+            remap=config.mapping == MappingType.FIRST,
+        )
 
         # Read in the MSA
         try:
@@ -188,27 +199,26 @@ class MSA:
         self,
         config: Config,
         indexes: tuple[list[int], list[int]] | None = None,  # type: ignore
-        ncores: int = 1,
     ) -> None:
         if indexes is None:
             indexes: tuple[None, None] = (None, None)
 
-        self.fkmers, self.rkmers, logs = digest_seq(
-            self.path,
-            ncores,
-            config.mapping == MappingType.FIRST,  # only remap if asked for
-            indexes[0],
-            indexes[1],
-            config.primer_size_min,
-            config.primer_size_max,
-            config.primer_gc_max / 100,
-            config.primer_gc_min / 100,
-            config.primer_tm_max,
-            config.primer_tm_min,
-            config.primer_max_walk,
-            config.primer_homopolymer_max,
-            config.min_base_freq,
-            config.ignore_n,
+        self.fkmers, self.rkmers, logs = self._digester.digest(
+            findexes=indexes[0],
+            rindexes=indexes[1],
+            primer_len_min=config.primer_size_min,
+            primer_len_max=config.primer_size_max,
+            primer_gc_max=config.primer_gc_max / 100,
+            primer_gc_min=config.primer_gc_min / 100,
+            primer_tm_max=config.primer_tm_max,
+            primer_tm_min=config.primer_tm_min,
+            primer_annealing_prop=config.primer_annealing_prop,  # if None will use TM
+            annealing_temp_c=config.primer_annealing_tempc,
+            max_walk=config.primer_max_walk,
+            max_homopolymers=config.primer_homopolymer_max,
+            min_freq=config.min_base_freq,
+            ignore_n=config.ignore_n,
+            dimerscore=config.dimer_score,
         )
 
         # Log
@@ -221,6 +231,25 @@ class MSA:
         ## Hairpin check the kmers
         self.fkmers = [x for x in self.fkmers if not forms_hairpin(x.seqs(), config)]
         self.rkmers = [x for x in self.rkmers if not forms_hairpin(x.seqs(), config)]
+
+    #    def digest_f_to_count(self, config: Config, findexes: list[int] | None = None):
+    #        counts = self._digester.digest_f_to_count(
+    #            findexes=findexes,
+    #            primer_len_min=config.primer_size_min,
+    #            primer_len_max=config.primer_size_max,
+    #            primer_gc_max=config.primer_gc_max / 100,
+    #            primer_gc_min=config.primer_gc_min / 100,
+    #            primer_tm_max=config.primer_tm_max,
+    #            primer_tm_min=config.primer_tm_min,
+    #            primer_annealing_prop=config.primer_annealing_prop,  # if None will use TM
+    #            annealing_temp_c=config.primer_annealing_tempc,
+    #            max_walk=config.primer_max_walk,
+    #            max_homopolymers=config.primer_homopolymer_max,
+    #            min_freq=config.min_base_freq,
+    #            ignore_n=config.ignore_n,
+    #            dimerscore=config.dimer_score,
+    #        )
+    #        return counts
 
     def digest(
         self,
