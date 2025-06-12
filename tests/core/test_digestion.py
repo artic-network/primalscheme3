@@ -157,8 +157,8 @@ class Test_WalkLeft(unittest.TestCase):
             array_list.append([x for x in seq])
 
         msa_array = np.array(array_list)
-        right = 60
-        left = 60 - 15
+        right = 65
+        left = right - 10
         result = walk_left(
             msa_array,
             right,
@@ -168,7 +168,7 @@ class Test_WalkLeft(unittest.TestCase):
             self.config,
         )
 
-        expected = ["CCAATGGTGCAAAAGGTACAATCATTAAT", "GTCCAATGGTGCAAAAGGTATAATCATTAAT"]
+        expected = ["CAATGGTGCAAAAGGTATAATCATTAATGT", "TGGTGCAAAAGGTACAATCATTAATGT"]
 
         # Ensure both a sorted
         result = [x for x in result]  # type: ignore
@@ -188,8 +188,8 @@ class Test_WalkLeft(unittest.TestCase):
             array_list.append([x for x in seq])
 
         msa_array = np.array(array_list)
-        right = 60
-        left = 60 - 15
+        right = 65
+        left = right - 10
 
         result = wrap_walk(
             walk_left,
@@ -304,7 +304,7 @@ class Test_WalkRight(unittest.TestCase):
             self.config,
         )
 
-        expected = ["TCCAATGGTGCAAAAGGTACAATCA", "TCCAATGGTGCAAAAGGTATAATCATTAATG"]
+        expected = ["TCCAATGGTGCAAAAGGTACAATC", "TCCAATGGTGCAAAAGGTATAATCAT"]
 
         # Ensure both a sorted
         result = [x for x in result]
@@ -378,7 +378,7 @@ class Test_WalkRight(unittest.TestCase):
             )
         )
 
-        expected = [ContainsInvalidBase(), "TCCAATGGTGCAAAAGGTAAAAATCATTAA"]
+        expected = [ContainsInvalidBase(), "TCCAATGGTGCAAAAGGTAAAAATCA"]
         self.assertEqual(result, expected)
 
     def test_walk_left_outsidearray(self):
@@ -429,7 +429,7 @@ class Test_MPRDigest(unittest.TestCase):
         result = r_digest_index(self.create_array(seqs), self.config, 20, 0)
 
         # The Expected Sequence
-        expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
+        expected = ["CTTTTGCACCATTGGACATTAATGAT"]
 
         self.assertEqual(result.seqs(), expected)  # type: ignore
 
@@ -458,7 +458,7 @@ class Test_MPRDigest(unittest.TestCase):
         result = r_digest_index(self.create_array(seqs), self.config, 20, 0.5)
 
         # The Expected Sequence
-        expected = ["ACCTTTTGCACCATTGGACATTAATGAT"]
+        expected = ["CTTTTGCACCATTGGACATTAATGAT"]
 
         self.assertEqual(result.seqs(), expected)  # type: ignore
 
@@ -533,7 +533,7 @@ class Test_MPFDigest(unittest.TestCase):
         result = f_digest_index(self.create_array(seqs), self.config, 40, 0)
 
         # The Expected Sequence
-        expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
+        expected = ["AAAAGGTATAATCATTAATGTCCAATGGTG"]
 
         self.assertEqual(result.seqs(), expected)  # type: ignore
 
@@ -561,7 +561,7 @@ class Test_MPFDigest(unittest.TestCase):
         result = f_digest_index(self.create_array(seqs), self.config, 40, 0.5)
 
         # The Expected Sequence
-        expected = ["GCAAAAGGTATAATCATTAATGTCCAATGGTG"]
+        expected = ["AAAAGGTATAATCATTAATGTCCAATGGTG"]
 
         self.assertEqual(result.seqs(), expected)  # type: ignore
 
@@ -643,7 +643,7 @@ class TestDigest(unittest.TestCase):
             indexes=([60], [1]),
             progress_manager=PM(),
         )
-        expected_fkmer = FKmer([b"GTCCAATGGTGCAAAAGGTATAATCATTAAT"], 60)
+        expected_fkmer = FKmer([b"CCAATGGTGCAAAAGGTATAATCATTAAT"], 60)
 
         fkmer = results[0][0]
         self.assertEqual(fkmer.seqs(), expected_fkmer.seqs())
@@ -665,7 +665,7 @@ class TestDigest(unittest.TestCase):
             indexes=([1], [25]),
             progress_manager=PM(),
         )
-        expected_rkmer = RKmer([b"TGATTATACCTTTTGCACCATTGGACATTA"], 25)
+        expected_rkmer = RKmer([b"ATACCTTTTGCACCATTGGACATTA"], 25)
 
         rkmer = results[1][0]
 

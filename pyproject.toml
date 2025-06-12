@@ -9,7 +9,7 @@ repository = "https://github.com/artic-network/primalscheme3"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-primer3-py = "^1.2.2"
+primer3-py = "^2.2.0"
 numpy = "^1.24.2"
 networkx = "^3.1"
 kaleido = "0.2.1"
