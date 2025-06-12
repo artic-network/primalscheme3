@@ -14,7 +14,14 @@ class Test_MappingIntergration(unittest.TestCase):
         """
         Test that a msa can be created
         """
-        msa = MSA("test_mapping", self.input_path, 0, "first", progress_manager=PM())
+        msa = MSA(
+            "test_mapping",
+            self.input_path,
+            0,
+            "first",
+            progress_manager=PM(),
+            config=self.config,
+        )
         msa.digest_rs(config=self.config)
 
         self.assertIsNotNone(msa._mapping_array)

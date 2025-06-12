@@ -25,7 +25,7 @@ class TestMultiplex(unittest.TestCase):
     config.n_pools = 2
 
     # Create an MSA object
-    msa = MSA("test", inputfile_path, 0, "first", None)
+    msa = MSA("test", inputfile_path, 0, "first", None, config)
 
     def test_next_pool_2_pool(self):
         """

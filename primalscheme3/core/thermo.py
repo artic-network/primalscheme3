@@ -1,7 +1,7 @@
+from collections.abc import Iterable
 from enum import Enum
 from itertools import groupby
 from math import exp, sqrt
-from typing import Iterable
 
 from primer3 import calc_hairpin as p3_calc_hairpin
 from primer3 import calc_heterodimer as p3_calc_heterodimer

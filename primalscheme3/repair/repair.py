@@ -164,6 +164,7 @@ def repair(
         mapping=base_cfg["mapping"],
         logger=logger,
         progress_manager=pm,
+        config=config,
     )
     logger.info(
         f"Read in MSA: [blue]{msa_path.name}[/blue] ({msa_obj._chrom_name})\t"

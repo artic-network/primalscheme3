@@ -1,6 +1,7 @@
 import pathlib
 import unittest
 
+from primalscheme3.core.config import Config
 from primalscheme3.core.errors import (
     MSAFileInvalid,
     MSAFileInvalidBase,
@@ -12,11 +13,12 @@ from primalscheme3.core.progress_tracker import ProgressManager
 
 class TestMSA(unittest.TestCase):
     msa_path = pathlib.Path("tests/test_data/test_msa/test_msa_valid.fasta").absolute()
+    config = Config()
 
     def test_create_msa(self):
         # Should not raise anything
         pm = ProgressManager()
-        _ = MSA("test", self.msa_path, 0, "first", pm)
+        _ = MSA("test", self.msa_path, 0, "first", pm, config=self.config)
 
 
 class TestParseMSA(unittest.TestCase):

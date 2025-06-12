@@ -2,7 +2,7 @@
 import pathlib
 
 from primalbedtools.bedfiles import BedLineParser
-from primaldimer_py import (
+from primalschemers._core import (
     calc_at_offset_py,  # type: ignore
 )
 

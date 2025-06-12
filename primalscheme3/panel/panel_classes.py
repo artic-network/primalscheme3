@@ -173,6 +173,7 @@ class PanelMSA(MSA):
         msa_index: int,
         mapping: str,
         progress_manager: ProgressManager,
+        config: Config,
         logger=None,
     ) -> None:
         # Call the MSA init
@@ -183,6 +184,7 @@ class PanelMSA(MSA):
             mapping=mapping,
             logger=logger,
             progress_manager=progress_manager,
+            config=config,
         )
 
         # Create the primerpairpointer
