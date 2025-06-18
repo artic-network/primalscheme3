@@ -150,7 +150,8 @@ def scheme_create(
     offline_plots: Annotated[
         bool,
         typer.Option(
-            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+            "--offline-plots/--online-plots",
+            help="Offline plots includes 3Mb of dependencies, so they can be viewed offline",
         ),
     ] = True,
     use_matchdb: Annotated[
@@ -163,6 +164,13 @@ def scheme_create(
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),
     ] = Config.ncores,
+    use_annealing: Annotated[
+        bool,
+        typer.Option(
+            "--use-annealing/--use-tm",
+            help="Using annealing proportion rather than Tm to calculate primers",
+        ),
+    ] = Config.use_annealing,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -324,7 +332,8 @@ def panel_create(
     offline_plots: Annotated[
         bool,
         typer.Option(
-            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+            "--offline-plots/--online-plots",
+            help="Offline plots includes 3Mb of dependencies, so they can be viewed offline",
         ),
     ] = True,
     use_matchdb: Annotated[
@@ -337,6 +346,13 @@ def panel_create(
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),
     ] = Config.ncores,
+    use_annealing: Annotated[
+        bool,
+        typer.Option(
+            "--use-annealing/--use-tm",
+            help="Using annealing proportion rather than Tm to calculate primers",
+        ),
+    ] = Config.use_annealing,
 ):
     """
     Creates a primer panel
@@ -526,13 +542,23 @@ def visualise_bedfile(
     """
     Visualise the bedfile
     """
-    from Bio import SeqIO
+    import dnaio
 
-    ref_file = SeqIO.index(ref_path, "fasta")
-    ref_genome = ref_file.get(ref_id)
+    refs = []
+    ref_genome: str | None = None
+
+    # Find the wanted file
+    with dnaio.open(ref_path, mode="r") as ref_file:
+        for record in ref_file:
+            refs.append(record.id)
+
+            # See if wanted genome
+            if record.id == ref_id:
+                ref_genome = record.sequence
+
     if ref_genome is None:
         raise typer.BadParameter(
-            f"Reference genome ID '{ref_id}' not found in '{ref_path}'"
+            f"Reference genome ID '{ref_id}' not found in '{ref_path}'. Options: {', '.join(refs)}"
         )
 
     with open(output, "w") as outfile:

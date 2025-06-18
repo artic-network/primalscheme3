@@ -5,11 +5,11 @@ from collections import Counter
 from enum import Enum
 from time import sleep
 
-from Bio import Seq, SeqIO, SeqRecord
+import dnaio
 from click import UsageError
 
 # Interaction checker
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primalschemers._core import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
@@ -28,7 +28,10 @@ from primalscheme3.core.mapping import (
 )
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
-from primalscheme3.core.primer_visual import primer_mismatch_heatmap
+from primalscheme3.core.primer_visual import (
+    plot_primer_thermo_profile_html,
+    primer_mismatch_heatmap,
+)
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
@@ -135,6 +138,7 @@ def schemereplace(
         mapping=config.mapping.value,
         logger=None,
         progress_manager=pm,
+        config=config,
     )
     # Check the hashes match
     with open(msa.path, "rb") as f:
@@ -171,9 +175,7 @@ def schemereplace(
 
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
-    msa.digest_rs(
-        config, (findexes, rindexes), ncores=config.ncores
-    )  ## Primer are remapped at this point.
+    msa.digest_rs(config, (findexes, rindexes))  ## Primer are remapped at this point.
     logger.info(f"Digested into {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
@@ -228,8 +230,8 @@ def schemereplace(
 
     # Find all primerpairs that in the same pool as the wanted primer
     same_pool_primerpairs = [x for x in bedprimerpairs if x.pool == wanted_pp.pool]
-    seqs_in_same_pool = [
-        seq for seq in (x.all_seqs() for x in same_pool_primerpairs) for seq in seq
+    seqs_bytes_in_same_pool = [
+        seq for seq in (x.all_seq_bytes() for x in same_pool_primerpairs) for seq in seq
     ]
 
     # Find all primerpairs that in the same pool and same msa as the wanted primer
@@ -270,8 +272,8 @@ def schemereplace(
 
         # If they dont overlap
         # Check for interactions
-        if do_pools_interact_py(
-            pos_primerpair.all_seqs(), seqs_in_same_pool, config.dimer_score
+        if do_pool_interact(
+            pos_primerpair.all_seq_bytes(), seqs_bytes_in_same_pool, config.dimer_score
         ):
             result_counter.update([ReplaceErrors.InteractWithPool])
             continue
@@ -374,6 +376,7 @@ def schemecreate(
             mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
+            config=config,
         )
 
         # copy the msa into the output / work dir
@@ -411,7 +414,10 @@ def schemecreate(
     # Read in all MSAs before digestion
     for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
-        msa_obj.digest_rs(config, None, ncores=config.ncores)  # Default to one core
+        msa_obj.digest_rs(
+            config,
+            None,
+        )  # Default to one core
         logger.info(
             f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
             f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
@@ -582,8 +588,9 @@ def schemecreate(
     upload_pt.manual_update(n=2, update=True)
 
     # Write all the consensus sequences to a single file
-    with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
-        reference_records = []
+    with dnaio.FastaWriter(
+        OUTPUT_DIR / "reference.fasta", line_length=60
+    ) as reference_outfile:
         for msa_obj in msa_dict.values():
             if config.mapping == MappingType.FIRST:
                 seq_str = generate_reference(msa_obj.array)
@@ -592,14 +599,10 @@ def schemecreate(
             else:
                 raise ValueError("Mapping must be 'first' or 'consensus'")
 
-            reference_records.append(
-                SeqRecord.SeqRecord(
-                    seq=Seq.Seq(seq_str),
-                    id=msa_obj._chrom_name,
-                )
+            reference_outfile.write(
+                dnaio.SequenceRecord(name=msa_obj._chrom_name, sequence=seq_str)
             )
 
-        SeqIO.write(reference_records, reference_outfile, "fasta")
     upload_pt.manual_update(n=3, update=True)
 
     # Create all hashes
@@ -636,6 +639,17 @@ def schemecreate(
         outfile.write(json.dumps(qc_data, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
+
+    # Create primer thermo profiles
+    with open(OUTPUT_DIR / "work" / "primer_thermo.html", "w") as outfile:
+        outfile.write(
+            plot_primer_thermo_profile_html(
+                OUTPUT_DIR / "primer.bed",
+                config,
+                offline_plots=offline_plots,
+            )
+        )
+
     # Writing plot data
     plot_data = generate_all_plotdata(
         list(msa_dict.values()),
@@ -652,15 +666,21 @@ def schemecreate(
     upload_pt.manual_update(n=6, update=True)
     with open(OUTPUT_DIR / "primer.html", "w") as outfile:
         for i, msa_obj in enumerate(msa_dict.values()):
-            outfile.write(
-                primer_mismatch_heatmap(
-                    array=msa_obj.array,
-                    seqdict=msa_obj._seq_dict,
-                    bedfile=OUTPUT_DIR / "primer.bed",
-                    offline_plots=True if offline_plots and i == 0 else False,
-                    mapping=config.mapping,
+            try:
+                outfile.write(
+                    primer_mismatch_heatmap(
+                        array=msa_obj.array,
+                        seqdict=msa_obj._seq_dict,
+                        bedfile=OUTPUT_DIR / "primer.bed",
+                        offline_plots=True if offline_plots and i == 0 else False,
+                        mapping=config.mapping,
+                    )
                 )
-            )
+            except UsageError:
+                logger.warning(
+                    f"No Primers found for {msa_obj._chrom_name}. Skipping Plot!"
+                )
+
     upload_pt.manual_update(n=7, update=True)
 
     # Close the progress tracker

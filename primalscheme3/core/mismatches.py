@@ -6,7 +6,7 @@ except ImportError:
 
 from typing import Iterable
 
-from Bio import SeqIO
+import dnaio
 
 # Module imports
 from primalscheme3.core.seq_functions import expand_ambs, reverse_complement
@@ -31,12 +31,13 @@ class MatchDB:
 
         # Read in and digest each MSA
         for msa_index, msa_path in enumerate(msas_paths):
-            records = SeqIO.parse(msa_path, "fasta")
-            # For each sequence in the MSA
-            for record in records:
-                self._digest_kmers_into_db(
-                    str(record.seq.upper()), kmer_size, msa_index
-                )
+            with dnaio.open(msa_path) as file:
+                # For each sequence in the MSA
+                for entry in file:
+                    if entry.sequence is not None:
+                        self._digest_kmers_into_db(
+                            entry.sequence.upper(), kmer_size, msa_index
+                        )
 
     def _write_unique(self, sequence, match: tuple[int, int]):
         """This will only write unqiue values to the db"""

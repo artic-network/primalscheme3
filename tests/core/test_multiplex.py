@@ -25,7 +25,7 @@ class TestMultiplex(unittest.TestCase):
     config.n_pools = 2
 
     # Create an MSA object
-    msa = MSA("test", inputfile_path, 0, "first", None)
+    msa = MSA("test", inputfile_path, 0, "first", None, config)
 
     def test_next_pool_2_pool(self):
         """
@@ -378,9 +378,7 @@ class TestMultiplex(unittest.TestCase):
         )
 
         # Check a primerpair with a different msa_index can be added
-        primerpair2 = PrimerPair(
-            FKmer([self.nCoV_2019_18_LEFT_0.encode()], 50), RKmer([b"TA"], 100), 1
-        )
+        primerpair2 = PrimerPair(FKmer([b"TA"], 50), RKmer([b"TA"], 100), 1)
         self.assertEqual(
             multiplex.check_primerpair_can_be_added(primerpair2, pool),
             PrimerPairCheck.OK,

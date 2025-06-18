@@ -115,6 +115,9 @@ class PrimerPair:
     def all_seqs(self) -> list[str]:
         return self.fprimer.seqs() + self.rprimer.seqs()
 
+    def all_seq_bytes(self) -> list[bytes]:
+        return self.fprimer.seqs_bytes() + self.rprimer.seqs_bytes()
+
     def calc_tm(self, config: Config) -> list[float]:
         """
         Calculates the tm for all primers in the PrimerPair

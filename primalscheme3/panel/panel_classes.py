@@ -173,6 +173,7 @@ class PanelMSA(MSA):
         msa_index: int,
         mapping: str,
         progress_manager: ProgressManager,
+        config: Config,
         logger=None,
     ) -> None:
         # Call the MSA init
@@ -183,6 +184,7 @@ class PanelMSA(MSA):
             mapping=mapping,
             logger=logger,
             progress_manager=progress_manager,
+            config=config,
         )
 
         # Create the primerpairpointer
@@ -305,7 +307,7 @@ class Panel(Multiplex):
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
     config: Config
-    _msa_dict: dict[int, PanelMSA]
+    _msa_dict: dict[int, PanelMSA]  # type: ignore
 
     # New attributes
     _current_msa_index: int
@@ -375,7 +377,7 @@ class Panel(Multiplex):
         seqs_in_each_pool = {
             pos_pool: [
                 seq
-                for seq in (pp.all_seqs() for pp in self._pools[pos_pool])
+                for seq in (pp.all_seq_bytes() for pp in self._pools[pos_pool])
                 for seq in seq
             ]
             for pos_pool in pos_pools_indexes

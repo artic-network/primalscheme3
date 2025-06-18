@@ -2,7 +2,7 @@ import pathlib
 import tempfile
 import unittest
 
-from Bio import SeqIO
+import dnaio
 
 from primalscheme3.core.config import MappingType
 from primalscheme3.core.msa import parse_msa
@@ -75,7 +75,10 @@ class TestPrimerVisualisation(unittest.TestCase):
         bedfile = pathlib.Path("tests/test_data/test_scheme/primer.bed")
         msa = pathlib.Path("tests/test_data/test_scheme/reference.fasta")
 
-        ref = SeqIO.read(msa, "fasta")
+        with dnaio.open(msa) as file:
+            for record in file:
+                ref_id = record.id
+                ref_sequence = record.sequence
 
         with tempfile.TemporaryDirectory(
             dir="tests/integration", suffix="-test-plot"
@@ -87,7 +90,9 @@ class TestPrimerVisualisation(unittest.TestCase):
             with open(out_path, "w") as outfile:
                 outfile.write(
                     bedfile_plot_html(
-                        bedfile=bedfile, ref_name=ref.id, ref_seq=str(ref.seq)
+                        bedfile=bedfile,
+                        ref_name=ref_id,  # type: ignore
+                        ref_seq=ref_sequence,  # type: ignore
                     )
                 )
 

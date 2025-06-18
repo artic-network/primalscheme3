@@ -1,6 +1,6 @@
 import unittest
 
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primalschemers._core import do_pool_interact  # type: ignore
 
 
 class TestDoPoolsInteract(unittest.TestCase):
@@ -12,9 +12,9 @@ class TestDoPoolsInteract(unittest.TestCase):
         """
         dimerscore = -26
 
-        pool1 = ["TGGAAATACCCACAAGTTAATGGTTTAAC"]
-        pool2 = ["ACACCTGTGCCTGTTAAACCAT"]
-        self.assertTrue(do_pools_interact_py(pool1, pool2, dimerscore))
+        pool1 = [b"TGGAAATACCCACAAGTTAATGGTTTAAC"]
+        pool2 = [b"ACACCTGTGCCTGTTAAACCAT"]
+        self.assertTrue(do_pool_interact(pool1, pool2, dimerscore))
 
     def test_not_do_pools_interact_py(self):
         """
@@ -23,9 +23,9 @@ class TestDoPoolsInteract(unittest.TestCase):
         """
         dimerscore = -26
 
-        pool1 = ["AGCGTGGTTATTGGATGGGTTTG"]
-        pool2 = ["AGCAAATCTTTACTAAAAAAAATTTACCTT"]
-        self.assertFalse(do_pools_interact_py(pool1, pool2, dimerscore))
+        pool1 = [b"AGCGTGGTTATTGGATGGGTTTG"]
+        pool2 = [b"AGCAAATCTTTACTAAAAAAAATTTACCTT"]
+        self.assertFalse(do_pool_interact(pool1, pool2, dimerscore))
 
     def test_pool_do_pools_interact_py(self):
         """
@@ -34,9 +34,9 @@ class TestDoPoolsInteract(unittest.TestCase):
         """
         dimerscore = -26
 
-        pool1 = ["AGCGTGGTTATTGGATGGGTTTG", "TGGAAATACCCACAAGTTAATGGTTTAAC"]
-        pool2 = ["AGCAAATCTTTACTAAAAAAAATTTACCTT", "ACACCTGTGCCTGTTAAACCAT"]
-        self.assertTrue(do_pools_interact_py(pool1, pool2, dimerscore))
+        pool1 = [b"AGCGTGGTTATTGGATGGGTTTG", b"TGGAAATACCCACAAGTTAATGGTTTAAC"]
+        pool2 = [b"AGCAAATCTTTACTAAAAAAAATTTACCTT", b"ACACCTGTGCCTGTTAAACCAT"]
+        self.assertTrue(do_pool_interact(pool1, pool2, dimerscore))
 
 
 if __name__ == "__main__":

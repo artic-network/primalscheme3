@@ -9,7 +9,7 @@ import numpy as np
 from primalschemers._core import FKmer, RKmer, do_pool_interact  # type: ignore
 
 from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.config import Config
+from primalscheme3.core.config import ALL_BASES, AMB_BASES, Config
 from primalscheme3.core.errors import (
     ERROR_SET,
     ContainsInvalidBase,
@@ -401,24 +401,43 @@ def r_digest_to_result(
         ]
         start_seq = "".join(start_array).replace("-", "")
 
-        # Prevent Ns from being added
-        if "N" in start_seq:
-            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
-            continue
-
         if not start_seq:  # If the start seq is empty go to the next row
             continue
 
-        # Get all sequences
-        results = wrap_walk(
-            walk_right,
-            array=align_array,
-            col_index_right=start_col + config.primer_size_min,
-            col_index_left=start_col,
-            row_index=row_index,
-            seq_str=start_seq,
-            config=config,
-        )
+        start_seq_bases = set(start_seq)
+
+        # Prevent Ns from being added
+        if "N" in start_seq_bases:
+            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
+            continue
+
+        # Check for Non DNA bases
+        if start_seq_bases - ALL_BASES:
+            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
+            continue
+
+        # expand any ambs
+        if AMB_BASES & start_seq_bases:
+            expanded_start_seq = expand_ambs([start_seq])
+            assert expanded_start_seq is not None
+        else:
+            expanded_start_seq = [start_seq]
+
+        results = []
+        for start_seq in expanded_start_seq:
+            # Get all sequences
+            results.extend(
+                wrap_walk(
+                    walk_right,
+                    array=align_array,
+                    col_index_right=start_col + config.primer_size_min,
+                    col_index_left=start_col,
+                    row_index=row_index,
+                    seq_str=start_seq,
+                    config=config,
+                )
+            )
+
         # If all mutations matter, return on any Error
         if min_freq == 0 and set(results) & ERROR_SET:
             return (
@@ -581,23 +600,41 @@ def f_digest_to_result(
             align_array[row_index, end_col - config.primer_size_min : end_col]
         ).replace("-", "")
 
-        # Prevent Ns from being added
-        if "N" in start_seq:
-            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
-            continue
-
         if not start_seq:  # If the start seq is empty go to the next row
             continue
 
-        results = wrap_walk(
-            walk_left,
-            array=align_array,
-            col_index_right=end_col,
-            col_index_left=end_col - config.primer_size_min,
-            row_index=row_index,
-            seq_str=start_seq,
-            config=config,
-        )
+        start_seq_bases = set(start_seq)
+
+        # Prevent Ns from being added
+        if "N" in start_seq_bases:
+            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
+            continue
+
+        # Check for Non DNA bases
+        if start_seq_bases - ALL_BASES:
+            total_col_seqs.update([DIGESTION_ERROR.CONTAINS_INVALID_BASE])
+            continue
+
+        # expand any ambs
+        if AMB_BASES & start_seq_bases:
+            expanded_start_seq = expand_ambs([start_seq])
+            assert expanded_start_seq is not None
+        else:
+            expanded_start_seq = [start_seq]
+
+        results = []
+        for start_seq in expanded_start_seq:
+            results.extend(
+                wrap_walk(
+                    walk_left,
+                    array=align_array,
+                    col_index_right=end_col,
+                    col_index_left=end_col - config.primer_size_min,
+                    row_index=row_index,
+                    seq_str=start_seq,
+                    config=config,
+                )
+            )
         # Early return if all errors matter
         if min_freq == 0 and set(results) & ERROR_SET:
             return (

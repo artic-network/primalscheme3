@@ -5,7 +5,7 @@ import shutil
 from enum import Enum
 
 from click import UsageError
-from primaldimer_py import do_pools_interact_py  # type: ignore
+from primalschemers._core import do_pool_interact  # type: ignore
 
 # Core imports
 from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
@@ -62,7 +62,7 @@ def detect_early_return(seq_counts: list[DIGESTION_RESULT]) -> bool:
 def report_check(
     seqstatus: DIGESTION_RESULT,
     current_primer_seqs: set[str],
-    seqs_in_pools: list[list[str]],
+    seqs_bytes_in_pools: list[list[str]],
     pool: int,
     dimerscore: float,
     logger,
@@ -100,7 +100,11 @@ def report_check(
         return False
 
     # Check for dimer with pool
-    if do_pools_interact_py([seqstatus.seq], seqs_in_pools[pool], dimerscore):
+    if do_pool_interact(
+        [seqstatus.seq.encode()],  # type: ignore
+        seqs_bytes_in_pools[pool],
+        dimerscore,
+    ):
         logger.warning(
             f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
         )
@@ -160,6 +164,7 @@ def repair(
         mapping=base_cfg["mapping"],
         logger=logger,
         progress_manager=pm,
+        config=config,
     )
     logger.info(
         f"Read in MSA: [blue]{msa_path.name}[/blue] ({msa_obj._chrom_name})\t"
@@ -210,9 +215,11 @@ def repair(
         )
 
     # Get all the seqs in each pool
-    seqs_in_pools = [[] for _ in range(config.n_pools)]
+    seqs_bytes_in_pools = [[] for _ in range(config.n_pools)]
     for pp in primerpairs_in_msa:
-        seqs_in_pools[pp.pool].extend([*pp.fprimer.seqs(), *pp.rprimer.seqs()])
+        seqs_bytes_in_pools[pp.pool].extend(
+            [*pp.fprimer.seq_bytes(), *pp.rprimer.seq_bytes()]
+        )
 
     # Find the indexes in the MSA that the primerbed refer to
     assert msa_obj._mapping_array is not None
@@ -250,8 +257,8 @@ def repair(
         for seqstatus in seqstatuss:
             if not report_check(
                 seqstatus=seqstatus,
-                current_primer_seqs=pp.fprimer.seqs(),
-                seqs_in_pools=seqs_in_pools,
+                current_primer_seqs=pp.fprimer.seqs_bytes(),
+                seqs_bytes_in_pools=seqs_bytes_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,
                 logger=logger,
@@ -260,7 +267,7 @@ def repair(
                 continue
 
             # Add the new seq
-            seqs_in_pools[pp.pool].append(seqstatus.seq)
+            seqs_bytes_in_pools[pp.pool].append(seqstatus.seq.encode())  # type: ignore
 
         # Handle the right primer
         logger.info(
@@ -292,8 +299,8 @@ def repair(
         for rseqstatus in rseq_counts:
             if not report_check(
                 seqstatus=rseqstatus,
-                current_primer_seqs=pp.rprimer.seqs(),
-                seqs_in_pools=seqs_in_pools,
+                current_primer_seqs=pp.rprimer.seq_bytes(),
+                seqs_bytes_in_pools=seqs_bytes_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,
                 logger=logger,
@@ -302,7 +309,7 @@ def repair(
                 continue
 
             # Add the new seq
-            seqs_in_pools[pp.pool].append(rseqstatus.seq)
+            seqs_bytes_in_pools[pp.pool].append(rseqstatus.seq.encode())  # type: ignore
 
     # Write out the new bedfile
     with open(OUTPUT_DIR / "primer.bed", "w") as f:
