@@ -9,7 +9,11 @@ import dnaio
 from click import UsageError
 
 # Interaction checker
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalschemers._core import (
+    FKmer,  # type: ignore
+    RKmer,  # type: ignore
+    do_pool_interact,  # type: ignore
+)
 
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
@@ -433,6 +437,18 @@ def schemecreate(
             )
             continue
 
+            ## Add the hardcoded tuni primers
+        tuni_f = FKmer(
+            seqs=[b"GTTACGCGCCAGCAAAAGCAGG", b"GTTACGCGCCAGCGAAAGCAGG"], end=12
+        )
+        msa_obj.fkmers.insert(0, tuni_f)
+
+        tuni_r = RKmer(
+            seqs=[b"GTTACGCGCCAGTAGAAACAAGG"],
+            start=max(msa_obj._ref_to_msa.keys()) - 12,
+        )
+        msa_obj.rkmers.append(tuni_r)
+
         # Generate all primerpairs then interaction check
         msa_obj.generate_primerpairs(
             amplicon_size_max=config.amplicon_size_max,
@@ -480,7 +496,10 @@ def schemecreate(
     for msa_index, msa_obj in msa_dict.items():
         # Set up the pm for the MSA
         scheme_pt = pm.create_sub_progress(
-            iter=None, chrom=msa_obj.name, process="Creating Scheme", leave=False
+            iter=None,
+            chrom=msa_obj.name,
+            process="Creating Scheme",
+            disable=True,  # Disable tqdm display to prevent collision with logger
         )
         scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
 

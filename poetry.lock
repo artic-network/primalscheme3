@@ -344,14 +344,14 @@ rapidfuzz = ">=3.0.0,<4.0.0"
 
 [[package]]
 name = "click"
-version = "8.2.1"
+version = "8.1.8"
 description = "Composable command line interface toolkit"
 optional = false
-python-versions = ">=3.10"
+python-versions = ">=3.7"
 groups = ["main", "docs"]
 files = [
-    {file = "click-8.2.1-py3-none-any.whl", hash = "sha256:61a3265b914e850b85317d0b3109c7f8cd35a670f963866005d6ef1d5175a12b"},
-    {file = "click-8.2.1.tar.gz", hash = "sha256:27c491cc05d968d271d5a1db13e3b5a184636d9d930f148c50b038f0d0646202"},
+    {file = "click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2"},
+    {file = "click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a"},
 ]
 
 [package.dependencies]
@@ -1650,14 +1650,14 @@ virtualenv = ">=20.10.0"
 
 [[package]]
 name = "primalbedtools"
-version = "0.6.2"
+version = "0.9"
 description = "A collection of tools for working with primer.bed files"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = "~=3.9"
 groups = ["main"]
 files = [
-    {file = "primalbedtools-0.6.2-py3-none-any.whl", hash = "sha256:aaff1a44235f67f08b2acff623dfc37f01054fcec2d6dec25ee5ed6416defbc1"},
-    {file = "primalbedtools-0.6.2.tar.gz", hash = "sha256:fe8d656fef3824c9f9af623cdad61a2ee00ca829c5856522b5f5b8a05d8860dc"},
+    {file = "primalbedtools-0.9-py3-none-any.whl", hash = "sha256:be97567116b0764401d12433ffa8ed20aacd3359f579b81c619fa21729dc73f8"},
+    {file = "primalbedtools-0.9.tar.gz", hash = "sha256:eca1280eb680cb39f5594e09781dfe05e230efef9f800871cf8cb6c08ec36c56"},
 ]
 
 [[package]]
@@ -2763,4 +2763,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "0a4a3728ba803a3a558bcdc9429daf7c84bc25c67170961af560ef1b73e435c8"
+content-hash = "885b1ba4ad34ee3da6dc74c371a31667032bfadd15784a150a737cb9806e9770"
