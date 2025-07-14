@@ -17,8 +17,9 @@ class TestScheme(unittest.TestCase):
         self.inputfile_path = pathlib.Path(
             "./tests/core/test_mismatch.fasta"
         ).absolute()
-        self.msa = MSA("test", self.inputfile_path, 0, "first", None)
         self.config = Config()
+        self.msa = MSA("test", self.inputfile_path, 0, "first", None, self.config)
+
         return super().setUp()
 
     def test_get_leading_coverage_edge(self):

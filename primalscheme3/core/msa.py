@@ -1,16 +1,16 @@
 import pathlib
 from uuid import uuid4
 
+import dnaio
 import numpy as np
-from Bio import SeqIO
 from primalschemers._core import (
+    Digester,  # type: ignore
     FKmer,  # type: ignore
     RKmer,  # type: ignore
-    digest_seq,  # type: ignore
 )
 
 from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config
+from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config, MappingType
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
 from primalscheme3.core.errors import (
     MSAFileInvalid,
@@ -45,22 +45,27 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         MSAFileInvalidBase: If the MSA contains non-DNA characters.
     """
     try:
-        records_index = SeqIO.index(
-            str(msa_path),
-            "fasta",
-        )
-    except ValueError as e:
+        records_index = {}
+        with dnaio.open(msa_path) as input_msa:
+            for record in input_msa:
+                parsed_record = record.id.replace("/", "_")
+                # Deal with duplicates
+                if parsed_record in records_index:
+                    raise ValueError(f"Duplicate ID ({parsed_record})")
+                records_index[parsed_record] = record.sequence.upper()
+
+    except (ValueError, dnaio.exceptions.FastaFormatError) as e:
         raise MSAFileInvalid(f"{msa_path.name}: {e}") from e
 
     try:
         array = np.array(
-            [record.seq.upper() for record in records_index.values()],
+            [list(record) for record in records_index.values()],
             dtype="U1",
             ndmin=2,  # Enforce 2D array even if one genome
         )
     except ValueError as e:
         raise MSAFileInvalidLength(
-            f"MSA ({msa_path.name}): contains sequences of different lengths"
+            f"MSA ({msa_path.name}): contains sequences of different lengths. Please ensure MSA is aligned!"
         ) from e
 
     # Check for empty MSA, caused by no records being parsed
@@ -85,12 +90,12 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
                 f"MSA ({msa_path.name}) contains non DNA characters ({base_str}) at column: {col_index}"
             )
     # Remove empty columns
-    array = np.delete(array, empty_col_indexes, axis=1)
+    # array = np.delete(array, empty_col_indexes, axis=1)
 
     # Remove end insertions
     array = remove_end_insertion(array)
 
-    return array, dict(records_index)
+    return array, records_index
 
 
 class MSA:
@@ -112,6 +117,9 @@ class MSA:
     rkmers: list[RKmer]
     primerpairs: list[PrimerPair]
 
+    # Rust Nonsense
+    _digester: Digester
+
     def __init__(
         self,
         name: str,
@@ -119,6 +127,7 @@ class MSA:
         msa_index: int,
         mapping: str,
         progress_manager,
+        config: Config,
         logger=None,
     ) -> None:
         self.name = name
@@ -131,6 +140,13 @@ class MSA:
         self.primerpairs = []
         self.fkmers = []
         self.rkmers = []
+
+        # digester
+        self._digester = Digester(
+            msa_path=str(path.absolute()),
+            ncores=config.ncores,
+            remap=config.mapping == MappingType.FIRST,
+        )
 
         # Read in the MSA
         try:
@@ -161,7 +177,7 @@ class MSA:
         if "/" in self._chrom_name:
             new_chromname = self._chrom_name.replace("/", "_")
             warning_str = (
-                f"Replacing '/' with '-'. '{self._chrom_name}' -> '{new_chromname}'"
+                f"Replacing '/' with '_'. '{self._chrom_name}' -> '{new_chromname}'"
             )
             if self.logger:
                 self.logger.warning(warning_str)
@@ -183,27 +199,26 @@ class MSA:
         self,
         config: Config,
         indexes: tuple[list[int], list[int]] | None = None,  # type: ignore
-        ncores: int = 1,
     ) -> None:
         if indexes is None:
             indexes: tuple[None, None] = (None, None)
 
-        self.fkmers, self.rkmers, logs = digest_seq(
-            self.path,
-            ncores,
-            True,
-            indexes[0],
-            indexes[1],
-            config.primer_size_min,
-            config.primer_size_max,
-            config.primer_gc_max / 100,
-            config.primer_gc_min / 100,
-            config.primer_tm_max,
-            config.primer_tm_min,
-            config.primer_max_walk,
-            config.primer_homopolymer_max,
-            config.min_base_freq,
-            config.ignore_n,
+        self.fkmers, self.rkmers, logs = self._digester.digest(
+            findexes=indexes[0],
+            rindexes=indexes[1],
+            primer_len_min=config.primer_size_min,
+            primer_len_max=config.primer_size_max,
+            primer_gc_max=config.primer_gc_max / 100,
+            primer_gc_min=config.primer_gc_min / 100,
+            primer_tm_max=config.primer_tm_max,
+            primer_tm_min=config.primer_tm_min,
+            primer_annealing_prop=config.primer_annealing_prop,  # if None will use TM
+            annealing_temp_c=config.primer_annealing_tempc,
+            max_walk=config.primer_max_walk,
+            max_homopolymers=config.primer_homopolymer_max,
+            min_freq=config.min_base_freq,
+            ignore_n=config.ignore_n,
+            dimerscore=config.dimer_score,
         )
 
         # Log
@@ -216,6 +231,25 @@ class MSA:
         ## Hairpin check the kmers
         self.fkmers = [x for x in self.fkmers if not forms_hairpin(x.seqs(), config)]
         self.rkmers = [x for x in self.rkmers if not forms_hairpin(x.seqs(), config)]
+
+    #    def digest_f_to_count(self, config: Config, findexes: list[int] | None = None):
+    #        counts = self._digester.digest_f_to_count(
+    #            findexes=findexes,
+    #            primer_len_min=config.primer_size_min,
+    #            primer_len_max=config.primer_size_max,
+    #            primer_gc_max=config.primer_gc_max / 100,
+    #            primer_gc_min=config.primer_gc_min / 100,
+    #            primer_tm_max=config.primer_tm_max,
+    #            primer_tm_min=config.primer_tm_min,
+    #            primer_annealing_prop=config.primer_annealing_prop,  # if None will use TM
+    #            annealing_temp_c=config.primer_annealing_tempc,
+    #            max_walk=config.primer_max_walk,
+    #            max_homopolymers=config.primer_homopolymer_max,
+    #            min_freq=config.min_base_freq,
+    #            ignore_n=config.ignore_n,
+    #            dimerscore=config.dimer_score,
+    #        )
+    #        return counts
 
     def digest(
         self,
@@ -276,13 +310,7 @@ class MSA:
             primerpair.amplicon_prefix = self._uuid
 
     def write_msa_to_file(self, path: pathlib.Path):
-        # Writes the msa to file with parsed chrom names
-        with open(path, "w") as outfile:
-            for r in self._seq_dict.values():
-                # Format each record
-                r.id = "_".join(r.id.split("/"))
-                r.description = ""
-                r.seq = r.seq.upper()
-                # Write
-                record_str = r.format("fasta")
-                outfile.write(record_str)
+        # Write all the consensus sequences to a single file
+        with dnaio.FastaWriter(path, line_length=60) as msa_outfile:
+            for id, seq in self._seq_dict.items():
+                msa_outfile.write(dnaio.SequenceRecord(name=id, sequence=seq))

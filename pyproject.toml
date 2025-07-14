@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "primalscheme3"
-version = "3.1.1"
+version = "3.2.0"
 description = "Generation of highly multiplexed primer schemes"
 authors = ["ChrisKent <chrisgkent@gmail.com>"]
 readme = "README.md"
@@ -9,22 +9,22 @@ repository = "https://github.com/artic-network/primalscheme3"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-primer3-py = "^1.2.2"
-biopython = "^1.80"
+primer3-py = "^2.2.0"
 numpy = "^1.24.2"
-primaldimer_py = "^1.0.4"
 networkx = "^3.1"
 kaleido = "0.2.1"
 plotly = "^5.16.1"
 tqdm = "^4.66.1"
 typer = "^0.12.3"
 primalbedtools = "^0.6.2"
-primalschemers = "^0.1.5"
+dnaio = "^1.2.3"
+primalschemers = "^0.1.7"
+poetry = "^2.1.3"
 
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^4.1.0"
-ruff = "^0.3.4"
+ruff = "^0.11.4"
 pytest = "^7.4.2"
 pre-commit = "^4.0.1"
 coverage = "^7.8.0"

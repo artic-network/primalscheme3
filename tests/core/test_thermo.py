@@ -38,13 +38,13 @@ class Test_PassesThermoCHecks(unittest.TestCase):
             "GTAATTCAGATACTGGTTGCAAAGTTTTTATGA": THERMO_RESULT.PASS,
             "GGGGGGGCCCCCCCC": THERMO_RESULT.HIGH_GC,
             "AAAATTTAATATATAT": THERMO_RESULT.LOW_GC,
-            "GTAATTCAGATACTGGTTGCAAAGTTTTTTTGA": THERMO_RESULT.MAX_HOMOPOLY,
+            "GTAATTCAGATACTGGGCAAAGTTTTTTTGA": THERMO_RESULT.MAX_HOMOPOLY,
             "AG": THERMO_RESULT.LOW_TM,
             "AGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGA": THERMO_RESULT.TO_LONG,
         }
 
         for seq, truth in test_data.items():
-            self.assertEqual(thermo_check(seq, config=self.config), truth)
+            self.assertEqual(thermo_check(seq, config=self.config), truth, msg=seq)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
 from enum import Enum
 
-from primaldimer_py import (
-    do_pools_interact_py,  # type: ignore
-)
+from primalschemers._core import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import PrimerPair
@@ -66,8 +64,8 @@ class Scheme(Multiplex):
                 return SchemeReturn.ADDED_FIRST_PRIMERPAIR
 
         # Create a hashmap of what seqs are in each pool for quick look up
-        pool_seqs_map: dict[int, list[str]] = {
-            index: self.get_seqs_in_pool(index) for index in range(self.n_pools)
+        pool_seqs_map: dict[int, list[bytes]] = {
+            index: self.get_seqs_bytes_in_pool(index) for index in range(self.n_pools)
         }
 
         # Adds the first valid primerpair
@@ -132,8 +130,8 @@ class Scheme(Multiplex):
         ]
 
         # Create a hashmap of all sequences in each pool for quick look up
-        index_to_seqs: dict[int, list[str]] = {
-            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
+        index_to_seqs: dict[int, list[bytes]] = {
+            index: self.get_seqs_bytes_in_pool(index) for index in pos_pools_indexes
         }
 
         # Find pp that could ol, depending on which pool
@@ -182,8 +180,8 @@ class Scheme(Multiplex):
         # Find what other pools to look in
         pos_pools_indexes = [last_pp.pool]
         # Create a hashmap of all sequences in each pool for quick look up
-        index_to_seqs: dict[int, list[str]] = {
-            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
+        index_to_seqs: dict[int, list[bytes]] = {
+            index: self.get_seqs_bytes_in_pool(index) for index in pos_pools_indexes
         }
 
         is_replacement_first = False
@@ -233,8 +231,8 @@ class Scheme(Multiplex):
                     continue
 
                 # Guard for interactions
-                if do_pools_interact_py(
-                    pp.all_seqs(),
+                if do_pool_interact(
+                    pp.all_seq_bytes(),
                     index_to_seqs.get(pool_index),
                     self.config.dimer_score,
                 ):
@@ -282,8 +280,8 @@ class Scheme(Multiplex):
         ]
 
         # Create a hashmap of all sequences in each pool for quick look up
-        index_to_seqs: dict[int, list[str]] = {
-            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
+        index_to_seqs: dict[int, list[bytes]] = {
+            index: self.get_seqs_bytes_in_pool(index) for index in pos_pools_indexes
         }
         # Find the walking start index
         walking_min = self._last_pp_added[-1].rprimer.start - self.config.min_overlap
@@ -368,9 +366,9 @@ class Scheme(Multiplex):
                     continue
 
                 # Check for interactions
-                if not do_pools_interact_py(
-                    fkmer.seqs(),
-                    rkmer.seqs(),
+                if not do_pool_interact(
+                    fkmer.seqs_bytes(),
+                    rkmer.seqs_bytes(),
                     self.config.dimer_score,
                 ):
                     pp = PrimerPair(fkmer, rkmer, msa.msa_index)
@@ -391,8 +389,8 @@ class Scheme(Multiplex):
         ]
 
         # Create a hashmap of all sequences in each pool for quick look up
-        index_to_seqs: dict[int, list[str]] = {
-            index: self.get_seqs_in_pool(index) for index in pos_pools_indexes
+        index_to_seqs: dict[int, list[bytes]] = {
+            index: self.get_seqs_bytes_in_pool(index) for index in pos_pools_indexes
         }
 
         for c_pp in checked_pp:
@@ -410,8 +408,8 @@ class Scheme(Multiplex):
                     continue
 
                 # Guard for Primer-Primer Interactions
-                if do_pools_interact_py(
-                    c_pp.all_seqs(),
+                if do_pool_interact(
+                    c_pp.all_seq_bytes(),
                     index_to_seqs.get(pool_index),
                     self.config.dimer_score,
                 ):

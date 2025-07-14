@@ -7,7 +7,7 @@ import pathlib
 import shutil
 import sys
 
-from Bio import Seq, SeqIO, SeqRecord
+import dnaio
 from click import UsageError
 
 # version import
@@ -18,7 +18,10 @@ from primalscheme3.core.create_reports import generate_all_plots_html
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB
-from primalscheme3.core.primer_visual import primer_mismatch_heatmap
+from primalscheme3.core.primer_visual import (
+    plot_primer_thermo_profile_html,
+    primer_mismatch_heatmap,
+)
 from primalscheme3.core.progress_tracker import ProgressManager
 
 # Module imports
@@ -152,6 +155,7 @@ def panelcreate(
             mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
+            config=config,
         )
 
         # copy the msa into the output / work dir
@@ -266,10 +270,12 @@ def panelcreate(
                 msa_obj.digest_rs(
                     config=config,
                     indexes=(findexes, rindexes),  # type: ignore
-                    ncores=config.ncores,
                 )
             case _:
-                msa_obj.digest_rs(config=config, indexes=None, ncores=config.ncores)
+                msa_obj.digest_rs(
+                    config=config,
+                    indexes=None,
+                )
 
         # Log the digestion
         logger.info(
@@ -446,8 +452,10 @@ def panelcreate(
         outfile.write(panel.to_amplicons(trim_primers=True))
 
     # Write all the consensus sequences to a single file
-    with open(OUTPUT_DIR / "reference.fasta", "w") as reference_outfile:
-        reference_records = []
+    # Write all the consensus sequences to a single file
+    with dnaio.FastaWriter(
+        OUTPUT_DIR / "reference.fasta", line_length=60
+    ) as reference_outfile:
         for msa_obj in msa_dict.values():
             if config.mapping == MappingType.FIRST:
                 seq_str = generate_reference(msa_obj.array)
@@ -456,14 +464,9 @@ def panelcreate(
             else:
                 raise ValueError("Mapping must be 'first' or 'consensus'")
 
-            reference_records.append(
-                SeqRecord.SeqRecord(
-                    seq=Seq.Seq(seq_str),
-                    id=msa_obj._chrom_name,
-                )
+            reference_outfile.write(
+                dnaio.SequenceRecord(name=msa_obj._chrom_name, sequence=seq_str)
             )
-
-        SeqIO.write(reference_records, reference_outfile, "fasta")
 
     # Generate all the hashes
     ## Generate the bedfile hash, and add it into the config
@@ -487,6 +490,17 @@ def panelcreate(
         outfile.write(json.dumps(config_dict, sort_keys=True))
 
     ## DO THIS LAST AS THIS CAN TAKE A LONG TIME
+
+    # Create primer thermo profiles
+    with open(OUTPUT_DIR / "work" / "primer_thermo.html", "w") as outfile:
+        outfile.write(
+            plot_primer_thermo_profile_html(
+                OUTPUT_DIR / "primer.bed",
+                config,
+                offline_plots=offline_plots,
+            )
+        )
+
     # Writing plot data
     plot_data = generate_all_plotdata(
         list(msa_dict.values()),
@@ -502,14 +516,19 @@ def panelcreate(
 
     with open(OUTPUT_DIR / "primer.html", "w") as outfile:
         for i, msa_obj in enumerate(msa_dict.values()):
-            outfile.write(
-                primer_mismatch_heatmap(
-                    array=msa_obj.array,
-                    seqdict=msa_obj._seq_dict,
-                    bedfile=OUTPUT_DIR / "primer.bed",
-                    offline_plots=True if offline_plots and i == 0 else False,
-                    mapping=config.mapping,
+            try:
+                outfile.write(
+                    primer_mismatch_heatmap(
+                        array=msa_obj.array,
+                        seqdict=msa_obj._seq_dict,
+                        bedfile=OUTPUT_DIR / "primer.bed",
+                        offline_plots=True if offline_plots and i == 0 else False,
+                        mapping=config.mapping,
+                    )
                 )
-            )
+            except UsageError:
+                logger.warning(
+                    f"No Primers found for {msa_obj._chrom_name}. Skipping Plot!"
+                )
 
     logger.info("Completed Successfully")
