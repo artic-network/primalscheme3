@@ -4,7 +4,7 @@ try:
 except ImportError:
     import dbm.dumb as db
 
-from typing import Iterable
+from collections.abc import Iterable
 
 import dnaio
 
