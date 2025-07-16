@@ -68,7 +68,6 @@ class PrimerPair:
         """
         matches = set()
         # Find the FKmer matches
-
         matches.update(
             matchDB.find_fkmer(
                 self.fprimer,
@@ -88,7 +87,6 @@ class PrimerPair:
                 msaindex=self.msa_index,
             )
         )
-
         return matches
 
     def kmers(self):
@@ -109,7 +107,7 @@ class PrimerPair:
         True means interaction
         """
         return do_pool_interact(
-            self.fprimer.seqs_bytes(), self.rprimer.seqs_bytes(), cfg["dimerscore"]
+            [*self.fprimer.seqs], [*self.rprimer.seqs], cfg["dimerscore"]
         )
 
     def all_seqs(self) -> list[str]:

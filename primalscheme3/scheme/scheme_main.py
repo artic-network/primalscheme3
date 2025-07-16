@@ -414,10 +414,7 @@ def schemecreate(
     # Read in all MSAs before digestion
     for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
-        msa_obj.digest_rs(
-            config,
-            None,
-        )  # Default to one core
+        msa_obj.digest_rs(config, None)  # Default to one core
         logger.info(
             f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
             f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "

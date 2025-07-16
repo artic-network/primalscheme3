@@ -27,7 +27,7 @@ class Test_MaxHomo(unittest.TestCase):
             self.assertEqual(max_homo(seq), mh_truth)
 
 
-class Test_PassesThermoCHecks(unittest.TestCase):
+class Test_PassesThermoChecks(unittest.TestCase):
     config = Config()
 
     def test_thermo_check(self):
@@ -35,10 +35,10 @@ class Test_PassesThermoCHecks(unittest.TestCase):
         Valuation order.
         """
         test_data = {
-            "GTAATTCAGATACTGGTTGCAAAGTTTTTATGA": THERMO_RESULT.PASS,
+            "GTAATTCAGATACTGGTTGCAAAGTTATTATGA": THERMO_RESULT.PASS,
             "GGGGGGGCCCCCCCC": THERMO_RESULT.HIGH_GC,
             "AAAATTTAATATATAT": THERMO_RESULT.LOW_GC,
-            "GTAATTCAGATACTGGGCAAAGTTTTTTTGA": THERMO_RESULT.MAX_HOMOPOLY,
+            "GTAACAGATACGTTGCAAAGTTTTTTTGA": THERMO_RESULT.MAX_HOMOPOLY,
             "AG": THERMO_RESULT.LOW_TM,
             "AGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGAGA": THERMO_RESULT.TO_LONG,
         }
