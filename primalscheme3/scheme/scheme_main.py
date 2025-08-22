@@ -9,7 +9,7 @@ import dnaio
 from click import UsageError
 
 # Interaction checker
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalschemers import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,

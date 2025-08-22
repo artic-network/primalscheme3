@@ -4,8 +4,8 @@ import numpy as np
 import plotly.graph_objects as go
 from click import UsageError
 from plotly.subplots import make_subplots
+from primalbedtools.amplicons import create_amplicons
 from primalbedtools.bedfiles import BedLine, BedLineParser
-from primalbedtools.primerpairs import create_primerpairs
 
 # Create in the classes from primalscheme3
 from primalscheme3.core.config import Config, MappingType
@@ -325,7 +325,7 @@ def bedfile_plot_html(
     """
     # Read in the bedfile
     _header, bedlines = BedLineParser.from_file(bedfile)
-    primerpairs = create_primerpairs(bedlines)
+    primerpairs = create_amplicons(bedlines)
 
     # Filter primerpairs for the reference genome
     wanted_primerspairs = [pp for pp in primerpairs if pp.chrom == ref_name]

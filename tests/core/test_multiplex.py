@@ -2,7 +2,7 @@ import pathlib
 import unittest
 
 import numpy as np
-from primalschemers._core import FKmer, RKmer  # type: ignore
+from primalschemers import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import PrimerPair
