@@ -3,7 +3,9 @@ from uuid import uuid4
 
 import dnaio
 import numpy as np
-from primalschemers._core import (
+import regex as re
+from primalbedtools.bedfiles import CHROM_REGEX
+from primalschemers import (
     Digester,  # type: ignore
     FKmer,  # type: ignore
     RKmer,  # type: ignore
@@ -20,6 +22,10 @@ from primalscheme3.core.errors import (
 from primalscheme3.core.mapping import create_mapping, ref_index_to_msa
 from primalscheme3.core.seq_functions import remove_end_insertion
 from primalscheme3.core.thermo import forms_hairpin
+
+
+def parse_chrom_name(old_chrom: str) -> str:
+    return old_chrom.replace("/", "_").replace("-", "_")
 
 
 def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
@@ -48,11 +54,11 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         records_index = {}
         with dnaio.open(msa_path) as input_msa:
             for record in input_msa:
-                parsed_record = record.id.replace("/", "_")
+                parsed_record_id = parse_chrom_name(record.id)
                 # Deal with duplicates
-                if parsed_record in records_index:
-                    raise ValueError(f"Duplicate ID ({parsed_record})")
-                records_index[parsed_record] = record.sequence.upper()
+                if parsed_record_id in records_index:
+                    raise ValueError(f"Duplicate ID ({parsed_record_id})")
+                records_index[parsed_record_id] = record.sequence.upper()
 
     except (ValueError, dnaio.exceptions.FastaFormatError) as e:
         raise MSAFileInvalid(f"{msa_path.name}: {e}") from e
@@ -174,16 +180,20 @@ class MSA:
         # Assign a UUID
         self._uuid = str(uuid4())[:8]
 
-        if "/" in self._chrom_name:
-            new_chromname = self._chrom_name.replace("/", "_")
-            warning_str = (
-                f"Replacing '/' with '_'. '{self._chrom_name}' -> '{new_chromname}'"
-            )
+        if "/" in self._chrom_name or "-" in self._chrom_name:
+            new_chromname = self._chrom_name.replace("/", "_").replace("-", "_")
+            warning_str = f"Replacing '/' and '-' with '_'. '{self._chrom_name}' -> '{new_chromname}'"
             if self.logger:
                 self.logger.warning(warning_str)
             else:
                 print(warning_str)
             self._chrom_name = new_chromname
+
+        # Check chromname
+        if not re.match(CHROM_REGEX, self._chrom_name):
+            raise ValueError(
+                f"chrom must match '{CHROM_REGEX}'. Got (`{self._chrom_name}`)"
+            )
 
         # Check length
         if len(self._chrom_name) > 200:  # limit is 255
@@ -313,4 +323,6 @@ class MSA:
         # Write all the consensus sequences to a single file
         with dnaio.FastaWriter(path, line_length=60) as msa_outfile:
             for id, seq in self._seq_dict.items():
-                msa_outfile.write(dnaio.SequenceRecord(name=id, sequence=seq))
+                msa_outfile.write(
+                    dnaio.SequenceRecord(name=parse_chrom_name(id), sequence=seq)
+                )

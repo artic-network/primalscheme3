@@ -1,6 +1,5 @@
 # Downsample to count
 import itertools
-import pathlib
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -8,8 +7,6 @@ from primalschemers import FKmer, RKmer  # type: ignore
 
 # type: ignore
 from primalscheme3.core.config import Config
-from primalscheme3.core.msa import MSA
-from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.thermo import THERMO_RESULT, calc_annealing_hetro, thermo_check
 
 MIN_ANNEALING = 3
@@ -207,7 +204,9 @@ def downsample_kmer(
     scores: dict[str, dict[str, float]] = {}
     tups = itertools.combinations(seq_counts.keys(), 2)
     for s1, s2 in tups:
-        an = calc_annealing_hetro(s1, s2, config)
+        an = calc_annealing_hetro(
+            "NN" + s1 + "NN", "NN" + s2 + "NN", config
+        )  # Add NN to prevent dangling end bonuses which might inhibit PCR
         # Ignore arbitrary small annealing
         if an < MIN_ANNEALING:
             continue
@@ -224,7 +223,6 @@ def downsample_kmer(
 
     # Start downsampling
     annealing_scores = {seq: 0.0 for seq in seq_counts.keys()}
-
     added_seqs = set()
 
     failed_seqs = set(
@@ -232,6 +230,25 @@ def downsample_kmer(
     )
 
     annealing_weight_sum = 0
+    # Add all primers above a set prop
+    total_count = sum(seq_counts.values())
+    count_threshold = total_count * config.downsample_always_add_prop
+
+    for seq, count in seq_counts.items():
+        if count >= count_threshold and seq not in failed_seqs:
+            added_seqs.add(seq)
+            annealing_scores = update_annealing(
+                seq,
+                annealing_scores,
+                scores,
+            )
+            annealing_weight_sum = sum(
+                {
+                    seq: min(TARGET_ANNEALING, score) * seq_counts[seq]
+                    for seq, score in annealing_scores.items()
+                }.values()
+            )
+
     while (
         sum(
             {
@@ -239,7 +256,7 @@ def downsample_kmer(
                 for seq, score in annealing_scores.items()
             }.values()
         )
-        < TARGET_ANNEALING * sum(seq_counts.values()) * 0.95
+        < TARGET_ANNEALING * total_count * config.downsample_target
     ):
         # Calculate scores based on current annealing
         tmp_scores = calc_scores(scores, seq_counts, annealing_scores, failed_seqs)
@@ -271,33 +288,10 @@ def downsample_kmer(
         visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs)  # type: ignore
 
     # If we have not reached the target annealing, add more sequences
-    if annealing_weight_sum / (TARGET_ANNEALING * sum(seq_counts.values())) >= 0.95:
+    if (
+        annealing_weight_sum / (TARGET_ANNEALING * sum(seq_counts.values()))
+        >= config.downsample_target
+    ):
         return sorted(added_seqs)
     else:
         return None
-
-
-if __name__ == "__main__":
-    # Example usage
-    config = Config()
-    config.primer_annealing_tempc = 65
-    config.primer_annealing_prop = 10
-    config.min_base_freq = 0
-    config.ncores = 8
-
-    pm = ProgressManager()
-    msa_obj = MSA(
-        "example",
-        pathlib.Path(
-            "/Users/kentcg/primerschemes/primerschemes/artic-measles/400/v1.0.0/work/all_genomes.align.ds.align.repaired.fasta"
-        ),
-        1,
-        "first",
-        pm,
-        config=config,
-    )
-
-    msa_obj.digest_rs(config, ([*range(0, 1000)], []))
-
-    for fk in msa_obj.fkmers:
-        downsample_kmer(fk, config, True)

@@ -23,6 +23,11 @@ class THERMO_RESULT(Enum):
     MAX_HOMOPOLY = 5
     HAIRPIN = 6
     TO_LONG = 7
+    HIGH_ANNEALING = 9
+    LOW_ANNEALING = 10
+
+
+ANNEALING_DIFF = 5
 
 
 def calc_thermo(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c):
@@ -173,18 +178,32 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMO_RESULT:
     if len(kmer_seq) > config.primer_size_max:
         return THERMO_RESULT.TO_LONG
 
-    # Check for tm in range
-    kmer_tm = calc_tm(
-        kmer_seq,
-        mv_conc=config.mv_conc,
-        dv_conc=config.dv_conc,
-        dna_conc=config.dna_conc,
-        dntp_conc=config.dntp_conc,
-    )
-    if kmer_tm > config.primer_tm_max:
-        return THERMO_RESULT.HIGH_TM
-    elif kmer_tm < config.primer_tm_min:
-        return THERMO_RESULT.LOW_TM
+    if config.use_annealing and config.primer_annealing_prop is not None:
+        kmer_annealing = calc_annealing(
+            kmer_seq,
+            mv_conc=config.mv_conc,
+            dv_conc=config.dv_conc,
+            dna_conc=config.dna_conc,
+            dntp_conc=config.dntp_conc,
+            temp_c=config.primer_annealing_tempc,
+        )
+        if kmer_annealing > config.primer_annealing_prop + ANNEALING_DIFF:
+            return THERMO_RESULT.HIGH_ANNEALING
+        elif kmer_annealing < config.primer_annealing_prop - ANNEALING_DIFF:
+            return THERMO_RESULT.LOW_ANNEALING
+    else:
+        # Check for tm in range
+        kmer_tm = calc_tm(
+            kmer_seq,
+            mv_conc=config.mv_conc,
+            dv_conc=config.dv_conc,
+            dna_conc=config.dna_conc,
+            dntp_conc=config.dntp_conc,
+        )
+        if kmer_tm > config.primer_tm_max + 2:
+            return THERMO_RESULT.HIGH_TM
+        elif kmer_tm < config.primer_tm_min:
+            return THERMO_RESULT.LOW_TM
 
     # Check for maxhomopolymer
     if max_homo(kmer_seq) > config.primer_homopolymer_max:
