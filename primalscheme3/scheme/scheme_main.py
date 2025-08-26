@@ -479,7 +479,7 @@ def schemecreate(
         scheme_pt = pm.create_sub_progress(
             iter=None, chrom=msa_obj.name, process="Creating Scheme", leave=False
         )
-        scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
+        scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1], flush=True)
 
         while True:
             # Provide the coverage to the progress tracker
