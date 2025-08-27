@@ -60,44 +60,55 @@ def get_primers_from_msa(
     row_data = {}
     if forward:
         for row in range(array.shape[0]):
-            gaps = 0
             row_data[row] = None
-            while index - length - gaps >= 0:
+            start_pos = max(index - length, 0)
+            while start_pos >= 0:
                 # Get slice
-                initial_slice = array[row, index - length - gaps : index]
+                initial_slice = array[row, start_pos:index]
                 # Check for gaps on set base
                 if initial_slice[-1] == "-":
                     break
                 sequence = "".join(initial_slice).replace("-", "")
-                # Covered removed gaps
-                if "" in initial_slice:
+                if not sequence:
                     break
                 # Check for gaps in the slice
                 if len(sequence) == length:
                     row_data[row] = sequence
                     break
                 # Walk left
-                gaps += 1
+                start_pos -= 1
+
+            # If the primer walks out the MSA just take what we have a rjust it
+            if start_pos == -1:
+                row_data[row] = (
+                    "".join(array[row, 0:index]).replace("-", "").rjust(length)
+                )
+
     else:
         for row in range(array.shape[0]):
-            gaps = 0
             row_data[row] = None
-            while index + length + gaps <= array.shape[1]:
+            end_pos = min(index + length, array.shape[1])
+            while end_pos <= array.shape[1]:
                 # Get slice
-                initial_slice = array[row, index : index + length + gaps]
+                initial_slice = array[row, index:end_pos]
                 # Check for gaps on set base
                 if initial_slice[0] == "-":
                     break
                 sequence = "".join(initial_slice).replace("-", "")
                 # Covered removed gaps
-                if "" in initial_slice:
+                if not sequence:
                     break
                 # Check for gaps in the slice
                 if len(sequence) == length:
                     row_data[row] = reverse_complement(sequence)
                     break
                 # Walk right
-                gaps += 1
+                end_pos += 1
+
+            # If the primer walks out the MSA just take what we have a ljust it
+            if end_pos == array.shape[1] + 1:
+                sequence = "".join(array[row, index:end_pos]).replace("-", "")
+                row_data[row] = reverse_complement(sequence).rjust(length)
     return row_data
 
 
@@ -113,7 +124,12 @@ def calc_primer_hamming(seq1, seq2) -> int:
         seq1b_exp = set(extend_ambiguous_base(seq1b))
         seq2b_exp = set(extend_ambiguous_base(seq2b))
 
-        if not seq1b_exp & seq2b_exp and (seq1b != "N" and seq2b != "N"):
+        if (
+            not seq1b_exp & seq2b_exp
+            and (seq1b != "N" and seq2b != "N")
+            and seq1b != " "
+            and seq2b != " "
+        ):
             dif += 1
 
     return dif
