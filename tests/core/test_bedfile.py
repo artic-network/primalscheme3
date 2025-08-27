@@ -2,6 +2,8 @@ import hashlib
 import pathlib
 import unittest
 
+from primalschemers import FKmer, RKmer  # type: ignore
+
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
 )
@@ -20,7 +22,8 @@ class Test_ReadInBedFile(unittest.TestCase):
         # Read in the bedfile
         bedprimerpairs, _headers = read_bedlines_to_bedprimerpairs(input_path)
         # Hash the input bedfile
-        input_hash = hashlib.file_digest(open(input_path, "rb"), "md5").hexdigest()
+        with open(input_path, "rb") as file:
+            input_hash = hashlib.file_digest(file, "md5").hexdigest()
 
         # Create the bedstring
         bed_list = []
@@ -51,7 +54,8 @@ class Test_ReadInBedFile(unittest.TestCase):
         # Read in the bedfile
         bedprimerpairs, _headers = read_bedlines_to_bedprimerpairs(input_path)
         # Hash the input bedfile
-        input_hash = hashlib.file_digest(open(input_path, "rb"), "md5").hexdigest()
+        with open(input_path, "rb") as file:
+            input_hash = hashlib.file_digest(file, "md5").hexdigest()
 
         # Create the bedstring
         bed_list = []
@@ -71,3 +75,39 @@ class Test_ReadInBedFile(unittest.TestCase):
         #     outfile.write(bed_str)
 
         self.assertEqual(input_hash, output_hash)
+
+    def test_kmer_counts(self):
+        """Test that the count attr is only set of KMers with counts"""
+        chrom = "chrom"
+        amplicon_prefix = "amp_5"
+        pool = 1
+
+        # With count
+        fkmer = FKmer([b"CGATCGAC"], 20, counts=[10])
+        self.assertEqual(
+            fkmer.to_bed(chrom=chrom, amplicon_prefix=amplicon_prefix, pool=pool),
+            f"{chrom}\t12\t20\t{amplicon_prefix}_LEFT_1\t{pool}\t+\tCGATCGAC\tpc=10\n",
+        )
+        # Without count
+        fkmer = FKmer([b"CGATCGAC"], 20)
+        self.assertEqual(
+            fkmer.to_bed(chrom=chrom, amplicon_prefix=amplicon_prefix, pool=pool),
+            f"{chrom}\t12\t20\t{amplicon_prefix}_LEFT_1\t{pool}\t+\tCGATCGAC\n",
+        )
+
+        # With count
+        rkmer = RKmer([b"CGATCGAC"], 20, counts=[10])
+        self.assertEqual(
+            rkmer.to_bed(chrom=chrom, amplicon_prefix=amplicon_prefix, pool=pool),
+            f"{chrom}\t20\t28\t{amplicon_prefix}_RIGHT_1\t{pool}\t-\tCGATCGAC\tpc=10\n",
+        )
+        # Without count
+        rkmer = RKmer([b"CGATCGAC"], 20)
+        self.assertEqual(
+            rkmer.to_bed(chrom=chrom, amplicon_prefix=amplicon_prefix, pool=pool),
+            f"{chrom}\t20\t28\t{amplicon_prefix}_RIGHT_1\t{pool}\t-\tCGATCGAC\n",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
