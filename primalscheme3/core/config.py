@@ -1,8 +1,7 @@
 import pathlib
 from enum import Enum
+from importlib.metadata import version
 from typing import Any
-
-from primalscheme3 import __version__
 
 
 # Written by Andy Smith, modified by: Chris Kent
@@ -27,7 +26,7 @@ class Config:
     force: bool = False
     high_gc: bool = False
     input_bedfile: pathlib.Path | None = None
-    version: str = __version__
+    version: str = version("primalscheme3")
     ncores = 1
     # Scheme Settings
     n_pools: int = 2

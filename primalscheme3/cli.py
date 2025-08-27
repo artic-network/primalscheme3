@@ -1,12 +1,12 @@
 #!/usr/bin/python3
 import argparse
 import pathlib
+from importlib.metadata import version
 from typing import Annotated, Optional
 
 import typer
 
 # Module imports
-from primalscheme3.__init__ import __version__
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.downsample import downsample_scheme
 from primalscheme3.core.msa import parse_msa
@@ -56,8 +56,10 @@ def check_output_dir(output: pathlib.Path, force: bool):
 
 def typer_callback_version(value: bool):
     if value:
-        version = typer.style(__version__, fg=typer.colors.GREEN, bold=True)
-        typer.echo("PrimalScheme3 version: " + version)
+        version_str = typer.style(
+            version("primalscheme3"), fg=typer.colors.GREEN, bold=True
+        )
+        typer.echo("PrimalScheme3 version: " + version_str)
         raise typer.Exit()
 
 
