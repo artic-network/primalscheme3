@@ -14,6 +14,7 @@ from primalschemers import (
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config, MappingType
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
+from primalscheme3.core.downsample import downsample_kmer
 from primalscheme3.core.errors import (
     MSAFileInvalid,
     MSAFileInvalidBase,
@@ -213,6 +214,12 @@ class MSA:
         if indexes is None:
             indexes: tuple[None, None] = (None, None)
 
+        # If using downsample dont thermo check in rust
+        if config.downsample:
+            rs_thermo = False
+        else:
+            rs_thermo = True
+
         self.fkmers, self.rkmers, logs = self._digester.digest(
             findexes=indexes[0],
             rindexes=indexes[1],
@@ -229,8 +236,8 @@ class MSA:
             min_freq=config.min_base_freq,
             ignore_n=config.ignore_n,
             dimerscore=config.dimer_score,
+            thermo_check=rs_thermo,
         )
-
         # Log
         if self.logger:
             for s in logs:
@@ -238,28 +245,55 @@ class MSA:
 
             self.logger.info("Starting Primer Hairpin Check")
 
-        ## Hairpin check the kmers
-        self.fkmers = [x for x in self.fkmers if not forms_hairpin(x.seqs(), config)]
-        self.rkmers = [x for x in self.rkmers if not forms_hairpin(x.seqs(), config)]
+        # Start the downsample
+        if config.downsample:
+            # fkmers
+            new_fkmers = []
+            for fkmer in self.fkmers:
+                new_seqs = downsample_kmer(fkmer, config, False)
+                if new_seqs is None:
+                    continue
 
-    #    def digest_f_to_count(self, config: Config, findexes: list[int] | None = None):
-    #        counts = self._digester.digest_f_to_count(
-    #            findexes=findexes,
-    #            primer_len_min=config.primer_size_min,
-    #            primer_len_max=config.primer_size_max,
-    #            primer_gc_max=config.primer_gc_max / 100,
-    #            primer_gc_min=config.primer_gc_min / 100,
-    #            primer_tm_max=config.primer_tm_max,
-    #            primer_tm_min=config.primer_tm_min,
-    #            primer_annealing_prop=config.primer_annealing_prop,  # if None will use TM
-    #            annealing_temp_c=config.primer_annealing_tempc,
-    #            max_walk=config.primer_max_walk,
-    #            max_homopolymers=config.primer_homopolymer_max,
-    #            min_freq=config.min_base_freq,
-    #            ignore_n=config.ignore_n,
-    #            dimerscore=config.dimer_score,
-    #        )
-    #        return counts
+                # Create a dict to keep track of seq counts
+                seq_counts = {
+                    s: c for s, c in zip(fkmer.seqs(), fkmer.counts(), strict=True)
+                }
+                new_fkmers.append(
+                    FKmer(
+                        [s.encode() for s in new_seqs],
+                        fkmer.end,
+                        [seq_counts[s] for s in new_seqs],
+                    )
+                )
+
+            self.fkmers = new_fkmers
+            # rkmers
+            new_rkmers = []
+            for rkmer in self.rkmers:
+                new_seqs = downsample_kmer(rkmer, config)
+                if new_seqs is None:
+                    continue
+                seq_counts = {
+                    s: c for s, c in zip(rkmer.seqs(), rkmer.counts(), strict=True)
+                }
+                new_rkmers.append(
+                    RKmer(
+                        [s.encode() for s in new_seqs],
+                        rkmer.start,
+                        [seq_counts[s] for s in new_seqs],
+                    )
+                )
+
+            self.rkmers = new_rkmers
+
+        else:
+            ## Hairpin check the kmers
+            self.fkmers = [
+                x for x in self.fkmers if not forms_hairpin(x.seqs(), config)
+            ]
+            self.rkmers = [
+                x for x in self.rkmers if not forms_hairpin(x.seqs(), config)
+            ]
 
     def digest(
         self,

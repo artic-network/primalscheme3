@@ -440,6 +440,8 @@ class Multiplex:
         if headers is None:
             headers = ["# artic-bed-version v3.0"]
 
+        headers.append("# pc=PrimerCountInMSA")
+
         # bed file str
         bfs = create_bedfile_str(headers, self.all_primerpairs())
 

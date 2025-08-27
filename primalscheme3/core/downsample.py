@@ -3,6 +3,8 @@ import itertools
 
 import matplotlib.pyplot as plt
 import networkx as nx
+from primalbedtools.bedfiles import group_amplicons
+from primalbedtools.scheme import Scheme
 from primalschemers import FKmer, RKmer  # type: ignore
 
 # type: ignore
@@ -178,19 +180,17 @@ def update_annealing(
     return annealing_scores
 
 
-def downsample_kmer(
-    kmer: FKmer | RKmer, config: Config, visualise: bool = False
-) -> list[str] | None:
+def downsample_seqs(
+    seq_counts: dict[str, float], config: Config, visualise: bool = False
+):
     """
     Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
     the count of how often that sequence appeared in the MSA
     """
-    # Sort seqs in desc
+
+    # Sort the seq_counts in descending order by value
     seq_counts = {
-        k: v
-        for k, v in sorted(
-            zip(kmer.seqs(), kmer.counts(), strict=True), key=lambda x: -x[1]
-        )
+        k: v for k, v in sorted(seq_counts.items(), key=lambda x: x[1], reverse=True)
     }
 
     # Thermo check each sequence.
@@ -205,7 +205,7 @@ def downsample_kmer(
     tups = itertools.combinations(seq_counts.keys(), 2)
     for s1, s2 in tups:
         an = calc_annealing_hetro(
-            "NN" + s1 + "NN", "NN" + s2 + "NN", config
+            s1, s2, config
         )  # Add NN to prevent dangling end bonuses which might inhibit PCR
         # Ignore arbitrary small annealing
         if an < MIN_ANNEALING:
@@ -295,3 +295,48 @@ def downsample_kmer(
         return sorted(added_seqs)
     else:
         return None
+    pass
+
+
+def downsample_kmer(
+    kmer: FKmer | RKmer, config: Config, visualise: bool = False
+) -> list[str] | None:
+    """
+    Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
+    the count of how often that sequence appeared in the MSA
+    """
+    # Sort seqs in desc
+    seq_counts = {k: v for k, v in zip(kmer.seqs(), kmer.counts(), strict=True)}
+    return downsample_seqs(seq_counts, config, visualise)
+
+
+def downsample_scheme(path, config, visualise: bool = False):
+    scheme = Scheme.from_file(path)
+
+    new_scheme = Scheme([], [])
+
+    for amps in group_amplicons(scheme.bedlines):
+        f_bls = amps["LEFT"]
+
+        fseq_counts = {bl.sequence: 1.0 for bl in f_bls}
+        kept_fseqs = downsample_seqs(
+            seq_counts=fseq_counts, config=config, visualise=visualise
+        )
+
+        # Find which bedlines are being kept
+        for fbl in f_bls:
+            if kept_fseqs is not None and fbl.sequence in kept_fseqs:
+                new_scheme.bedlines.append(fbl)
+
+        r_bls = amps["RIGHT"]
+        rseq_counts = {bl.sequence: 1.0 for bl in r_bls}
+        kept_rseqs = downsample_seqs(
+            seq_counts=rseq_counts, config=config, visualise=visualise
+        )
+
+        # Find which bedlines are being kept
+        for rbl in r_bls:
+            if kept_rseqs is not None and rbl.sequence in kept_rseqs:
+                new_scheme.bedlines.append(rbl)
+
+    print(new_scheme.to_str())
