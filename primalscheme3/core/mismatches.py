@@ -27,7 +27,10 @@ class MatchDB:
     """
 
     def __init__(self, path, msas_paths: list[str], kmer_size: int) -> None:
-        self.db = db.open(str(path), "n")
+        if not msas_paths:
+            self.db = {}  # Using an empty dict will have same api as dbm but not write a file
+        else:
+            self.db = db.open(str(path), "n")
 
         # Read in and digest each MSA
         for msa_index, msa_path in enumerate(msas_paths):
