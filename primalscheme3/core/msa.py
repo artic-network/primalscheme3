@@ -1,9 +1,9 @@
 import pathlib
+import re
 from uuid import uuid4
 
 import dnaio
 import numpy as np
-import regex as re
 from primalbedtools.bedfiles import CHROM_REGEX
 from primalschemers import (
     Digester,  # type: ignore

@@ -66,6 +66,7 @@ class Config:
     primer_max_walk: int = 80
     # MatchDB Settings
     use_matchdb: bool = True
+    in_memory_db: bool = True
     editdist_max: int = 1
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min

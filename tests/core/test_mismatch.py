@@ -1,5 +1,6 @@
 import unittest
 
+from primalscheme3.core.config import Config
 from primalscheme3.core.mismatches import (
     MatchDB,
     detect_new_products,
@@ -74,7 +75,7 @@ def hamming_distance(seq1: str, seq2: str) -> int:
     """
     if len(seq1) != len(seq2):
         raise ValueError("Sequences must be the same length")
-    return sum(base1 != base2 for base1, base2 in zip(seq1, seq2))
+    return sum(base1 != base2 for base1, base2 in zip(seq1, seq2, strict=False))
 
 
 class Test_MatchDB(unittest.TestCase):
@@ -89,14 +90,15 @@ class Test_MatchDB(unittest.TestCase):
     ## GGG---TACACTCGGACTCAGGC -> GCCTGAGTCCGAGTGTACCC is found in sequence 3 at (499,-)
     def setUp(self):
         self.matchdb_path = "./tests/core/testcase"
+        self.config = Config()
 
     def test_matchdb_createdb(self):
         """
         This tests the creation of the matchdb and the find_match function
         """
-        kmersize = 20
+        self.config.mismatch_kmersize = 20
         matchdb = MatchDB(
-            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], self.config
         )
 
         result = matchdb.find_match("CTAGCACACTTAAGACGGAG")
@@ -106,9 +108,9 @@ class Test_MatchDB(unittest.TestCase):
         """
         This creates a db and then finds the reverse complement of a sequence
         """
-        kmersize = 20
+        self.config.mismatch_kmersize = 20
         matchdb = MatchDB(
-            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], self.config
         )
 
         result = matchdb.find_match("TTGTCGCGTCGATACTGAAC")
@@ -118,9 +120,9 @@ class Test_MatchDB(unittest.TestCase):
         """
         This creates a db and then finds a sequence with a gap
         """
-        kmersize = 20
+        self.config.mismatch_kmersize = 20
         matchdb = MatchDB(
-            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], self.config
         )
 
         result = matchdb.find_match("GCAGGGTACACTCGGACTCA")
@@ -130,9 +132,9 @@ class Test_MatchDB(unittest.TestCase):
         """
         This creates a db and then finds a sequence with a gap in the reverse complement
         """
-        kmersize = 20
+        self.config.mismatch_kmersize = 20
         matchdb = MatchDB(
-            self.matchdb_path, ["tests/core/test_mismatch.fasta"], kmersize
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], self.config
         )
 
         result = matchdb.find_match("GCCTGAGTCCGAGTGTACCC")

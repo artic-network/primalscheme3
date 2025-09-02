@@ -117,7 +117,7 @@ def panelcreate(
     mismatch_db = MatchDB(
         OUTPUT_DIR / "work/mismatch",
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
-        config.mismatch_kmersize,
+        config,
     )
     logger.info(
         f"[green]Created[/green]: "
