@@ -3,7 +3,7 @@ import pathlib
 import sys
 
 import primalbedtools.bedfiles as bf
-from primalschemers._core import FKmer, RKmer  # type: ignore
+from primalschemers import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config

@@ -5,7 +5,7 @@ import shutil
 from enum import Enum
 
 from click import UsageError
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalschemers import do_pool_interact  # type: ignore
 
 # Core imports
 from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs

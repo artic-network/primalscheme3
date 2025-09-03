@@ -1,14 +1,14 @@
 #!/usr/bin/python3
 import argparse
 import pathlib
-
-# Module imports
 from importlib.metadata import version
 from typing import Annotated
 
 import typer
 
+# Module imports
 from primalscheme3.core.config import Config, MappingType
+from primalscheme3.core.downsample import downsample_scheme
 from primalscheme3.core.msa import parse_msa
 from primalscheme3.core.primer_visual import bedfile_plot_html, primer_mismatch_heatmap
 from primalscheme3.core.progress_tracker import ProgressManager
@@ -174,6 +174,19 @@ def scheme_create(
             help="Using annealing proportion rather than Tm to calculate primers",
         ),
     ] = Config.use_annealing,
+    # Downsample params
+    downsample: Annotated[
+        bool,
+        typer.Option(
+            help="Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+        ),
+    ] = Config.downsample,
+    downsample_target: Annotated[
+        float,
+        typer.Option(
+            help="Ensure X proportion of primers have >= annealing (if using downsampling)",
+        ),
+    ] = Config.downsample_target,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -356,6 +369,19 @@ def panel_create(
             help="Using annealing proportion rather than Tm to calculate primers",
         ),
     ] = Config.use_annealing,
+    # Downsample params
+    downsample: Annotated[
+        bool,
+        typer.Option(
+            help="Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+        ),
+    ] = Config.downsample,
+    downsample_target: Annotated[
+        float,
+        typer.Option(
+            help="Ensure X proportion of primers have >= annealing (if using downsampling)",
+        ),
+    ] = Config.downsample_target,
 ):
     """
     Creates a primer panel
@@ -568,6 +594,35 @@ def visualise_bedfile(
         outfile.write(
             bedfile_plot_html(bedfile=bedfile, ref_name=ref_id, ref_seq=ref_genome)
         )
+
+
+@app.command(no_args_is_help=True)
+def downsample_existing_scheme(
+    bedfile: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The bedfile containing the primers",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    downsample_target: Annotated[
+        float,
+        typer.Option(min=0, max=1),
+    ] = Config.downsample_target,
+    visualise: Annotated[
+        bool,
+        typer.Option(help="Will print graph visualisations of downsampling"),
+    ] = False,
+):
+    """Will try and reduce number of primers in a cloud by calculating inter-primercloud annealing"""
+
+    config = Config(**locals())
+    config.downsample = True
+
+    downsample_scheme(bedfile, config, visualise)
 
 
 if __name__ == "__main__":

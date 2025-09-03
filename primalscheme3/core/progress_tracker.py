@@ -26,6 +26,7 @@ class ProgressTracker(tqdm):
         chrom: str | None = None,
         count: int | float | None = None,
         update: bool = False,
+        flush: bool = False,
     ):
         old_n = self.n
         # Update the progress bar manually
@@ -43,6 +44,8 @@ class ProgressTracker(tqdm):
         if update:
             self.update(self.n - old_n)
 
+        if flush:
+            self.refresh()
         self.parent.signal()
 
 

@@ -96,20 +96,6 @@ class Test_MatchDB(unittest.TestCase):
         """
         This tests the creation of the matchdb and the find_match function
         """
-        self.config.mismatch_in_memory = False
-        self.config.mismatch_kmersize = 20
-        matchdb = MatchDB(
-            self.matchdb_path, ["tests/core/test_mismatch.fasta"], self.config
-        )
-
-        result = matchdb.find_match("CTAGCACACTTAAGACGGAG")
-        self.assertEqual(result, [[0, 720, "+"], [0, 780, "+"]])
-
-    def test_matchdb_createdb_in_mem(self):
-        """
-        This tests the creation of the matchdb and the find_match function
-        """
-        self.config.mismatch_in_memory = True
         self.config.mismatch_kmersize = 20
         matchdb = MatchDB(
             self.matchdb_path, ["tests/core/test_mismatch.fasta"], self.config

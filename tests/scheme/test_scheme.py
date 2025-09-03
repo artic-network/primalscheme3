@@ -1,7 +1,7 @@
 import pathlib
 import unittest
 
-from primalschemers._core import FKmer, RKmer  # type: ignore
+from primalschemers import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
@@ -12,8 +12,8 @@ from primalscheme3.scheme.classes import Scheme, SchemeReturn
 
 class TestScheme(unittest.TestCase):
     def setUp(self) -> None:
-        self.db_path = pathlib.Path("./tests/core/mulitplex").absolute()
         self.config = Config()
+        self.db_path = pathlib.Path("./tests/core/mulitplex").absolute()
         self.matchdb = MatchDB(self.db_path, [], self.config)  # Create an empty matchdb
         self.inputfile_path = pathlib.Path(
             "./tests/core/test_mismatch.fasta"

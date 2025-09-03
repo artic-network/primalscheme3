@@ -9,7 +9,7 @@ import dnaio
 from click import UsageError
 
 # Interaction checker
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalschemers import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
@@ -479,7 +479,7 @@ def schemecreate(
         scheme_pt = pm.create_sub_progress(
             iter=None, chrom=msa_obj.name, process="Creating Scheme", leave=False
         )
-        scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1])
+        scheme_pt.manual_update(n=0, total=msa_obj.array.shape[1], flush=True)
 
         while True:
             # Provide the coverage to the progress tracker

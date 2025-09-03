@@ -1,7 +1,8 @@
 from enum import Enum
 
 import numpy as np
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalbedtools.scheme import Scheme
+from primalschemers import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
@@ -439,7 +440,14 @@ class Multiplex:
         if headers is None:
             headers = ["# artic-bed-version v3.0"]
 
-        return create_bedfile_str(headers, self.all_primerpairs())
+        headers.append("# pc=PrimerCountInMSA")
+
+        # bed file str
+        bfs = create_bedfile_str(headers, self.all_primerpairs())
+
+        # Parse the bedfile string into pbt.scheme for validation
+        s = Scheme.from_str(bfs)
+        return s.to_str()
 
     def to_amplicons(
         self,

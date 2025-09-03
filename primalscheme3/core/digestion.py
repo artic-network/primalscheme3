@@ -6,7 +6,7 @@ from typing import Callable, Union
 import numpy as np
 
 # Submodules
-from primalschemers._core import FKmer, RKmer, do_pool_interact  # type: ignore
+from primalschemers import FKmer, RKmer, do_pool_interact  # type: ignore
 
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import ALL_BASES, AMB_BASES, Config

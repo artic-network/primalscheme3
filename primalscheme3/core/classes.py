@@ -1,5 +1,5 @@
 # Module imports
-from primalschemers._core import FKmer, RKmer, do_pool_interact  # type: ignore
+from primalschemers import FKmer, RKmer, do_pool_interact  # type: ignore
 
 from primalscheme3.core.config import Config
 from primalscheme3.core.thermo import calc_tm, gc

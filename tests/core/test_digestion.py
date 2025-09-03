@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from primalschemers._core import FKmer, RKmer  # type: ignore
+from primalschemers import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import (
