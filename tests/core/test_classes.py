@@ -52,7 +52,7 @@ class Test_PrimerPair(unittest.TestCase):
         seqs = primerpair.all_seqs()
         seqs_bytes = primerpair.all_seq_bytes()
 
-        for s, sb in zip(seqs, seqs_bytes):
+        for s, sb in zip(seqs, seqs_bytes, strict=False):
             self.assertEqual(s.encode(), sb)
 
     def test_to_bed(self):

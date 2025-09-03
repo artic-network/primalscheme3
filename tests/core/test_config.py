@@ -109,7 +109,9 @@ class TestConfig(unittest.TestCase):
         new_config = Config()
         new_config.assign_kwargs(**config_dict)
 
-        for new, old in zip(new_config.items().items(), config.items().items()):
+        for new, old in zip(
+            new_config.items().items(), config.items().items(), strict=False
+        ):
             self.assertEqual(new, old)
 
 

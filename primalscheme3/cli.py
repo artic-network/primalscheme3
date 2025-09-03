@@ -2,7 +2,7 @@
 import argparse
 import pathlib
 from importlib.metadata import version
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -99,7 +99,7 @@ def scheme_create(
         ),
     ] = Config.amplicon_size,
     bedfile: Annotated[
-        Optional[pathlib.Path],
+        pathlib.Path | None,
         typer.Option(
             help="An existing bedfile to add primers to",
             exists=True,
@@ -144,7 +144,7 @@ def scheme_create(
         bool, typer.Option(help="Override the output directory")
     ] = Config.force,
     input_bedfile: Annotated[
-        Optional[pathlib.Path],
+        pathlib.Path | None,
         typer.Option(
             help="Path to a primer.bedfile containing the pre-calculated primers"
         ),
@@ -289,7 +289,7 @@ def panel_create(
         ),
     ],
     region_bedfile: Annotated[
-        Optional[pathlib.Path],
+        pathlib.Path | None,
         typer.Option(
             help="Path to the bedfile containing the wanted regions",
             readable=True,
@@ -299,7 +299,7 @@ def panel_create(
         ),
     ] = None,
     input_bedfile: Annotated[
-        Optional[pathlib.Path],
+        pathlib.Path | None,
         typer.Option(
             help="Path to a primer.bedfile containing the pre-calculated primers",
             readable=True,
@@ -334,13 +334,13 @@ def panel_create(
         ),
     ] = Config.mapping.value,  # type: ignore
     max_amplicons: Annotated[
-        Optional[int], typer.Option(help="Max number of amplicons to create", min=1)
+        int | None, typer.Option(help="Max number of amplicons to create", min=1)
     ] = None,
     max_amplicons_msa: Annotated[
-        Optional[int], typer.Option(help="Max number of amplicons for each MSA", min=1)
+        int | None, typer.Option(help="Max number of amplicons for each MSA", min=1)
     ] = None,
     max_amplicons_region_group: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(help="Max number of amplicons for each region", min=1),
     ] = None,
     force: Annotated[bool, typer.Option(help="Override the output directory")] = False,
