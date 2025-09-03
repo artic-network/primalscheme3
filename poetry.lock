@@ -1843,14 +1843,14 @@ virtualenv = ">=20.10.0"
 
 [[package]]
 name = "primalbedtools"
-version = "0.11.1"
+version = "0.6.2"
 description = "A collection of tools for working with primer.bed files"
 optional = false
-python-versions = "<4,>=3.9"
+python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "primalbedtools-0.11.1-py3-none-any.whl", hash = "sha256:a63bc3286253e91c22cfa645ae8ae008f5b1e05f51f2cd40855c749f085d76de"},
-    {file = "primalbedtools-0.11.1.tar.gz", hash = "sha256:aa7ae7c6c32044b6770de2bb3010cb01795b028c30137381defdc551343b4c54"},
+    {file = "primalbedtools-0.6.2-py3-none-any.whl", hash = "sha256:aaff1a44235f67f08b2acff623dfc37f01054fcec2d6dec25ee5ed6416defbc1"},
+    {file = "primalbedtools-0.6.2.tar.gz", hash = "sha256:fe8d656fef3824c9f9af623cdad61a2ee00ca829c5856522b5f5b8a05d8860dc"},
 ]
 
 [[package]]
@@ -3057,4 +3057,4 @@ cffi = ["cffi (>=1.17) ; python_version >= \"3.13\" and platform_python_implemen
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "71dc24428a06218490be83767a3fd8d0a01222d26e654357bf4db8141a207b62"
+content-hash = "142306c24c8cbad88caddbd20068c2573d5dc2ba9a922e4a1a6200eac0b591c3"
