@@ -18,7 +18,7 @@ dependencies = [
 "typer>=0.16.1",
 "primalbedtools>=0.6.2",
 "dnaio>=1.2.3",
-"primalschemers>=0.1.7",
+"primalschemers==0.1.7",
 "poetry>=2.1.3"
 ]
 
