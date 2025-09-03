@@ -8,6 +8,8 @@ from collections.abc import Iterable
 
 import dnaio
 
+from primalscheme3.core.config import Config
+
 # Module imports
 from primalscheme3.core.seq_functions import expand_ambs, reverse_complement
 
@@ -26,8 +28,12 @@ class MatchDB:
     delim between values:   b';'
     """
 
-    def __init__(self, path, msas_paths: list[str], kmer_size: int) -> None:
-        self.db = db.open(str(path), "n")
+    def __init__(self, path, msas_paths: list[str], config: Config) -> None:
+        # If in memory or empty contents don't write a file
+        if config.mismatch_in_memory or not msas_paths:
+            self.db = {}
+        else:
+            self.db = db.open(str(path), "n")
 
         # Read in and digest each MSA
         for msa_index, msa_path in enumerate(msas_paths):
@@ -36,7 +42,7 @@ class MatchDB:
                 for entry in file:
                     if entry.sequence is not None:
                         self._digest_kmers_into_db(
-                            entry.sequence.upper(), kmer_size, msa_index
+                            entry.sequence.upper(), config.mismatch_kmersize, msa_index
                         )
 
     def _write_unique(self, sequence, match: tuple[int, int]):

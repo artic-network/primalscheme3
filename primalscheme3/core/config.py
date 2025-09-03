@@ -67,6 +67,7 @@ class Config:
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min
     mismatch_product_size: int = 0
+    mismatch_in_memory: bool = False  # Use an in memory dict rather than a dbm file
     # Thermodynamic Parameters
     mv_conc: float = 100.0
     dv_conc: float = 2.0

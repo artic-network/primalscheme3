@@ -13,11 +13,12 @@ from primalscheme3.scheme.classes import Scheme, SchemeReturn
 class TestScheme(unittest.TestCase):
     def setUp(self) -> None:
         self.db_path = pathlib.Path("./tests/core/mulitplex").absolute()
-        self.matchdb = MatchDB(self.db_path, [], 30)  # Create an empty matchdb
+        self.config = Config()
+        self.matchdb = MatchDB(self.db_path, [], self.config)  # Create an empty matchdb
         self.inputfile_path = pathlib.Path(
             "./tests/core/test_mismatch.fasta"
         ).absolute()
-        self.config = Config()
+
         self.msa = MSA("test", self.inputfile_path, 0, "first", None, self.config)
 
         return super().setUp()
