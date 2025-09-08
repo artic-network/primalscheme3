@@ -40,6 +40,9 @@ class BedPrimerPair(PrimerPair):
     def match_primer_stem(self, primernamestem: str) -> bool:
         return self._primername == primernamestem
 
+    def all_seq_bytes(self) -> list[bytes]:
+        return self.fprimer.seqs_bytes() + self.rprimer.seqs_bytes()
+
 
 def read_bedlines_to_bedprimerpairs(
     path: pathlib.Path,
