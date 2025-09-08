@@ -19,7 +19,7 @@ class TestScheme(unittest.TestCase):
             "./tests/core/test_mismatch.fasta"
         ).absolute()
 
-        self.msa = MSA("test", self.inputfile_path, 0, "first", None, self.config)
+        self.msa = MSA("test", self.inputfile_path, 0, None, self.config)
 
         return super().setUp()
 

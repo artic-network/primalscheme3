@@ -18,7 +18,13 @@ class TestMSA(unittest.TestCase):
     def test_create_msa(self):
         # Should not raise anything
         pm = ProgressManager()
-        _ = MSA("test", self.msa_path, 0, "first", pm, config=self.config)
+        _ = MSA(
+            name="test",
+            path=self.msa_path,
+            msa_index=0,
+            progress_manager=pm,
+            config=self.config,
+        )
 
 
 class TestParseMSA(unittest.TestCase):

@@ -18,7 +18,6 @@ class Test_MappingIntergration(unittest.TestCase):
             "test_mapping",
             self.input_path,
             0,
-            "first",
             progress_manager=PM(),
             config=self.config,
         )

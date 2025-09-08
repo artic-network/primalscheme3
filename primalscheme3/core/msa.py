@@ -132,7 +132,6 @@ class MSA:
         name: str,
         path: pathlib.Path,
         msa_index: int,
-        mapping: str,
         progress_manager,
         config: Config,
         logger=None,
@@ -164,31 +163,11 @@ class MSA:
                 self.logger.error(f"MSA: {self.name} failed QC: {e}")
             raise e
 
-        # Create the mapping array
-        # Goes from msa idx -> ref idx
-        if mapping == "consensus":
-            self._chrom_name = self.name + "_consensus"
-            self._mapping_array = np.array([*range(len(self.array[0]))])
-        elif mapping == "first":
-            self._mapping_array, self.array = create_mapping(self.array, 0)
-            self._chrom_name = list(self._seq_dict)[0]
-        else:
-            raise ValueError(f"Mapping method: {mapping} not recognised")
-
-        # Goes from ref idx -> msa idx
-        self._ref_to_msa = ref_index_to_msa(self._mapping_array)
+        # Create the mapping arrays + set chrom name
+        self.set_reference_genome(config.mapping)
 
         # Assign a UUID
         self._uuid = str(uuid4())[:8]
-
-        if "/" in self._chrom_name or "-" in self._chrom_name:
-            new_chromname = self._chrom_name.replace("/", "_").replace("-", "_")
-            warning_str = f"Replacing '/' and '-' with '_'. '{self._chrom_name}' -> '{new_chromname}'"
-            if self.logger:
-                self.logger.warning(warning_str)
-            else:
-                print(warning_str)
-            self._chrom_name = new_chromname
 
         # Check chromname
         if not re.match(CHROM_REGEX, self._chrom_name):
@@ -334,6 +313,40 @@ class MSA:
                 and x.start in mapping_set
                 and max(x.ends()) < self.array.shape[1]
             ]
+
+    def set_reference_genome(self, mapping: MappingType | int):
+        """
+        Given the mapping type, or the index changes the MSA to use that genome as the reference.
+        - Updates/create the mapping arrays
+        - Updates _chromname
+        """
+
+        # Create the mapping array
+        # Goes from msa idx -> ref idx
+        if mapping == MappingType.CONSENSUS:
+            self._chrom_name = self.name + "_consensus"
+            self._mapping_array = np.array([*range(len(self.array[0]))])
+        elif mapping == MappingType.FIRST:
+            self._mapping_array, self.array = create_mapping(self.array, 0)
+            self._chrom_name = list(self._seq_dict)[0]
+        elif isinstance(mapping, int):
+            self._mapping_array, self.array = create_mapping(self.array, mapping)
+            self._chrom_name = list(self._seq_dict)[mapping]
+        else:
+            raise ValueError(f"Mapping method: {mapping} not recognised")
+
+        # Goes from ref idx -> msa idx
+        self._ref_to_msa = ref_index_to_msa(self._mapping_array)
+
+        # Parse the chrom name
+        if "/" in self._chrom_name or "-" in self._chrom_name:
+            new_chromname = self._chrom_name.replace("/", "_").replace("-", "_")
+            warning_str = f"Replacing '/' and '-' with '_'. '{self._chrom_name}' -> '{new_chromname}'"
+            if self.logger:
+                self.logger.warning(warning_str)
+            else:
+                print(warning_str)
+            self._chrom_name = new_chromname
 
     def generate_primerpairs(
         self, amplicon_size_min: int, amplicon_size_max: int, dimerscore: float

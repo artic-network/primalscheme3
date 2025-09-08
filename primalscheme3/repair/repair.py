@@ -161,7 +161,6 @@ def repair(
         name=msa_path.stem,
         path=msa_path,
         msa_index=0,
-        mapping=base_cfg["mapping"],
         logger=logger,
         progress_manager=pm,
         config=config,
@@ -218,7 +217,7 @@ def repair(
     seqs_bytes_in_pools = [[] for _ in range(config.n_pools)]
     for pp in primerpairs_in_msa:
         seqs_bytes_in_pools[pp.pool].extend(
-            [*pp.fprimer.seq_bytes(), *pp.rprimer.seq_bytes()]
+            [*pp.fprimer.seqs_bytes(), *pp.rprimer.seqs_bytes()]
         )
 
     # Find the indexes in the MSA that the primerbed refer to
@@ -299,7 +298,7 @@ def repair(
         for rseqstatus in rseq_counts:
             if not report_check(
                 seqstatus=rseqstatus,
-                current_primer_seqs=pp.rprimer.seq_bytes(),
+                current_primer_seqs=pp.rprimer.seqs_bytes(),
                 seqs_bytes_in_pools=seqs_bytes_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,
