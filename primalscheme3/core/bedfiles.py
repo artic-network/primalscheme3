@@ -123,7 +123,7 @@ def create_amplicon_str(
     for pp in primerpairs:
         if trim_primers:
             amplicon_str.append(
-                f"{pp.chrom_name}\t{pp.fprimer.region()[1]}\t{pp.rprimer.region()[0] - 1}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
+                f"{pp.chrom_name}\t{pp.fprimer.region()[1]}\t{pp.rprimer.region()[0]}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
             )
         else:
             amplicon_str.append(
