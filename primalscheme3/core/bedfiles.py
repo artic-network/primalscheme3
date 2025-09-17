@@ -64,20 +64,30 @@ def read_bedlines_to_bedprimerpairs(
         if len(rk_start) != 1:
             raise ValueError("Cannot combine into Single RP")
 
-        fk_counts = [float(fk.attributes.get("pc")) for fk in fks]  # type: ignore
-        rk_counts = [float(rk.attributes.get("pc")) for rk in rks]  # type: ignore
+        # Make a note of the any count data encoded into the bedlines
+        fk_counts = [fk.attributes.get("pc") for fk in fks]
+        if None in fk_counts:
+            fk_counts = None
+        else:
+            fk_counts = [float(fk) for fk in fk_counts]  # type: ignore
+
+        rk_counts = [rk.attributes.get("pc") for rk in rks]
+        if None in rk_counts:
+            rk_counts = None
+        else:
+            rk_counts = [float(rk) for rk in rk_counts]  # type: ignore
 
         primerpairs.append(
             BedPrimerPair(
                 fprimer=FKmer(
                     [fk.sequence.encode() for fk in fks],
                     fk_end.pop(),
-                    fk_counts if None not in fk_counts else None,
+                    fk_counts,
                 ),
                 rprimer=RKmer(
                     [rk.sequence.encode() for rk in rks],
                     rk_start.pop(),
-                    rk_counts if None not in rk_counts else None,
+                    rk_counts,
                 ),
                 msa_index=None,  # This is set later # type: ignore
                 chrom_name=fks[0].chrom,
