@@ -29,7 +29,7 @@ def parse_chrom_name(old_chrom: str) -> str:
     return old_chrom.replace("/", "_").replace("-", "_")
 
 
-def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
+def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict[str, str]]:
     """
     Parses a multiple sequence alignment (MSA) file in FASTA format.
 
@@ -52,7 +52,7 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict]:
         MSAFileInvalidBase: If the MSA contains non-DNA characters.
     """
     try:
-        records_index = {}
+        records_index: dict[str, str] = {}
         with dnaio.open(msa_path) as input_msa:
             for record in input_msa:
                 parsed_record_id = parse_chrom_name(record.id)
@@ -117,7 +117,7 @@ class MSA:
     _chrom_name: str  # only used in the primer.bed file and html report
     _mapping_array: np.ndarray
     _ref_to_msa: dict[int, int]
-    _seq_dict: dict
+    _seq_dict: dict[str, str]
 
     # Calculated on evaluation
     fkmers: list[FKmer]
@@ -148,8 +148,8 @@ class MSA:
         self.rkmers = []
 
         # digester
-        self._digester = Digester(
-            msa_path=str(path.absolute()),
+        self.create_digester(
+            path=path,
             ncores=config.ncores,
             remap=config.mapping == MappingType.FIRST,
         )
@@ -185,19 +185,53 @@ class MSA:
                 )
             self._chrom_name = new_chromname
 
+    def create_digester(self, path: pathlib.Path, ncores: int, remap: bool):
+        """
+        Creates an instance of the Rust Digester Object.
+        """
+        # digester
+        self._digester = Digester(
+            msa_path=str(path.absolute()),
+            ncores=ncores,
+            remap=remap,
+        )
+
     def digest_rs(
         self,
         config: Config,
         indexes: tuple[list[int], list[int]] | None = None,  # type: ignore
+        rs_thermo=True,
+        py_hairpin=True,
     ) -> None:
+        """
+        Digest the MSA using the Rust Digester and optionally downsample and filter kmers.
+
+        This method performs the following steps:
+        1. Uses the Rust Digester to generate FKmers and RKmers from the MSA, with configurable parameters.
+        2. Optionally disables Rust-side thermo checking if downsampling is enabled.
+        3. If downsampling is enabled, uses Python logic to select and filter kmers in parallel (using multiprocessing),
+           based on sequence abundance and thermodynamic properties.
+        4. Optionally applies a Python-side hairpin filter to remove kmers that form hairpins.
+        5. Updates the object's FKmers and RKmers in place.
+
+        Args:
+            config (Config): Configuration object with all primer design parameters.
+            indexes (tuple[list[int], list[int]] | None): Optional tuple of indexes for FKmers and RKmers to digest.
+            rs_thermo (bool): If True, enables Rust-side thermo checking. Automatically disabled if downsampling.
+            py_hairpin (bool): If True, applies Python-side hairpin filtering after downsampling.
+
+        Returns:
+            None. Updates self.fkmers and self.rkmers in place.
+
+        Raises:
+            ValueError: If chrom name does not match expected regex or is too long.
+        """
         if indexes is None:
             indexes: tuple[None, None] = (None, None)
 
-        # If using downsample dont thermo check in rust
+        # If using downsample override thermo check in rust
         if config.downsample:
             rs_thermo = False
-        else:
-            rs_thermo = True
 
         self.fkmers, self.rkmers, logs = self._digester.digest(
             findexes=indexes[0],
@@ -265,7 +299,7 @@ class MSA:
 
             self.rkmers = new_rkmers
 
-        else:
+        if py_hairpin:
             ## Hairpin check the kmers
             self.fkmers = [
                 x for x in self.fkmers if not forms_hairpin(x.seqs(), config)
