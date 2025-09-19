@@ -1055,11 +1055,11 @@ wheels = [
 
 [[package]]
 name = "primalbedtools"
-version = "0.10.1"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6f/fc/e468266cff10b7150bb04070a2d128a29f584ec6ea684430efd858dec0f5/primalbedtools-0.10.1.tar.gz", hash = "sha256:1fe17f4327abfc066ff789ca15f95c1aa8dcba33c5e4dc4718c4f574de7b9ce3", size = 23645855, upload-time = "2025-08-07T13:43:31.385Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/1b/315a71aa26804b2cd61912e6b8d1b29ee3b95d93c57cf1c09b8a87c09cca/primalbedtools-1.0.0.tar.gz", hash = "sha256:69dd012a02e711a73a7e23279dde4a2e5be973f69a245ac6e4de7f4f4b8e425b", size = 81797, upload-time = "2025-09-04T11:42:52.582Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/53/01e449328676241a468fcd1713938c1d66290f2ac8a0550a985e42b20208/primalbedtools-0.10.1-py3-none-any.whl", hash = "sha256:95a9ae66e9dc987bcbddf830ef0676dd1dd323404c4aa92c1e4df67a042eccae", size = 20482, upload-time = "2025-08-07T13:43:27.176Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/57/4ab6d7097f977b27db97dbd98d3d9092ebeda7de38e1000d4488f6fe1870/primalbedtools-1.0.0-py3-none-any.whl", hash = "sha256:84b5d5ff90273559460a3dffa697c085d2b07883319439e1085145f8ccff7424", size = 23215, upload-time = "2025-09-04T11:42:51.431Z" },
 ]
 
 [[package]]
@@ -1102,7 +1102,7 @@ requires-dist = [
     { name = "networkx", specifier = "~=3.1" },
     { name = "numpy", specifier = ">=2.3.0" },
     { name = "plotly", specifier = ">=5.16.1,<6" },
-    { name = "primalbedtools", specifier = ">=0.10.1,<0.11" },
+    { name = "primalbedtools", specifier = ">=1.0.0" },
     { name = "primalschemers", specifier = ">=0.1.9,<0.2" },
     { name = "primer3-py", specifier = ">=2.2.0,<3" },
     { name = "tqdm", specifier = ">=4.66.1,<5" },

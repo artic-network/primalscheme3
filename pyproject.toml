@@ -13,11 +13,11 @@ dependencies = [
     "plotly>=5.16.1,<6",
     "tqdm>=4.66.1,<5",
     "typer>=0.16.1,<0.17",
-    "primalbedtools>=0.10.1,<0.11",
     "dnaio>=1.2.3,<2",
     "matplotlib>=3.10.5,<4",
     "primalschemers>=0.1.9,<0.2",
     "numpy>=2.3.0",
+    "primalbedtools>=1.0.0",
 ]
 
 [project.urls]
