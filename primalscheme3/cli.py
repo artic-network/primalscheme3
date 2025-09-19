@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import argparse
+import json
 import pathlib
 from importlib.metadata import version
 from typing import Annotated
@@ -17,9 +18,10 @@ from primalscheme3.interaction.interaction import (
 )
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
 from primalscheme3.repair.repair import repair
+from primalscheme3.replace.replace import ReplaceRunModes, replace
 
 # Import main functions
-from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
+from primalscheme3.scheme.scheme_main import schemecreate
 
 ## Commands are in the format of
 # {pclass}-{mode}
@@ -211,7 +213,7 @@ def scheme_create(
 
 
 @app.command(no_args_is_help=True)
-def scheme_replace(
+def replace_primerpair(
     primername: Annotated[
         str, typer.Argument(help="The name of the primer to replace")
     ],
@@ -245,7 +247,7 @@ def scheme_replace(
             help="The min size of an amplicon. [100<=x<=2000]", min=100, max=2000
         ),
     ],
-    config: Annotated[
+    config_path: Annotated[
         pathlib.Path,
         typer.Option(
             help="The config.json used to create the original primer scheme",
@@ -254,22 +256,60 @@ def scheme_replace(
             resolve_path=True,
         ),
     ],
+    output: Annotated[
+        pathlib.Path,
+        typer.Option(
+            help="The output directory",
+            resolve_path=True,
+        ),
+    ],
+    mode: Annotated[
+        ReplaceRunModes,
+        typer.Option(
+            help="Select what run mode",
+        ),
+    ] = ReplaceRunModes.ListAll.value,  # type: ignore
+    force: Annotated[
+        bool, typer.Option(help="Override the output directory")
+    ] = Config.force,
+    mask_old_sites: Annotated[
+        bool,
+        typer.Option(
+            help="If True prevents replacement primers from spanning old primer regions."
+        ),
+    ] = True,
 ):
     """
     Replaces a primerpair in a bedfile
     """
 
+    # Read in the config file
+    with open(config_path) as file:
+        _cfg: dict = json.load(file)
+    config = Config(**_cfg)
+
+    # Update the config with CLI params
+    config.assign_kwargs(**locals())
+
+    # Update the config with required
+    config.in_memory_db = True  # Set up the db
+
+    # Check the output directory
+    check_output_dir(output, force)
+
     # Set up the progress manager
     pm = ProgressManager()
 
-    schemereplace(
-        config_path=config,
+    replace(
         primername=primername,
-        ampliconsizemax=amplicon_size_max,
-        ampliconsizemin=amplicon_size_min,
+        config=config,
         primerbed=primerbed,
         msapath=msa,
         pm=pm,
+        output=output,
+        force=force,
+        mode=mode,
+        mask_old_sites=mask_old_sites,
     )
 
 

@@ -1,5 +1,3 @@
-import hashlib
-import json
 import pathlib
 from collections import Counter
 from enum import Enum
@@ -11,40 +9,40 @@ from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
 )
 from primalscheme3.core.config import Config
+from primalscheme3.core.create_report_data import (
+    generate_all_plotdata,
+)
+from primalscheme3.core.create_reports import generate_all_plots_html
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
+from primalscheme3.core.primer_visual import (
+    primer_mismatch_heatmap,
+)
 from primalscheme3.core.progress_tracker import ProgressManager
 
 
-class ReplaceErrors(Enum):
-    SamePrimer = "SamePrimer"
-    ClashWithPool = "ClashWithPool"
-    InteractWithPool = "InteractWithPool"
+class ReplaceRunModes(Enum):
+    AddBest = "addbest"
+    ListAll = "listall"
 
 
 def replace(
-    config_path: pathlib.Path,
-    ampliconsizemax: int,
-    ampliconsizemin: int,
+    config: Config,
     primerbed: pathlib.Path,
     primername: str,
     msapath: pathlib.Path,
     pm: ProgressManager | None,
     output: pathlib.Path,
-    force,
+    force: bool,
+    mode: ReplaceRunModes,
+    mask_old_sites: bool = False,
 ):
     """
     List all replacements primers
     """
-    # Read in the config file
-    with open(config_path) as file:
-        _cfg: dict = json.load(file)
-    config = Config()
-    config.assign_kwargs(**_cfg)
-    config.min_overlap = 0
-    config.in_memory_db = True  # Set up the db
+    offline_plots = False
 
     # See if the output dir already exists.
     if output.is_dir() and not force:
@@ -57,42 +55,41 @@ def replace(
     if pm is None:
         pm = ProgressManager()
 
-    # Set up the logger without a file
     logger = setup_rich_logger(logfile=str((output / "work/file.log").absolute()))
 
-    # Update the amplicon size if it is provided
-    if ampliconsizemax:
-        logger.info(
-            f"Updated min/max amplicon size to {ampliconsizemin}/{ampliconsizemax}"
-        )
-
-        config.amplicon_size_max = ampliconsizemax
-        config.amplicon_size_min = ampliconsizemin
-
-    # If more than two pools are given throw error
-    if config.n_pools > 2:
-        raise UsageError("ERROR: repair is only supported with two pools")
-
-    # Create a mapping of chromname/reference to msa_index
-    msa_chrom_to_index: dict[str, int] = {
-        msa_data["msa_chromname"]: msa_index
-        for msa_index, msa_data in _cfg["msa_data"].items()
-    }
+    # Update the amplicon size
+    logger.info(
+        f"Updated min/max amplicon size to {config.amplicon_size_min}/{config.amplicon_size_max}"
+    )
 
     # Read in the bedfile
     bedprimerpairs, headers = read_bedlines_to_bedprimerpairs(primerbed)
+    chroms = {bpp.chrom_name for bpp in bedprimerpairs}
 
-    # Map each primer to an MSA index
-    for primerpair in bedprimerpairs:
-        msa_index = msa_chrom_to_index.get(str(primerpair.chrom_name), None)
-        if msa_index is not None:
-            primerpair.msa_index = msa_index
-        elif _cfg["bedfile"]:
-            # This case can happen when primers are added to the scheme via --bedfile.
-            # Set the msa index to -1
-            primerpair.msa_index = -1
-        else:
-            raise UsageError(f"ERROR: {primerpair.chrom_name} not found in MSA data")
+    # Read in the MSA
+    MSA_INDEX = 0
+    msa = MSA(
+        name=msapath.stem,
+        path=msapath,
+        msa_index=MSA_INDEX,
+        logger=logger,
+        progress_manager=pm,
+        config=config,
+    )
+
+    # Assign all primers with matching chroms to the msa_index
+    correct_msa_bpp = 0
+    for bpp in bedprimerpairs:
+        if bpp.chrom_name == msa._chrom_name:
+            correct_msa_bpp += 1
+            bpp.msa_index = MSA_INDEX
+        # else default is -1
+
+    if correct_msa_bpp == 0:
+        logger.critical(
+            f"Chroms found in bedfile ({', '.join([c for c in chroms if c is not None])}) do not match MSA chromname ({msa._chrom_name})."
+        )
+        exit()
 
     bedprimerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
 
@@ -115,30 +112,6 @@ def replace(
     else:
         logger.info("Found amplicon to replace:")
         logger.info(wanted_pp.to_bed())
-
-    # Read in the MSAs from config["msa_data"]
-    msa_data = _cfg["msa_data"].get(wanted_pp.msa_index)
-    if msa_data is None:
-        if wanted_pp.msa_index == -1:
-            raise UsageError(f"ERROR: The Primer {primername} was added via --bedfile")
-        else:
-            raise UsageError(f"ERROR: MSA index {wanted_pp.msa_index} not found")
-
-    msa = MSA(
-        name=msa_data["msa_name"],
-        path=msapath,
-        msa_index=wanted_pp.msa_index,
-        logger=None,
-        progress_manager=pm,
-        config=config,
-    )
-    # Check the hashes match
-    with open(msa.path, "rb") as f:
-        msa_checksum = hashlib.file_digest(f, "md5").hexdigest()
-    if msa_checksum != msa_data["msa_checksum"]:
-        raise UsageError("ERROR: MSA checksums do not match.")
-    else:
-        logger.info("MSA checksums match")
 
     # Create the multiplex object.
     msa_dict = {wanted_pp.msa_index: msa}
@@ -170,7 +143,7 @@ def replace(
 
     # If no left ol set the index to something reasonable
     if left_ol_ref_index is None:
-        left_ol_ref_index = max(0, wanted_pp.rprimer.start - config.amplicon_size_min)
+        left_ol_ref_index = max(0, wanted_pp.rprimer.start)
 
     findexes = [
         *range(
@@ -192,7 +165,7 @@ def replace(
 
     # If no left ol set the index to something reasonable
     if right_ol_ref_index is None:
-        right_ol_ref_index = max(0, wanted_pp.fprimer.end + config.amplicon_size_min)
+        right_ol_ref_index = max(0, wanted_pp.fprimer.end)
 
     rindexes = [
         *range(
@@ -207,6 +180,23 @@ def replace(
     # Targeted digestion leads to a mismatch of the indexes.
     # Digest the MSA into FKmers and RKmers
     msa.digest_rs(config, (findexes, rindexes))  ## Primer are remapped at this point.
+
+    # See if to hard mask old primer sites
+    unwanted_f_ends = {wanted_pp.fprimer.end}
+    unwanted_r_starts = {wanted_pp.rprimer.start}
+
+    if mask_old_sites:
+        unwanted_f_ends = unwanted_f_ends.union(
+            range(min(wanted_pp.fprimer.starts()), wanted_pp.fprimer.end)
+        )
+        unwanted_r_starts = unwanted_f_ends.union(
+            range(wanted_pp.rprimer.start, max(wanted_pp.rprimer.ends()))
+        )
+
+    # Remove the primers from old scheme
+    msa.fkmers = [fk for fk in msa.fkmers if fk.end not in unwanted_f_ends]
+    msa.rkmers = [rk for rk in msa.rkmers if rk.start not in unwanted_r_starts]
+
     logger.info(f"Digested into {len(msa.fkmers)} FKmers and {len(msa.rkmers)} RKmers")
 
     # Generate all primerpairs then interaction check
@@ -215,6 +205,8 @@ def replace(
         amplicon_size_min=config.amplicon_size_min,
         dimerscore=config.dimer_score,
     )
+
+    ## TODO ENSURE THE PP SPAN REQUIRED REGIONS IN REGION MODE
 
     logger.info(f"Generated {len(msa.primerpairs)} possible amplicons")
     if len(msa.primerpairs) == 0:
@@ -242,9 +234,18 @@ def replace(
 
     if len(valid_pp) == 0:
         logger.critical("No valid primerpairs can be added.")
+        return
 
     # Sort the pp depending on a score
     valid_pp.sort(key=lambda pp: len(pp.all_seqs()))
+
+    # Write all valid primers to file
+    if mode == ReplaceRunModes.ListAll:
+        with open(output / "primer.bed", "w") as outfile:
+            for i, pp in enumerate(valid_pp, 1):
+                outfile.write(f"# PrimerPair Option: {i}\n")
+                outfile.write(pp.to_bed())
+        exit()
 
     multiplex.add_primer_pair_to_pool(
         valid_pp[0], valid_pp[0].pool, valid_pp[0].msa_index
@@ -255,4 +256,32 @@ def replace(
     with open(output / "primer.bed", "w") as outfile:
         primer_bed_str = multiplex.to_bed()
         outfile.write(primer_bed_str)
-    exit()
+
+    # Writing plot data
+    plot_data = generate_all_plotdata(
+        list(msa_dict.values()),
+        output / "work",
+        last_pp_added=multiplex._last_pp_added,
+    )
+
+    # Write the plot
+    with open(output / "plot.html", "w") as outfile:
+        outfile.write(
+            generate_all_plots_html(plot_data, output, offline_plots=offline_plots)
+        )
+    with open(output / "primer.html", "w") as outfile:
+        for i, msa_obj in enumerate(msa_dict.values()):
+            try:
+                outfile.write(
+                    primer_mismatch_heatmap(
+                        array=msa_obj.array,
+                        seqdict=msa_obj._seq_dict,
+                        bedfile=output / "primer.bed",
+                        offline_plots=True if offline_plots and i == 0 else False,
+                        mapping=config.mapping,
+                    )
+                )
+            except UsageError:
+                logger.warning(
+                    f"No Primers found for {msa_obj._chrom_name}. Skipping Plot!"
+                )
