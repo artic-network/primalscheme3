@@ -1,7 +1,6 @@
 import hashlib
 import json
 import pathlib
-import shutil
 from enum import Enum
 
 from click import UsageError
@@ -13,14 +12,18 @@ from primalscheme3.core.config import Config
 from primalscheme3.core.digestion import (
     DIGESTION_ERROR,
     DIGESTION_RESULT,
-    f_digest_to_result,
-    r_digest_to_result,
 )
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.progress_tracker import ProgressManager
-from primalscheme3.core.seq_functions import reverse_complement
-from primalscheme3.core.thermo import THERMO_RESULT
+from primalscheme3.core.thermo import THERMO_RESULT, thermo_check
+
+
+def primers_equal(s1, s2) -> bool:
+    for b1, b2 in zip(s1, s2, strict=False):
+        if b2 != b1:
+            return False
+    return True
 
 
 class NewPrimerStatus(Enum):
@@ -60,7 +63,8 @@ def detect_early_return(seq_counts: list[DIGESTION_RESULT]) -> bool:
 
 
 def report_check(
-    seqstatus: DIGESTION_RESULT,
+    seq: str,
+    count: float,
     current_primer_seqs: set[str],
     seqs_bytes_in_pools: list[list[str]],
     pool: int,
@@ -72,47 +76,46 @@ def report_check(
     Will carry out the checks and report the results via the logger. Will return False if the seq should not be added
     """
 
-    report_seq = seqstatus.seq if isinstance(seqstatus.seq, str) else "DIGESTION_ERROR"
+    report_seq = seq if isinstance(seq, str) else "DIGESTION_ERROR"
     report_seq = report_seq.rjust(config.primer_size_max + 5, " ")
 
+    thermo_status = thermo_check(seq, config)
+
     # Check it passed thermo
-    if (
-        seqstatus.thermo_check(config=config) != THERMO_RESULT.PASS
-        or seqstatus.seq is None
-    ):
+    if thermo_status != THERMO_RESULT.PASS or seq is None:
         logger.warning(
-            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {seqstatus.thermo_check(config=config)}",
+            f"{report_seq}\t{round(count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {thermo_status.name}",
         )
         return False
 
     # Check it is a new seq
-    if seqstatus.seq in current_primer_seqs:
+    if any([primers_equal(seq, x) for x in current_primer_seqs]):
         logger.info(
-            f"{report_seq}\t{round(seqstatus.count, 4)}\t[blue]{NewPrimerStatus.PRESENT.value}[/blue]: In scheme",
+            f"{report_seq}\t{round(count, 4)}\t[blue]{NewPrimerStatus.PRESENT.value}[/blue]: In scheme",
         )
         return False
 
     # Check for minor allele
-    if seqstatus.count < config.min_base_freq:
+    if count < config.min_base_freq:
         logger.warning(
-            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Minor allele",
+            f"{report_seq}\t{round(count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Minor allele",
         )
         return False
 
     # Check for dimer with pool
     if do_pool_interact(
-        [seqstatus.seq.encode()],  # type: ignore
+        [seq.encode()],  # type: ignore
         seqs_bytes_in_pools[pool],
         dimerscore,
     ):
         logger.warning(
-            f"{report_seq}\t{round(seqstatus.count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
+            f"{report_seq}\t{round(count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
         )
         return False
 
     # Log the seq
     logger.info(
-        f"{report_seq}\t{round(seqstatus.count, 4)}\t[green]{NewPrimerStatus.VALID.value}[/green]: Can be added",
+        f"{report_seq}\t{round(count, 4)}\t[green]{NewPrimerStatus.VALID.value}[/green]: Can be added",
     )
 
     return True
@@ -139,7 +142,7 @@ def repair(
     base_cfg = config.to_dict()
     base_cfg["msa_data"] = msa_data
 
-    config.min_base_freq = 0.01
+    config.min_base_freq = 0.1
 
     # See if the output dir already exists
     if OUTPUT_DIR.is_dir() and not force:
@@ -156,6 +159,14 @@ def repair(
     if pm is None:
         pm = ProgressManager()
 
+    # Read in the bedfile, and find chrom names
+    all_primerpairs, _header = read_bedlines_to_bedprimerpairs(bedfile_path)
+    bedfile_chroms: set[str] = {pp.chrom_name for pp in all_primerpairs}  # type: ignore
+
+    if None in bedfile_chroms:
+        logger.warning("Invalid bedfile. Chrom name has been parsed to None")
+        exit()
+
     # Read in the MSA file
     msa_obj = MSA(
         name=msa_path.stem,
@@ -165,20 +176,29 @@ def repair(
         progress_manager=pm,
         config=config,
     )
+
+    # Search for the required chroms in msa._seq_dict
+    msa_seq_names_to_index = {id: i for i, id in enumerate(msa_obj._seq_dict.keys())}
+    names_in_both = bedfile_chroms.intersection(msa_seq_names_to_index.keys())
+    if len(names_in_both) == 0:
+        logger.warning(
+            f"BedFile Chrom names ({', '.join(bedfile_chroms)}) not found in MSA seq IDs"
+        )
+        exit()
+    elif len(names_in_both) > 1:
+        logger.warning(
+            f"Multiple BedFile Chrom names ({', '.join(names_in_both)}) found in MSA seq IDs"
+        )
+        exit()
+
+    # Change the MSA chrom to the correct ref
+    msa_obj.set_reference_genome(msa_seq_names_to_index[names_in_both.pop()])
+
     logger.info(
         f"Read in MSA: [blue]{msa_path.name}[/blue] ({msa_obj._chrom_name})\t"
         f"seqs:[green]{msa_obj.array.shape[0]}[/green]\t"
         f"cols:[green]{msa_obj.array.shape[1]}[/green]"
     )
-    # Check for a '/' in the chromname
-    if "/" in msa_obj._chrom_name:
-        new_chromname = msa_obj._chrom_name.split("/")[0]
-        logger.warning(
-            f"Having a '/' in the chromname {msa_obj._chrom_name} "
-            f"will cause issues with figure generation bedfile output. "
-            f"Parsing chromname [yellow]{msa_obj._chrom_name}[/yellow] -> [green]{new_chromname}[/green]"
-        )
-        msa_obj._chrom_name = new_chromname
 
     # Update the base_cfg with the new msa
     # Create MSA checksum
@@ -195,10 +215,7 @@ def repair(
     }
     # Copy the MSA file to the work dir
     local_msa_path = OUTPUT_DIR / "work" / msa_path.name
-    shutil.copy(msa_path, local_msa_path)
-
-    # Read in the bedfile
-    all_primerpairs, _header = read_bedlines_to_bedprimerpairs(bedfile_path)
+    msa_obj.write_msa_to_file(local_msa_path)
 
     # Get the primerpairs for this new MSA
     primerpairs_in_msa = [
@@ -220,43 +237,48 @@ def repair(
             [*pp.fprimer.seqs_bytes(), *pp.rprimer.seqs_bytes()]
         )
 
-    # Find the indexes in the MSA that the primerbed refer to
-    assert msa_obj._mapping_array is not None
-    mapping_list = list(msa_obj._mapping_array)
+    # Update the MSA Digester to use the MSA index
+    msa_obj.create_digester(local_msa_path, config.ncores, remap=False)
+
+    fp_indexes = [msa_obj._ref_to_msa[pp.fprimer.end] for pp in primerpairs_in_msa]
+    rp_indexes = [msa_obj._ref_to_msa[pp.rprimer.start] for pp in primerpairs_in_msa]
+
+    # Digest the positions, returning all seqs
+    msa_obj.digest_rs(
+        config=config,
+        indexes=(fp_indexes, rp_indexes),
+        rs_thermo=False,
+        py_hairpin=False,
+    )
 
     # For primerpair in the bedfile, check if new seqs need to be added by digestion the MSA
     for pp in primerpairs_in_msa:
         logger.info(
             f"Checking {pp.amplicon_prefix}_{pp.amplicon_number}_LEFT",
         )
-        msa_fkmer_end = msa_obj._ref_to_msa.get(pp.fprimer.end)
+        msa_fkmer_end = msa_obj._ref_to_msa[pp.fprimer.end]
 
         if msa_fkmer_end is None:
             continue
 
-        _end_col, fseq_counts = f_digest_to_result(
-            msa_obj.array, config, msa_fkmer_end, config.min_base_freq
-        )
-
-        # Change count to freq
-        fseq_total_count = sum([dr.count for dr in fseq_counts])
-        for dr in fseq_counts:
-            dr.count = dr.count / fseq_total_count
-
-        # Check for early return conditions
-        if detect_early_return(fseq_counts):
-            logger.warning(
-                f"Early return for {pp.amplicon_prefix}_{pp.amplicon_number}_LEFT. Skipping",
-            )
+        # Find the FKmer object
+        new_fkmers = [fk for fk in msa_obj.fkmers if fk.end == msa_fkmer_end]
+        if len(new_fkmers) != 1:
+            logger.critical(f"Digestion failed for FKmer:{msa_fkmer_end}")
             continue
+        new_fkmer = new_fkmers[0]
 
-        seqstatuss = sorted(fseq_counts, key=lambda x: x.count, reverse=True)
+        fseq_count = {
+            seq: count
+            for seq, count in zip(new_fkmer.seqs(), new_fkmer.counts(), strict=True)
+        }
 
         # Decide if the new seqs should be added
-        for seqstatus in seqstatuss:
+        for seq in fseq_count:
             if not report_check(
-                seqstatus=seqstatus,
-                current_primer_seqs=pp.fprimer.seqs_bytes(),
+                seq=seq,
+                count=fseq_count[seq],
+                current_primer_seqs=pp.fprimer.seqs(),
                 seqs_bytes_in_pools=seqs_bytes_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,
@@ -266,39 +288,35 @@ def repair(
                 continue
 
             # Add the new seq
-            seqs_bytes_in_pools[pp.pool].append(seqstatus.seq.encode())  # type: ignore
+            seqs_bytes_in_pools[pp.pool].append(seq.encode())  # type: ignore
 
         # Handle the right primer
         logger.info(
             f"Checking {pp.amplicon_prefix}_{pp.amplicon_number}_RIGHT",
         )
-        msa_rkmer_start = mapping_list.index(pp.rprimer.start)
-        _start_col, rseq_counts = r_digest_to_result(
-            msa_obj.array, config, msa_rkmer_start, config.min_base_freq
-        )
-        # Check for early return conditions
-        if detect_early_return(rseq_counts):
-            logger.warning(
-                "Early return for {pp.amplicon_prefix}_{pp.amplicon_number}_RIGHT",
-            )
+        msa_rkmer_end = msa_obj._ref_to_msa[pp.rprimer.start]
+
+        if msa_rkmer_end is None:
             continue
-        # Valid seqs
 
-        rseq_total_count = sum([dr.count for dr in rseq_counts])
-        for dr in rseq_counts:
-            dr.count = dr.count / rseq_total_count
+        # Find the FKmer object
+        new_rkmers = [rk for rk in msa_obj.rkmers if rk.start == msa_rkmer_end]
+        if len(new_rkmers) != 1:
+            logger.critical(f"Digestion failed for RKmer:{msa_rkmer_end}")
+            continue
+        new_rkmer = new_rkmers[0]
 
-        for dr in rseq_counts:
-            if dr.seq is not None and not isinstance(dr.seq, DIGESTION_ERROR):
-                dr.seq = reverse_complement(dr.seq)
-
-        rseq_counts = sorted(rseq_counts, key=lambda x: x.count, reverse=True)
+        rseq_count = {
+            seq: count
+            for seq, count in zip(new_rkmer.seqs(), new_rkmer.counts(), strict=True)
+        }
 
         # Decide if the new seqs should be added
-        for rseqstatus in rseq_counts:
+        for seq in rseq_count:
             if not report_check(
-                seqstatus=rseqstatus,
-                current_primer_seqs=pp.rprimer.seqs_bytes(),
+                seq=seq,
+                count=rseq_count[seq],
+                current_primer_seqs=pp.rprimer.seqs(),
                 seqs_bytes_in_pools=seqs_bytes_in_pools,
                 pool=pp.pool,
                 dimerscore=config.dimer_score,
@@ -308,7 +326,7 @@ def repair(
                 continue
 
             # Add the new seq
-            seqs_bytes_in_pools[pp.pool].append(rseqstatus.seq.encode())  # type: ignore
+            seqs_bytes_in_pools[pp.pool].append(seq.encode())  # type: ignore
 
     # Write out the new bedfile
     with open(OUTPUT_DIR / "primer.bed", "w") as f:
@@ -322,4 +340,4 @@ def repair(
 
     # Write the config dict to file
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
-        outfile.write(json.dumps(base_cfg, sort_keys=True))
+        outfile.write(json.dumps(config.to_dict(), sort_keys=True))
