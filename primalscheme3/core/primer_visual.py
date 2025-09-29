@@ -42,7 +42,7 @@ class PlotlyText:
     def format_str(self) -> str:
         # parsedseqs
         cigar = []
-        for p, g in zip(self.primer_seq[::-1], self.genome_seq[::-1]):
+        for p, g in zip(self.primer_seq[::-1], self.genome_seq[::-1], strict=False):
             if p == g:
                 cigar.append("|")
             else:
@@ -120,7 +120,7 @@ def calc_primer_hamming(seq1, seq2) -> int:
     :return: The number of mismatches between the two sequences.
     """
     dif = 0
-    for seq1b, seq2b in zip(seq1[::-1], seq2[::-1]):
+    for seq1b, seq2b in zip(seq1[::-1], seq2[::-1], strict=False):
         seq1b_exp = set(extend_ambiguous_base(seq1b))
         seq2b_exp = set(extend_ambiguous_base(seq2b))
 
@@ -383,53 +383,61 @@ def bedfile_plot_html(
     )
 
     # Add the primer lines
+    shapes = []
     for pp in wanted_primerspairs:
-        print(f"Adding primer: {pp.amplicon_name}")
-        fig.add_shape(
-            type="rect",
-            y0=pp.pool - 0.05,
-            y1=pp.pool + 0.05,
-            x0=pp.amplicon_start,
-            x1=pp.coverage_start,
-            fillcolor="LightSalmon",
-            line=dict(color="darksalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=pp.pool - 0.05,
+                y1=pp.pool + 0.05,
+                x0=pp.amplicon_start,
+                x1=pp.coverage_start,
+                fillcolor="LightSalmon",
+                line=dict(color="darksalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
-        fig.add_shape(
-            type="rect",
-            y0=pp.pool - 0.05,
-            y1=pp.pool + 0.05,
-            x0=pp.coverage_end,
-            x1=pp.amplicon_end,
-            fillcolor="LightSalmon",
-            line=dict(color="darksalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=pp.pool - 0.05,
+                y1=pp.pool + 0.05,
+                x0=pp.coverage_end,
+                x1=pp.amplicon_end,
+                fillcolor="LightSalmon",
+                line=dict(color="darksalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
         # Handle circular genomes
         is_circular = pp.is_circular
 
-        fig.add_shape(
-            type="line",
-            y0=pp.pool,
-            y1=pp.pool,
-            x0=pp.coverage_start,
-            x1=pp.coverage_end if not is_circular else len(ref_seq),
-            line=dict(color="LightSeaGreen", width=5),
-            row=1,
-            col=1,
-        )
-        if is_circular:
-            fig.add_shape(
+        shapes.append(
+            dict(
                 type="line",
                 y0=pp.pool,
                 y1=pp.pool,
-                x0=0,
-                x1=pp.coverage_end,
+                x0=pp.coverage_start,
+                x1=pp.coverage_end if not is_circular else len(ref_seq),
                 line=dict(color="LightSeaGreen", width=5),
-                row=1,
-                col=1,
+                xref="x",
+                yref="y",
+            )
+        )
+        if is_circular:
+            shapes.append(
+                dict(
+                    type="line",
+                    y0=pp.pool,
+                    y1=pp.pool,
+                    x0=0,
+                    x1=pp.coverage_end,
+                    line=dict(color="LightSeaGreen", width=5),
+                    xref="x",
+                    yref="y",
+                )
             )
 
     fig.update_xaxes(
@@ -481,9 +489,12 @@ def bedfile_plot_html(
             "autoScale2d",
             "zoom",
             "toImage",
-        ]
+        ],
+        height=400,
+        title_text=ref_name,
+        showlegend=False,
+        shapes=shapes,
     )
-    fig.update_layout(height=400, title_text=ref_name, showlegend=False)
 
     # Write a html version of the plot
     return fig.to_html(

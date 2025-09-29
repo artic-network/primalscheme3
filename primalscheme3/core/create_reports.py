@@ -43,6 +43,7 @@ def generate_plot_html(
 
     # Extract amplicon data from the msa_data
     # Filter primers that are circular
+    shapes = []
     circular_pp = []
     amplicons = []
     for _, pp in msa_data["amplicons"].items():
@@ -94,37 +95,43 @@ def generate_plot_html(
 
     # Plot the amplicons lines
     for amplicon in amplicons:
-        fig.add_shape(
-            type="line",
-            y0=amplicon["p"],
-            y1=amplicon["p"],
-            x0=amplicon["cs"],
-            x1=amplicon["ce"],
-            line=dict(color="LightSeaGreen", width=5),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="line",
+                y0=amplicon["p"],
+                y1=amplicon["p"],
+                x0=amplicon["cs"],
+                x1=amplicon["ce"],
+                line=dict(color="LightSeaGreen", width=5),
+                xref="x",
+                yref="y",
+            )
         )
-        fig.add_shape(
-            type="rect",
-            y0=amplicon["p"] - 0.05,
-            y1=amplicon["p"] + 0.05,
-            x0=amplicon["s"],
-            x1=amplicon["cs"],
-            fillcolor="LightSalmon",
-            line=dict(color="darksalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=amplicon["p"] - 0.05,
+                y1=amplicon["p"] + 0.05,
+                x0=amplicon["s"],
+                x1=amplicon["cs"],
+                fillcolor="LightSalmon",
+                line=dict(color="darksalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
-        fig.add_shape(
-            type="rect",
-            y0=amplicon["p"] - 0.05,
-            y1=amplicon["p"] + 0.05,
-            x0=amplicon["ce"],
-            x1=amplicon["e"],
-            fillcolor="LightSalmon",
-            line=dict(color="darksalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=amplicon["p"] - 0.05,
+                y1=amplicon["p"] + 0.05,
+                x0=amplicon["ce"],
+                x1=amplicon["e"],
+                fillcolor="LightSalmon",
+                line=dict(color="darksalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
 
     # Plot the circular primers
@@ -263,16 +270,18 @@ def generate_plot_html(
     if "regions" in msa_data:
         data = msa_data.get("regions", [])
         for region in data:
-            fig.add_shape(
-                type="line",
-                y0=1.5,
-                y1=1.5,
-                x0=region["s"],
-                x1=region["e"],
-                fillcolor="Green",
-                line=dict(color="Green", width=5),
-                row=1,
-                col=1,
+            shapes.append(
+                dict(
+                    type="line",
+                    y0=1.5,
+                    y1=1.5,
+                    x0=region["s"],
+                    x1=region["e"],
+                    fillcolor="Green",
+                    line=dict(color="Green", width=5),
+                    xref="x",
+                    yref="y",
+                )
             )
         fig.add_trace(
             go.Scatter(  # doesn't need WebGL
@@ -359,11 +368,10 @@ def generate_plot_html(
     )  # Add the x-axis title to the bottom plot
 
     # fig.update_layout(paper_bgcolor="#000000")
-    fig.update_layout(height=900, title_text=chromname, showlegend=False)
-    # plot_bgcolor="rgba(246, 237, 202, 0.5)",
-
-    # Remove unnecessary plot elements
     fig.update_layout(
+        height=900,
+        title_text=chromname,
+        showlegend=False,
         modebar_remove=[
             "select2d",
             "lasso2d",
@@ -371,8 +379,10 @@ def generate_plot_html(
             "autoScale2d",
             "zoom",
             "toImage",
-        ]
+        ],
+        shapes=shapes,
     )
+    # plot_bgcolor="rgba(246, 237, 202, 0.5)",
 
     # Write a png version of the plot
     fig.write_image(
