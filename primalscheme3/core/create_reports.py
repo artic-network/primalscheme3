@@ -83,14 +83,20 @@ def generate_plot_html(
     )
     # Add the uncovered regions
     for start, stop in msa_data["uncovered"].items():
-        fig.add_vrect(
-            x0=start,
-            x1=stop + 1,
-            fillcolor="#F0605D",
-            line=dict(width=0),
-            opacity=0.5,
-            row=1,  # type: ignore
-            col=1,  # type: ignore
+        shapes.append(
+            dict(
+                type="rect",
+                x0=start,
+                x1=stop + 1,
+                y0=0.5,
+                y1=npools + 0.5,
+                xref="x",
+                yref="y",
+                fillcolor="#F0605D",
+                line=dict(width=0),
+                opacity=0.5,
+                layer="above",
+            )
         )
 
     # Plot the amplicons lines
@@ -137,48 +143,56 @@ def generate_plot_html(
     # Plot the circular primers
     for pp in circular_pp:
         # Add the left side line
-        fig.add_shape(
-            type="line",
-            y0=pp["p"],
-            y1=pp["p"],
-            x1=pp["ce"],
-            x0=0,
-            line=dict(color="LightSeaGreen", width=5),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="line",
+                y0=pp["p"],
+                y1=pp["p"],
+                x1=pp["ce"],
+                x0=0,
+                line=dict(color="LightSeaGreen", width=5),
+                xref="x",
+                yref="y",
+            )
         )
         # Add the right side line
-        fig.add_shape(
-            type="line",
-            y0=pp["p"],
-            y1=pp["p"],
-            x0=pp["cs"],
-            x1=length,
-            line=dict(color="LightSeaGreen", width=5),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="line",
+                y0=pp["p"],
+                y1=pp["p"],
+                x0=pp["cs"],
+                x1=length,
+                line=dict(color="LightSeaGreen", width=5),
+                xref="x",
+                yref="y",
+            )
         )
-        fig.add_shape(
-            type="rect",
-            y0=pp["p"] - 0.05,
-            y1=pp["p"] + 0.05,
-            x0=pp["s"],
-            x1=pp["cs"],
-            fillcolor="LightSalmon",
-            line=dict(color="LightSalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=pp["p"] - 0.05,
+                y1=pp["p"] + 0.05,
+                x0=pp["s"],
+                x1=pp["cs"],
+                fillcolor="LightSalmon",
+                line=dict(color="LightSalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
-        fig.add_shape(
-            type="rect",
-            y0=pp["p"] - 0.05,
-            y1=pp["p"] + 0.05,
-            x0=pp["ce"],
-            x1=pp["e"],
-            fillcolor="LightSalmon",
-            line=dict(color="LightSalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=pp["p"] - 0.05,
+                y1=pp["p"] + 0.05,
+                x0=pp["ce"],
+                x1=pp["e"],
+                fillcolor="LightSalmon",
+                line=dict(color="LightSalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
 
     # Add the base occupancy
