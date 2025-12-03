@@ -15,7 +15,7 @@ dependencies = [
     "typer>=0.16.1,<0.17",
     "dnaio>=1.2.3,<2",
     "matplotlib>=3.10.5,<4",
-    "primalschemers>=0.1.9,<0.2",
+    "primalschemers>=0.1.10,<0.2",
     "numpy>=2.3.0",
     "primalbedtools>=1.0.0",
 ]
