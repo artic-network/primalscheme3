@@ -1,7 +1,7 @@
 # Modules
 from collections import Counter
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Union
 
 import numpy as np
 
@@ -170,7 +170,7 @@ def walk_right(
     row_index: int,
     seq_str: str,
     config: Config,
-) -> Union[set[str], Exception]:
+) -> set[str] | Exception:
     """
     Walks to the right of the array and returns a set of valid sequences.
 
@@ -370,7 +370,7 @@ def r_digest_to_result(
 
     # Check for gap frequency on first base
     base, counts = np.unique(align_array[:, start_col], return_counts=True)
-    first_base_counter = dict(zip(base, counts))
+    first_base_counter = dict(zip(base, counts, strict=False))
     first_base_counter.pop("", None)
 
     num_seqs = np.sum(counts)
@@ -563,7 +563,7 @@ def f_digest_to_result(
     base, counts = np.unique(
         align_array[:, end_col], return_counts=True
     )  # -1 for non-inclusive end
-    first_base_counter = dict(zip(base, counts))
+    first_base_counter = dict(zip(base, counts, strict=False))
     first_base_counter.pop("", None)
 
     num_seqs = np.sum(counts)
@@ -704,7 +704,7 @@ def hamming_dist(s1, s2) -> int:
     """
     Return the number of substitutions, starting from the 3p end
     """
-    return sum((x != y for x, y in zip(s1[::-1], s2[::-1])))
+    return sum((x != y for x, y in zip(s1[::-1], s2[::-1], strict=False)))
 
 
 def f_digest(

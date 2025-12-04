@@ -29,7 +29,7 @@ def complement(seq: str) -> str:
 
 def get_most_common_base(array: np.ndarray, col_index: int) -> str:
     values, counts = np.unique(array[:, col_index], return_counts=True)
-    counter = dict(zip(values, counts))
+    counter = dict(zip(values, counts, strict=True))
     counter.pop("", None)
     return max(counter, key=counter.get)  # type: ignore
 
@@ -129,7 +129,7 @@ def entropy_score_array(msa: np.ndarray) -> list[float]:
     # Iterate over colums
     for col in range(msa.shape[1]):
         value, counts = np.unique(msa[:, col], return_counts=True)
-        count_dict = dict(zip(value, counts))
+        count_dict = dict(zip(value, counts, strict=False))
 
         # Remove non DNA bases
         count_dict = {k: v for k, v in count_dict.items() if k in ALL_BASES}

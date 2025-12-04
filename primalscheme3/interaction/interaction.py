@@ -20,7 +20,7 @@ SIMPLE_DNA = {"A", "C", "G", "T"}
 
 def create_cigar(seq1: str, seq2: str) -> str:
     cigar = []
-    for seq1base, seq2base in zip(seq1, seq2):
+    for seq1base, seq2base in zip(seq1, seq2, strict=False):
         # Guard against non DNA bases
         if seq1base not in SIMPLE_DNA or seq2base not in SIMPLE_DNA:
             cigar.append(" ")
