@@ -152,7 +152,6 @@ def panelcreate(
             name=msa_path.stem,
             path=msa_path,
             msa_index=msa_index,
-            mapping=config.mapping.value,
             logger=logger,
             progress_manager=pm,
             config=config,

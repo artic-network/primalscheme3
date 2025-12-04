@@ -1,6 +1,6 @@
 import unittest
 
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalschemers import do_pool_interact  # type: ignore
 
 
 class TestDoPoolsInteract(unittest.TestCase):

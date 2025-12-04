@@ -29,9 +29,8 @@ class MatchDB:
     """
 
     def __init__(self, path, msas_paths: list[str], config: Config) -> None:
-        # If in memory or empty contents don't write a file
-        if config.mismatch_in_memory or not msas_paths:
-            self.db = {}
+        if config.in_memory_db or not msas_paths:
+            self.db = {}  # Using an dict will have same api as dbm but not write a file
         else:
             self.db = db.open(str(path), "n")
 

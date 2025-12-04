@@ -1,14 +1,15 @@
 #!/usr/bin/python3
 import argparse
+import json
 import pathlib
-
-# Module imports
 from importlib.metadata import version
 from typing import Annotated
 
 import typer
 
+# Module imports
 from primalscheme3.core.config import Config, MappingType
+from primalscheme3.core.downsample import downsample_scheme
 from primalscheme3.core.msa import parse_msa
 from primalscheme3.core.primer_visual import bedfile_plot_html, primer_mismatch_heatmap
 from primalscheme3.core.progress_tracker import ProgressManager
@@ -17,9 +18,10 @@ from primalscheme3.interaction.interaction import (
 )
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
 from primalscheme3.repair.repair import repair
+from primalscheme3.replace.replace import ReplaceRunModes, replace
 
 # Import main functions
-from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
+from primalscheme3.scheme.scheme_main import schemecreate
 
 ## Commands are in the format of
 # {pclass}-{mode}
@@ -174,6 +176,21 @@ def scheme_create(
             help="Using annealing proportion rather than Tm to calculate primers",
         ),
     ] = Config.use_annealing,
+    # Downsample params
+    downsample: Annotated[
+        bool,
+        typer.Option(
+            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            hidden=True,
+        ),
+    ] = Config.downsample,
+    downsample_target: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            hidden=True,
+        ),
+    ] = Config.downsample_target,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -198,7 +215,7 @@ def scheme_create(
 
 
 @app.command(no_args_is_help=True)
-def scheme_replace(
+def replace_primerpair(
     primername: Annotated[
         str, typer.Argument(help="The name of the primer to replace")
     ],
@@ -232,7 +249,7 @@ def scheme_replace(
             help="The min size of an amplicon. [100<=x<=2000]", min=100, max=2000
         ),
     ],
-    config: Annotated[
+    config_path: Annotated[
         pathlib.Path,
         typer.Option(
             help="The config.json used to create the original primer scheme",
@@ -241,22 +258,60 @@ def scheme_replace(
             resolve_path=True,
         ),
     ],
+    output: Annotated[
+        pathlib.Path,
+        typer.Option(
+            help="The output directory",
+            resolve_path=True,
+        ),
+    ],
+    mode: Annotated[
+        ReplaceRunModes,
+        typer.Option(
+            help="Select what run mode",
+        ),
+    ] = ReplaceRunModes.ListAll.value,  # type: ignore
+    force: Annotated[
+        bool, typer.Option(help="Override the output directory")
+    ] = Config.force,
+    mask_old_sites: Annotated[
+        bool,
+        typer.Option(
+            help="If True prevents replacement primers from spanning old primer regions."
+        ),
+    ] = True,
 ):
     """
     Replaces a primerpair in a bedfile
     """
 
+    # Read in the config file
+    with open(config_path) as file:
+        _cfg: dict = json.load(file)
+    config = Config(**_cfg)
+
+    # Update the config with CLI params
+    config.assign_kwargs(**locals())
+
+    # Update the config with required
+    config.in_memory_db = True  # Set up the db
+
+    # Check the output directory
+    check_output_dir(output, force)
+
     # Set up the progress manager
     pm = ProgressManager()
 
-    schemereplace(
-        config_path=config,
+    replace(
         primername=primername,
-        ampliconsizemax=amplicon_size_max,
-        ampliconsizemin=amplicon_size_min,
+        config=config,
         primerbed=primerbed,
         msapath=msa,
         pm=pm,
+        output=output,
+        force=force,
+        mode=mode,
+        mask_old_sites=mask_old_sites,
     )
 
 
@@ -356,6 +411,21 @@ def panel_create(
             help="Using annealing proportion rather than Tm to calculate primers",
         ),
     ] = Config.use_annealing,
+    # Downsample params
+    downsample: Annotated[
+        bool,
+        typer.Option(
+            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            hidden=True,
+        ),
+    ] = Config.downsample,
+    downsample_target: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            hidden=True,
+        ),
+    ] = Config.downsample_target,
 ):
     """
     Creates a primer panel
@@ -568,6 +638,35 @@ def visualise_bedfile(
         outfile.write(
             bedfile_plot_html(bedfile=bedfile, ref_name=ref_id, ref_seq=ref_genome)
         )
+
+
+@app.command(no_args_is_help=True, hidden=True)
+def downsample_existing_scheme(
+    bedfile: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The bedfile containing the primers",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    downsample_target: Annotated[
+        float,
+        typer.Option(min=0, max=1),
+    ] = Config.downsample_target,
+    visualise: Annotated[
+        bool,
+        typer.Option(help="Will print graph visualisations of downsampling"),
+    ] = False,
+):
+    """Will try and reduce number of primers in a cloud by calculating inter-primercloud annealing"""
+
+    config = Config(**locals())
+    config.downsample = True
+
+    downsample_scheme(bedfile, config, visualise)
 
 
 if __name__ == "__main__":

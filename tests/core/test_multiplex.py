@@ -2,7 +2,7 @@ import pathlib
 import unittest
 
 import numpy as np
-from primalschemers._core import FKmer, RKmer  # type: ignore
+from primalschemers import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import PrimerPair
@@ -25,7 +25,7 @@ class TestMultiplex(unittest.TestCase):
     config.n_pools = 2
 
     # Create an MSA object
-    msa = MSA("test", inputfile_path, 0, "first", None, config)
+    msa = MSA("test", inputfile_path, 0, None, config)
 
     def test_next_pool_2_pool(self):
         """
@@ -71,7 +71,7 @@ class TestMultiplex(unittest.TestCase):
         # Add a primerpair to pool 0
         multiplex.add_primer_pair_to_pool(primerpair, 0, pp_msa_index)
 
-        # Check that the primerpair has beed added to _last_pp_added
+        # Check that the primerpair has been added to _last_pp_added
         self.assertEqual(
             multiplex._last_pp_added[-1],
             primerpair,
@@ -84,6 +84,38 @@ class TestMultiplex(unittest.TestCase):
         self.assertEqual(primerpair.msa_index, pp_msa_index)
         # Check amplicon number has been assigned
         self.assertEqual(multiplex._last_pp_added[-1].amplicon_number, 1)
+
+    def test_add_primer_pair_to_pool_set_amp_number(self):
+        """
+        Test if method add_primer_pair_to_pool does what expected, with a specified amp number
+        """
+        pool = 1
+        amp_num = 10
+
+        self.config.n_pools = 2
+        multiplex = Multiplex(
+            config=self.config, matchDB=self.matchdb, msa_dict={0: self.msa}
+        )
+        pp_msa_index = 0
+
+        primerpair = PrimerPair(FKmer([b"A"], 10), RKmer([b"T"], 20), pp_msa_index)
+        primerpair.amplicon_number = amp_num
+        # Add a primerpair to pool 1
+        multiplex.add_primer_pair_to_pool(primerpair, pool, pp_msa_index)
+
+        # Check that the primerpair has been added to _last_pp_added
+        self.assertEqual(
+            multiplex._last_pp_added[-1],
+            primerpair,
+        )
+        # Check that the primerpair has been added to the correct pool
+        self.assertEqual(multiplex._pools[pool], [primerpair])
+        # Check that current pool has updated
+        self.assertEqual(multiplex._current_pool, 0)
+        # Check that the primerpair has had its msa_index updated
+        self.assertEqual(primerpair.msa_index, pp_msa_index)
+        # Check amplicon number has not changed
+        self.assertEqual(multiplex._last_pp_added[-1].amplicon_number, amp_num)
 
     def test_remove_last_primer_pair(self):
         self.config.n_pools = 2
@@ -398,6 +430,39 @@ class TestMultiplex(unittest.TestCase):
             multiplex.check_primerpair_can_be_added(interacting_primerpair, pool),
             PrimerPairCheck.INTERACTING,
         )
+
+    def test_get_next_amplicon_number(self):
+        multiplex = Multiplex(
+            config=self.config,
+            matchDB=self.matchdb,
+            msa_dict={0: self.msa, 1: self.msa},
+        )
+        msa_index = 0
+        pool = 0
+
+        # Get first amp number, fake msa_index
+        self.assertEqual(1, multiplex.get_next_amplicon_number(100))
+        self.assertEqual(1, multiplex.get_next_amplicon_number(0))
+
+        # Create a primerpair
+        primerpair = PrimerPair(
+            FKmer([self.nCoV_2019_18_LEFT_0.encode()], 50),
+            RKmer([b"TA"], 100),
+            msa_index,
+        )
+        primerpair.pool = pool
+
+        multiplex.add_primer_pair_to_pool(primerpair, pool, msa_index)
+
+        # Check the amp num has updated
+        self.assertEqual(2, multiplex.get_next_amplicon_number(0))
+
+        # Add massive amp num
+        primerpair2 = PrimerPair(FKmer([b"TA"], 50), RKmer([b"TA"], 100), 1)
+        primerpair2.amplicon_number = 100
+        multiplex.add_primer_pair_to_pool(primerpair2, pool, 1)
+
+        self.assertEqual(101, multiplex.get_next_amplicon_number(1))
 
 
 if __name__ == "__main__":

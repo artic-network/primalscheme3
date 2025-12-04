@@ -14,6 +14,9 @@ class MappingType(Enum):
     CONSENSUS = "consensus"
 
 
+PRIMER_COUNT_ATTR_STRING = "pc"
+
+
 class Config:
     """
     PrimalScheme3 configuration.
@@ -34,15 +37,19 @@ class Config:
     mapping: MappingType = MappingType.FIRST
     circular: bool = False
     backtrack: bool = False
-    min_base_freq: float = 0.0
     ignore_n: bool = False
+    # PrimerCloud settings
+    min_base_freq: float = 0.0
+    downsample: bool = False
+    downsample_target = 0.99
+    downsample_always_add_prop = 0.25
     # Amplicon Settings
     amplicon_size: int = 400
     amplicon_size_min: int = 0
     amplicon_size_max: int = 0
     # Primer Settings
     _primer_size_default_min: int = 19
-    _primer_size_default_max: int = 34
+    _primer_size_default_max: int = 36
     _primer_size_hgc_min: int = 17
     _primer_size_hgc_max: int = 30
     _primer_gc_default_min: int = 30
@@ -54,14 +61,15 @@ class Config:
     primer_tm_max: float = 62.5
     primer_annealing_tempc = 65
     primer_annealing_prop: float | None = None
-    _primer_annealing_prop_default = 10
+    _primer_annealing_prop_default = 20
     use_annealing: bool = False
 
-    primer_hairpin_th_max: float = 47.0
+    primer_hairpin_th_max: float = 51
     primer_homopolymer_max: int = 5
     primer_max_walk: int = 80
     # MatchDB Settings
     use_matchdb: bool = True
+    in_memory_db: bool = True
     editdist_max: int = 1
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min

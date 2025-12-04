@@ -3,10 +3,10 @@ import pathlib
 import sys
 
 import primalbedtools.bedfiles as bf
-from primalschemers._core import FKmer, RKmer  # type: ignore
+from primalschemers import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.config import Config
+from primalscheme3.core.config import PRIMER_COUNT_ATTR_STRING, Config
 
 
 class BedPrimerPair(PrimerPair):
@@ -40,6 +40,9 @@ class BedPrimerPair(PrimerPair):
     def match_primer_stem(self, primernamestem: str) -> bool:
         return self._primername == primernamestem
 
+    def all_seq_bytes(self) -> list[bytes]:
+        return self.fprimer.seqs_bytes() + self.rprimer.seqs_bytes()
+
 
 def read_bedlines_to_bedprimerpairs(
     path: pathlib.Path,
@@ -61,10 +64,31 @@ def read_bedlines_to_bedprimerpairs(
         if len(rk_start) != 1:
             raise ValueError("Cannot combine into Single RP")
 
+        # Make a note of the any count data encoded into the bedlines
+        fk_counts = [fk.attributes.get(PRIMER_COUNT_ATTR_STRING) for fk in fks]
+        if None in fk_counts:
+            fk_counts = None
+        else:
+            fk_counts = [float(fk) for fk in fk_counts]  # type: ignore
+
+        rk_counts = [rk.attributes.get(PRIMER_COUNT_ATTR_STRING) for rk in rks]
+        if None in rk_counts:
+            rk_counts = None
+        else:
+            rk_counts = [float(rk) for rk in rk_counts]  # type: ignore
+
         primerpairs.append(
             BedPrimerPair(
-                fprimer=FKmer([fk.sequence.encode() for fk in fks], fk_end.pop()),
-                rprimer=RKmer([rk.sequence.encode() for rk in rks], rk_start.pop()),
+                fprimer=FKmer(
+                    [fk.sequence.encode() for fk in fks],
+                    fk_end.pop(),
+                    fk_counts,
+                ),
+                rprimer=RKmer(
+                    [rk.sequence.encode() for rk in rks],
+                    rk_start.pop(),
+                    rk_counts,
+                ),
                 msa_index=None,  # This is set later # type: ignore
                 chrom_name=fks[0].chrom,
                 amplicon_number=fks[0].amplicon_number,
@@ -109,7 +133,7 @@ def create_amplicon_str(
     for pp in primerpairs:
         if trim_primers:
             amplicon_str.append(
-                f"{pp.chrom_name}\t{pp.fprimer.region()[1]}\t{pp.rprimer.region()[0] - 1}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
+                f"{pp.chrom_name}\t{pp.fprimer.region()[1]}\t{pp.rprimer.region()[0]}\t{pp.amplicon_prefix}_{pp.amplicon_number}\t{pp.pool + 1}"
             )
         else:
             amplicon_str.append(

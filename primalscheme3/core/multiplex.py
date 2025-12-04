@@ -1,7 +1,8 @@
 from enum import Enum
 
 import numpy as np
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalbedtools.scheme import Scheme
+from primalschemers import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
@@ -279,6 +280,19 @@ class Multiplex:
         """
         return (self._current_pool + 1) % self.n_pools
 
+    def get_next_amplicon_number(self, msa_index: int) -> int:
+        """
+        Returns the next sequential amplicon number for that MSA
+        """
+        amp_numbers = {
+            pp.amplicon_number
+            for pp in self.all_primerpairs()
+            if pp.msa_index == msa_index
+        }
+        if len(amp_numbers) == 0:
+            return 1
+        return max(amp_numbers) + 1
+
     def add_primer_pair_to_pool(
         self, primerpair: PrimerPair | BedPrimerPair, pool: int, msa_index: int
     ):
@@ -298,17 +312,10 @@ class Multiplex:
         """
         # Set the primerpair values
         primerpair.pool = pool
-        primerpair.amplicon_number = (
-            len(
-                [
-                    pp
-                    for sublist in self._pools
-                    for pp in sublist
-                    if pp.msa_index == primerpair.msa_index
-                ]
-            )
-            + 1
-        )
+
+        # Set the amplicon number if undefined
+        if primerpair.amplicon_number == -1:
+            primerpair.amplicon_number = self.get_next_amplicon_number(msa_index)
 
         # Adds the primerpair's matches to the pools matches
         self._matches[pool].update(
@@ -389,7 +396,7 @@ class Multiplex:
         """
         # Circular
         if primerpair.fprimer.end > primerpair.rprimer.start:
-            return (
+            return bool(
                 np.count_nonzero(
                     self._lookup[primerpair.msa_index][
                         pool, primerpair.fprimer.region()[0] :
@@ -405,7 +412,7 @@ class Multiplex:
             )
 
         # Get the slice of the lookup
-        return (
+        return bool(
             np.count_nonzero(
                 self._lookup[primerpair.msa_index][
                     pool,
@@ -439,7 +446,14 @@ class Multiplex:
         if headers is None:
             headers = ["# artic-bed-version v3.0"]
 
-        return create_bedfile_str(headers, self.all_primerpairs())
+        headers.append("# pc=PrimerCountInMSA")
+
+        # bed file str
+        bfs = create_bedfile_str(headers, self.all_primerpairs())
+
+        # Parse the bedfile string into pbt.scheme for validation
+        s = Scheme.from_str(bfs)
+        return s.to_str()
 
     def to_amplicons(
         self,

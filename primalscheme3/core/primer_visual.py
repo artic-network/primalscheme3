@@ -4,8 +4,8 @@ import numpy as np
 import plotly.graph_objects as go
 from click import UsageError
 from plotly.subplots import make_subplots
+from primalbedtools.amplicons import create_amplicons
 from primalbedtools.bedfiles import BedLine, BedLineParser
-from primalbedtools.primerpairs import create_primerpairs
 
 # Create in the classes from primalscheme3
 from primalscheme3.core.config import Config, MappingType
@@ -42,7 +42,7 @@ class PlotlyText:
     def format_str(self) -> str:
         # parsedseqs
         cigar = []
-        for p, g in zip(self.primer_seq[::-1], self.genome_seq[::-1]):
+        for p, g in zip(self.primer_seq[::-1], self.genome_seq[::-1], strict=False):
             if p == g:
                 cigar.append("|")
             else:
@@ -60,44 +60,55 @@ def get_primers_from_msa(
     row_data = {}
     if forward:
         for row in range(array.shape[0]):
-            gaps = 0
             row_data[row] = None
-            while index - length - gaps >= 0:
+            start_pos = max(index - length, 0)
+            while start_pos >= 0:
                 # Get slice
-                initial_slice = array[row, index - length - gaps : index]
+                initial_slice = array[row, start_pos:index]
                 # Check for gaps on set base
                 if initial_slice[-1] == "-":
                     break
                 sequence = "".join(initial_slice).replace("-", "")
-                # Covered removed gaps
-                if "" in initial_slice:
+                if not sequence:
                     break
                 # Check for gaps in the slice
                 if len(sequence) == length:
                     row_data[row] = sequence
                     break
                 # Walk left
-                gaps += 1
+                start_pos -= 1
+
+            # If the primer walks out the MSA just take what we have a rjust it
+            if start_pos == -1:
+                row_data[row] = (
+                    "".join(array[row, 0:index]).replace("-", "").rjust(length)
+                )
+
     else:
         for row in range(array.shape[0]):
-            gaps = 0
             row_data[row] = None
-            while index + length + gaps <= array.shape[1]:
+            end_pos = min(index + length, array.shape[1])
+            while end_pos <= array.shape[1]:
                 # Get slice
-                initial_slice = array[row, index : index + length + gaps]
+                initial_slice = array[row, index:end_pos]
                 # Check for gaps on set base
                 if initial_slice[0] == "-":
                     break
                 sequence = "".join(initial_slice).replace("-", "")
                 # Covered removed gaps
-                if "" in initial_slice:
+                if not sequence:
                     break
                 # Check for gaps in the slice
                 if len(sequence) == length:
                     row_data[row] = reverse_complement(sequence)
                     break
                 # Walk right
-                gaps += 1
+                end_pos += 1
+
+            # If the primer walks out the MSA just take what we have a ljust it
+            if end_pos == array.shape[1] + 1:
+                sequence = "".join(array[row, index:end_pos]).replace("-", "")
+                row_data[row] = reverse_complement(sequence).rjust(length)
     return row_data
 
 
@@ -109,11 +120,16 @@ def calc_primer_hamming(seq1, seq2) -> int:
     :return: The number of mismatches between the two sequences.
     """
     dif = 0
-    for seq1b, seq2b in zip(seq1[::-1], seq2[::-1]):
+    for seq1b, seq2b in zip(seq1[::-1], seq2[::-1], strict=False):
         seq1b_exp = set(extend_ambiguous_base(seq1b))
         seq2b_exp = set(extend_ambiguous_base(seq2b))
 
-        if not seq1b_exp & seq2b_exp and (seq1b != "N" and seq2b != "N"):
+        if (
+            not seq1b_exp & seq2b_exp
+            and (seq1b != "N" and seq2b != "N")
+            and seq1b != " "
+            and seq2b != " "
+        ):
             dif += 1
 
     return dif
@@ -325,7 +341,7 @@ def bedfile_plot_html(
     """
     # Read in the bedfile
     _header, bedlines = BedLineParser.from_file(bedfile)
-    primerpairs = create_primerpairs(bedlines)
+    primerpairs = create_amplicons(bedlines)
 
     # Filter primerpairs for the reference genome
     wanted_primerspairs = [pp for pp in primerpairs if pp.chrom == ref_name]
@@ -367,53 +383,61 @@ def bedfile_plot_html(
     )
 
     # Add the primer lines
+    shapes = []
     for pp in wanted_primerspairs:
-        print(f"Adding primer: {pp.amplicon_name}")
-        fig.add_shape(
-            type="rect",
-            y0=pp.pool - 0.05,
-            y1=pp.pool + 0.05,
-            x0=pp.amplicon_start,
-            x1=pp.coverage_start,
-            fillcolor="LightSalmon",
-            line=dict(color="darksalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=pp.pool - 0.05,
+                y1=pp.pool + 0.05,
+                x0=pp.amplicon_start,
+                x1=pp.coverage_start,
+                fillcolor="LightSalmon",
+                line=dict(color="darksalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
-        fig.add_shape(
-            type="rect",
-            y0=pp.pool - 0.05,
-            y1=pp.pool + 0.05,
-            x0=pp.coverage_end,
-            x1=pp.amplicon_end,
-            fillcolor="LightSalmon",
-            line=dict(color="darksalmon", width=2),
-            row=1,
-            col=1,
+        shapes.append(
+            dict(
+                type="rect",
+                y0=pp.pool - 0.05,
+                y1=pp.pool + 0.05,
+                x0=pp.coverage_end,
+                x1=pp.amplicon_end,
+                fillcolor="LightSalmon",
+                line=dict(color="darksalmon", width=2),
+                xref="x",
+                yref="y",
+            )
         )
         # Handle circular genomes
         is_circular = pp.is_circular
 
-        fig.add_shape(
-            type="line",
-            y0=pp.pool,
-            y1=pp.pool,
-            x0=pp.coverage_start,
-            x1=pp.coverage_end if not is_circular else len(ref_seq),
-            line=dict(color="LightSeaGreen", width=5),
-            row=1,
-            col=1,
-        )
-        if is_circular:
-            fig.add_shape(
+        shapes.append(
+            dict(
                 type="line",
                 y0=pp.pool,
                 y1=pp.pool,
-                x0=0,
-                x1=pp.coverage_end,
+                x0=pp.coverage_start,
+                x1=pp.coverage_end if not is_circular else len(ref_seq),
                 line=dict(color="LightSeaGreen", width=5),
-                row=1,
-                col=1,
+                xref="x",
+                yref="y",
+            )
+        )
+        if is_circular:
+            shapes.append(
+                dict(
+                    type="line",
+                    y0=pp.pool,
+                    y1=pp.pool,
+                    x0=0,
+                    x1=pp.coverage_end,
+                    line=dict(color="LightSeaGreen", width=5),
+                    xref="x",
+                    yref="y",
+                )
             )
 
     fig.update_xaxes(
@@ -465,9 +489,12 @@ def bedfile_plot_html(
             "autoScale2d",
             "zoom",
             "toImage",
-        ]
+        ],
+        height=400,
+        title_text=ref_name,
+        showlegend=False,
+        shapes=shapes,
     )
-    fig.update_layout(height=400, title_text=ref_name, showlegend=False)
 
     # Write a html version of the plot
     return fig.to_html(

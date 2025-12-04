@@ -52,7 +52,7 @@ def calc_gc(align_array: np.ndarray, kmer_size: int = 30) -> list[tuple[int, flo
         slice = align_array[:, col_index : col_index + kmer_size]
         value, counts = np.unique(slice, return_counts=True)
 
-        score_dict = dict(zip(value, counts))
+        score_dict = dict(zip(value, counts, strict=True))
         num_gc = score_dict.get("G", 1) + score_dict.get("C", 1)
         num_at = score_dict.get("A", 1) + score_dict.get("T", 1)
 

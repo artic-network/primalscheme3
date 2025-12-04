@@ -1,6 +1,6 @@
 from enum import Enum
 
-from primalschemers._core import do_pool_interact  # type: ignore
+from primalschemers import do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import PrimerPair

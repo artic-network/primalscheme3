@@ -17,7 +17,6 @@ class TestPanelMSA(unittest.TestCase):
             "test",
             pathlib.Path("tests/core/test_mismatch.fasta"),
             0,
-            "first",
             ProgressManager(),
             config=self.config,
         )

@@ -1,4 +1,3 @@
-import json
 import pathlib
 import tempfile
 import unittest
@@ -6,7 +5,7 @@ import unittest
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.panel.panel_main import PanelRunModes, panelcreate
-from primalscheme3.scheme.scheme_main import schemecreate, schemereplace
+from primalscheme3.scheme.scheme_main import schemecreate
 
 
 class TestMain(unittest.TestCase):
@@ -31,25 +30,6 @@ class TestMain(unittest.TestCase):
     def check_file(self, path):
         self.assertTrue(path.is_file())
         self.assertTrue(path.stat().st_size > 0)
-
-    def test_scheme_repair(self):
-        # Override config with read in data
-        config_dict = json.load(open(self.input_config))
-        self.config = Config()
-        self.config.assign_kwargs(**config_dict)
-
-        # Run Scheme Create
-        pm = ProgressManager()
-
-        schemereplace(
-            config_path=self.input_config,
-            ampliconsizemax=1200,
-            ampliconsizemin=800,
-            primerbed=self.input_bedfile,
-            primername="1540b43d_15_LEFT",
-            pm=pm,
-            msapath=self.input_msa_path,
-        )
 
     def test_schemecreate_first(self):
         with tempfile.TemporaryDirectory(
