@@ -180,13 +180,15 @@ def scheme_create(
     downsample: Annotated[
         bool,
         typer.Option(
-            help="Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
-            help="Ensure X proportion of primers have >= annealing (if using downsampling)",
+            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            hidden=True,
         ),
     ] = Config.downsample_target,
 ):
@@ -413,13 +415,15 @@ def panel_create(
     downsample: Annotated[
         bool,
         typer.Option(
-            help="Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
-            help="Ensure X proportion of primers have >= annealing (if using downsampling)",
+            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            hidden=True,
         ),
     ] = Config.downsample_target,
 ):
@@ -636,7 +640,7 @@ def visualise_bedfile(
         )
 
 
-@app.command(no_args_is_help=True)
+@app.command(no_args_is_help=True, hidden=True)
 def downsample_existing_scheme(
     bedfile: Annotated[
         pathlib.Path,
