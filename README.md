@@ -6,14 +6,17 @@ This is a command-line interface tool that generates a primer scheme from a Mult
 
 ## Installation
 
-Currently the best way to use is to use poetry to handle dependencies.
+Via pip!
+```
+pip install primalscheme3
+```
 
+From source 
 ```         
-git clone https://github.com/ChrisgKent/primalscheme3
+git clone https://github.com/artic-network/primalscheme3
 cd primalscheme3
-poetry install
-poetry build
-
+uv sync
+uv run primalscheme3
 ```
 
 # `PrimalScheme3`
