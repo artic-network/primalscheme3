@@ -3,7 +3,7 @@ name = "primalscheme3"
 version = "3.3.0"
 description = "Generation of highly multiplexed primer schemes"
 authors = [{ name = "ChrisKent", email = "chrisgkent@gmail.com" }]
-requires-python = "~=3.11"
+requires-python = ">=3.11,<3.14"
 readme = "README.md"
 license = "GPL-3.0-only"
 dependencies = [
