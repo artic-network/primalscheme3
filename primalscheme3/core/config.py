@@ -14,6 +14,9 @@ class MappingType(Enum):
     CONSENSUS = "consensus"
 
 
+PRIMER_COUNT_ATTR_STRING = "pc"
+
+
 class Config:
     """
     PrimalScheme3 configuration.

@@ -8,7 +8,7 @@ from primalbedtools.scheme import Scheme
 from primalschemers import FKmer, RKmer  # type: ignore
 
 # type: ignore
-from primalscheme3.core.config import Config
+from primalscheme3.core.config import PRIMER_COUNT_ATTR_STRING, Config
 from primalscheme3.core.thermo import THERMO_RESULT, calc_annealing_hetro, thermo_check
 
 MIN_ANNEALING = 3
@@ -318,7 +318,10 @@ def downsample_scheme(path, config, visualise: bool = False):
     for amps in group_amplicons(scheme.bedlines):
         f_bls = amps["LEFT"]
 
-        fseq_counts = {bl.sequence: 1.0 for bl in f_bls}
+        fseq_counts = {
+            bl.sequence: float(bl.attributes.get(PRIMER_COUNT_ATTR_STRING, 1.0))
+            for bl in f_bls
+        }
         kept_fseqs = downsample_seqs(
             seq_counts=fseq_counts, config=config, visualise=visualise
         )
@@ -329,7 +332,10 @@ def downsample_scheme(path, config, visualise: bool = False):
                 new_scheme.bedlines.append(fbl)
 
         r_bls = amps["RIGHT"]
-        rseq_counts = {bl.sequence: 1.0 for bl in r_bls}
+        rseq_counts = {
+            bl.sequence: float(bl.attributes.get(PRIMER_COUNT_ATTR_STRING, 1.0))
+            for bl in r_bls
+        }
         kept_rseqs = downsample_seqs(
             seq_counts=rseq_counts, config=config, visualise=visualise
         )

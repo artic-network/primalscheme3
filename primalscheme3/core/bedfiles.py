@@ -6,7 +6,7 @@ import primalbedtools.bedfiles as bf
 from primalschemers import FKmer, RKmer  # type: ignore
 
 from primalscheme3.core.classes import PrimerPair
-from primalscheme3.core.config import Config
+from primalscheme3.core.config import PRIMER_COUNT_ATTR_STRING, Config
 
 
 class BedPrimerPair(PrimerPair):
@@ -65,13 +65,13 @@ def read_bedlines_to_bedprimerpairs(
             raise ValueError("Cannot combine into Single RP")
 
         # Make a note of the any count data encoded into the bedlines
-        fk_counts = [fk.attributes.get("pc") for fk in fks]
+        fk_counts = [fk.attributes.get(PRIMER_COUNT_ATTR_STRING) for fk in fks]
         if None in fk_counts:
             fk_counts = None
         else:
             fk_counts = [float(fk) for fk in fk_counts]  # type: ignore
 
-        rk_counts = [rk.attributes.get("pc") for rk in rks]
+        rk_counts = [rk.attributes.get(PRIMER_COUNT_ATTR_STRING) for rk in rks]
         if None in rk_counts:
             rk_counts = None
         else:
