@@ -50,8 +50,8 @@ def calc_annealing(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c) -> f
     return (1 / (1 + sqrt(1 / ((dna_conc / 4000000000.0) * ka)))) * 100
 
 
-def calc_annealing_hetro(kmer_seq, template_seq, config: Config) -> float:
-    tr = p3_calc_heterodimer(
+def calc_binding(kmer_seq: str, template_seq: str, config: Config):
+    return p3_calc_heterodimer(
         seq1=kmer_seq,
         seq2=reverse_complement(template_seq),
         mv_conc=config.mv_conc,
@@ -61,6 +61,10 @@ def calc_annealing_hetro(kmer_seq, template_seq, config: Config) -> float:
         temp_c=config.primer_annealing_tempc,
         output_structure=False,
     )
+
+
+def calc_annealing_hetro(kmer_seq: str, template_seq: str, config: Config) -> float:
+    tr = calc_binding(kmer_seq, template_seq, config)
     ka = exp(-tr.dg / (1.987 * (config.primer_annealing_tempc + T_KELVIN)))
     return (1 / (1 + sqrt(1 / ((config.dna_conc / 4000000000.0) * ka)))) * 100
 

@@ -4,11 +4,12 @@ from uuid import uuid4
 
 import dnaio
 import numpy as np
+import tqdm
 from primalbedtools.bedfiles import CHROM_REGEX
 from primalschemers import (
-    Digester,  # type: ignore
-    FKmer,  # type: ignore
-    RKmer,  # type: ignore
+    Digester,
+    FKmer,
+    RKmer,
 )
 
 from primalscheme3.core.classes import PrimerPair
@@ -21,6 +22,7 @@ from primalscheme3.core.errors import (
     MSAFileInvalidLength,
 )
 from primalscheme3.core.mapping import create_mapping, ref_index_to_msa
+from primalscheme3.core.primerscorer import PrimerScorer
 from primalscheme3.core.seq_functions import remove_end_insertion
 from primalscheme3.core.thermo import forms_hairpin
 
@@ -243,6 +245,7 @@ class MSA:
             primer_tm_max=config.primer_tm_max,
             primer_tm_min=config.primer_tm_min,
             primer_annealing_prop=config.primer_annealing_prop,  # if None will use TM
+            primer_annealing_diff=config.primer_annealing_diff,
             annealing_temp_c=config.primer_annealing_tempc,
             max_walk=config.primer_max_walk,
             max_homopolymers=config.primer_homopolymer_max,
@@ -260,16 +263,24 @@ class MSA:
 
         # Start the downsample
         if config.downsample:
+            ps = PrimerScorer(
+                pathlib.Path(
+                    "/Users/kentcg/qpcr-single-mm/dinucleotide/q5_gam_surrogate_training_data.joblib"
+                )
+            )
             # fkmers
             new_fkmers = []
-            for fkmer in self.fkmers:
-                new_seqs = downsample_kmer(fkmer, config, False)
+            for fkmer in tqdm.tqdm(self.fkmers):
+                new_seqs = downsample_kmer(
+                    kmer=fkmer, config=config, ps=ps, visualise=False
+                )
                 if new_seqs is None:
                     continue
 
                 # Create a dict to keep track of seq counts
                 seq_counts = {
-                    s: c for s, c in zip(fkmer.seqs(), fkmer.counts(), strict=True)
+                    s: c
+                    for s, c in zip(fkmer.seqs(), fkmer.counts(), strict=True)  # type: ignore
                 }
                 new_fkmers.append(
                     FKmer(
@@ -283,11 +294,14 @@ class MSA:
             # rkmers
             new_rkmers = []
             for rkmer in self.rkmers:
-                new_seqs = downsample_kmer(rkmer, config)
+                new_seqs = downsample_kmer(
+                    kmer=rkmer, config=config, ps=ps, visualise=False
+                )
                 if new_seqs is None:
                     continue
                 seq_counts = {
-                    s: c for s, c in zip(rkmer.seqs(), rkmer.counts(), strict=True)
+                    s: c
+                    for s, c in zip(rkmer.seqs(), rkmer.counts(), strict=True)  # type: ignore
                 }
                 new_rkmers.append(
                     RKmer(
