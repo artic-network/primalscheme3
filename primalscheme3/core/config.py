@@ -43,6 +43,7 @@ class Config:
     downsample: bool = False
     downsample_target = 0.99
     downsample_always_add_prop = 0.25
+    downsample_max_dct = -4.0
     # Amplicon Settings
     amplicon_size: int = 400
     amplicon_size_min: int = 0
@@ -61,7 +62,8 @@ class Config:
     primer_tm_max: float = 62.5
     primer_annealing_tempc = 65
     primer_annealing_prop: float | None = None
-    _primer_annealing_prop_default = 20
+    primer_annealing_diff: float = 5
+    _primer_annealing_prop_default: float = 30.0
     use_annealing: bool = False
 
     primer_hairpin_th_max: float = 51
@@ -74,7 +76,6 @@ class Config:
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min
     mismatch_product_size: int = 0
-    mismatch_in_memory: bool = False  # Use an in memory dict rather than a dbm file
     # Thermodynamic Parameters
     mv_conc: float = 100.0
     dv_conc: float = 2.0
@@ -290,4 +291,5 @@ AMBIGUOUS_DNA_COMPLEMENT = {
     "X": "X",
     "N": "N",
     "-": "-",
+    ".": ".",
 }
