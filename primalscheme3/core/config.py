@@ -1,3 +1,4 @@
+import os
 import pathlib
 from enum import Enum
 from importlib.metadata import version
@@ -55,8 +56,8 @@ class Config:
     _primer_size_hgc_max: int = 30
     _primer_gc_default_min: int = 30
     _primer_gc_default_max: int = 55
-    _primer_gc_hgc_min: int = 40
-    _primer_gc_hgc_max: int = 65
+    _primer_gc_hgc_min: int = 30
+    _primer_gc_hgc_max: int = 67
     # Thermo
     primer_tm_min: float = 59.5
     primer_tm_max: float = 62.5
@@ -66,7 +67,7 @@ class Config:
     _primer_annealing_prop_default: float = 30.0
     use_annealing: bool = False
 
-    primer_hairpin_th_max: float = 51
+    primer_hairpin_th_max: float = 55
     primer_homopolymer_max: int = 5
     primer_max_walk: int = 80
     # MatchDB Settings
@@ -124,19 +125,26 @@ class Config:
 
         return items
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, relative_to: pathlib.Path | None = None) -> dict[str, Any]:
         """
-        Return a dict (key, val) for non-private, non-callable members
+        Return a dict (key, val) for non-private, non-callable members.
+        If relative_to is provided, Path values are stored relative to that path.
         """
-        dict = {}
-        for key, val in self.items().items():
-            if isinstance(val, Enum):
-                dict[key] = val.value
-            elif isinstance(val, pathlib.Path):
-                dict[key] = str(val)
+        result: dict[str, Any] = {}
+        for key in [x for x in dir(self) if not x.startswith("_")]:
+            if callable(getattr(self, key)):
+                continue
+            value = getattr(self, key)
+            if isinstance(value, Enum):
+                result[key] = value.value
+            elif isinstance(value, pathlib.Path):
+                if relative_to is None:
+                    result[key] = str(value)
+                else:
+                    result[key] = os.path.relpath(value, relative_to)
             else:
-                dict[key] = val
-        return dict
+                result[key] = value
+        return result
 
     def __str__(self) -> str:
         return "\n".join(f"{key}: {val}" for key, val in self.items())

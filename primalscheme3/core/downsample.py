@@ -20,11 +20,6 @@ TARGET_ANNEALING = 20
 VISUALISE_LABEL_LEN = 20
 
 
-ALWAYS_ADD_PROP = 0.2
-TARGET_COVERAGE_PROP = 0.9
-MAX_DCT = -4.0
-
-
 def visualise_graph(
     G, seq_counts, seq_thermo_dict, pos, added_seqs=None, accounted_seqs=None
 ):
@@ -200,6 +195,9 @@ def update_annealing(
 
 
 def update_delta_ct(old: dict[str, None | float], new: dict[str, None | float]):
+    """
+    Merge delta-Ct values, ignoring None (unknown) scores.
+    """
     for k, v in new.items():
         if v is None:
             continue
@@ -208,6 +206,33 @@ def update_delta_ct(old: dict[str, None | float], new: dict[str, None | float]):
         else:
             old[k] = max([old[k], v])  # type: ignore  TODO: creating the additive scoring model
     return old
+
+
+def accounted_count(
+    seq_counts: dict[str, float],
+    seq_delta_ct: dict[str, None | float],
+    max_dct: float,
+) -> float:
+    """
+    Sum counts for sequences with known delta-Ct at or above the threshold.
+    """
+    return sum(
+        seq_counts[s] for s, v in seq_delta_ct.items() if v is not None and v >= max_dct
+    )
+
+
+def coverage_prop(
+    seq_counts: dict[str, float],
+    seq_delta_ct: dict[str, None | float],
+    max_dct: float,
+) -> float:
+    """
+    Coverage proportion = accounted_count / total_count.
+    """
+    total = sum(seq_counts.values())
+    if total == 0:
+        return 0.0
+    return accounted_count(seq_counts, seq_delta_ct, max_dct) / total
 
 
 def delta_ct_downsample_seqs(
@@ -261,7 +286,7 @@ def delta_ct_downsample_seqs(
 
     all_seqs_count = sum(seq_counts.values())
 
-    always_add_count = ALWAYS_ADD_PROP * all_seqs_count
+    always_add_count = config.downsample_always_add_prop * all_seqs_count
 
     # Start downsampling
     added_seqs = set()
@@ -269,6 +294,10 @@ def delta_ct_downsample_seqs(
     failed_seqs = set(
         seq for seq, status in seq_thermo_dict.items() if status != THERMO_RESULT.PASS
     )
+    ordered_seqs = list(
+        seq_counts.keys()
+    )  # Preserve count-sorted order for deterministic ties
+    order_index = {s: i for i, s in enumerate(ordered_seqs)}
     possible_seqs = set(seq_thermo_dict.keys()) - failed_seqs
 
     # Keep track of deltaCt
@@ -287,17 +316,18 @@ def delta_ct_downsample_seqs(
     # Loop over other sequences to add the best for each iter.
     # While proportion of seqs covered above MAX_DCT is less than required
     while (
-        sum(
-            seq_counts[s]
-            for s, v in seq_delta_ct.items()
-            if v is not None and v > MAX_DCT
+        coverage_prop(
+            seq_counts,
+            seq_delta_ct,
+            config.downsample_max_dct,
         )
-        / all_seqs_count
-        < TARGET_COVERAGE_PROP
+        < config.downsample_target
     ):
         # Sort the sequences to find the ones with highest count-weighted dCt
         tmp_scores = {}
-        for s in possible_seqs:
+        for s in ordered_seqs:
+            if s not in possible_seqs:
+                continue
             # Score the primer from cache
             scores = score_cache[s]
 
@@ -305,13 +335,16 @@ def delta_ct_downsample_seqs(
             filtered_scores = {
                 ref: dct
                 for ref, dct in scores.items()
-                if dct is not None and dct >= MAX_DCT
+                if dct is not None and dct >= config.downsample_max_dct
             }
 
             # Calculate the score based on unaccounted count
             score = 0
             for i in filtered_scores:
-                if seq_delta_ct[i] is None or seq_delta_ct[i] < MAX_DCT:  # type: ignore
+                if (
+                    seq_delta_ct[i] is None
+                    or seq_delta_ct[i] < config.downsample_max_dct
+                ):  # type: ignore
                     score += seq_counts[i]
 
             if score > 0:
@@ -320,7 +353,13 @@ def delta_ct_downsample_seqs(
         if not tmp_scores:
             break
 
-        tmp_scores_list = sorted(tmp_scores, key=tmp_scores.get, reverse=True)  # type: ignore
+        # Deterministic tie-break: prefer earlier sequences by count order
+        tmp_scores_list = [
+            s
+            for s, _ in sorted(
+                tmp_scores.items(), key=lambda kv: (-kv[1], order_index[kv[0]])
+            )
+        ]
 
         added_seq = False
         for tmp in tmp_scores_list:
@@ -337,15 +376,20 @@ def delta_ct_downsample_seqs(
         else:
             break
 
-    account_seqs = {s for s, v in seq_delta_ct.items() if v is not None and v > MAX_DCT}
-    accounted_count = sum(
-        seq_counts[s] for s, v in seq_delta_ct.items() if v is not None and v >= MAX_DCT
+    accounted_count_val = accounted_count(
+        seq_counts,
+        seq_delta_ct,
+        config.downsample_max_dct,
     )
-    tmp_target_prop = accounted_count / all_seqs_count
+    tmp_target_prop = accounted_count_val / all_seqs_count
     if visualise:
+        account_seqs = {
+            s
+            for s, v in seq_delta_ct.items()
+            if v is not None and v > config.downsample_max_dct
+        }
         visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs, account_seqs)  # type: ignore
-    if tmp_target_prop >= TARGET_COVERAGE_PROP:
-        visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs, account_seqs)  # type: ignore
+    if tmp_target_prop >= config.downsample_target:
         return sorted(added_seqs)
     else:
         return None
