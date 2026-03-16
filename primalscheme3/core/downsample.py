@@ -20,6 +20,11 @@ TARGET_ANNEALING = 20
 VISUALISE_LABEL_LEN = 20
 
 
+ALWAYS_ADD_PROP = 0.2
+TARGET_COVERAGE_PROP = 0.9
+MAX_DCT = -4.0
+
+
 def visualise_graph(
     G, seq_counts, seq_thermo_dict, pos, added_seqs=None, accounted_seqs=None
 ):
@@ -62,7 +67,7 @@ def visualise_graph(
                 node_edge_widths.append(0.5)  # Thinner border for non-added sequences
 
     # Create edge weights for visualization
-    edge_weights = [G[u][v].get("score", 10) for u, v in G.edges()]
+    edge_weights = [G[u][v].get("score", 5) for u, v in G.edges()]
 
     # Plot the graph
     plt.figure(figsize=(12, 8))
@@ -73,7 +78,6 @@ def visualise_graph(
         pos,
         node_size=node_sizes,  # type: ignore
         node_color=node_colors,  # type: ignore
-        alpha=0.8,
         edgecolors=node_edge_colors,  # type: ignore
         linewidths=node_edge_widths,  # type: ignore
     )
@@ -89,18 +93,18 @@ def visualise_graph(
         )
 
     # Add labels (you might want to truncate long sequences)
-    node_labels = {
-        node: f"{node[:VISUALISE_LABEL_LEN]}..."
-        if len(node) > VISUALISE_LABEL_LEN
-        else node
-        for node in G.nodes()
-    }
-    nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8)
+    # node_labels = {
+    #    node: f"{node[:VISUALISE_LABEL_LEN]}..."
+    #    if len(node) > VISUALISE_LABEL_LEN
+    #    else node
+    #    for node in G.nodes()
+    # }
+    # nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8)
 
     # Add edge labels showing annealing scores
-    if G.edges():  # Only add edge labels if edges exist
-        edge_labels = {(u, v): f"{G[u][v].get('score', 10):.1f}" for u, v in G.edges()}
-        nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=6)
+    # if G.edges():  # Only add edge labels if edges exist
+    #     edge_labels = {(u, v): f"{G[u][v].get('score', 10):.1f}" for u, v in G.edges()}
+    #     nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=6)
 
     plt.title(
         "Sequence Annealing Network\n(Node size = sequence count, Node color = thermo check, Gold border = added sequences)"
@@ -197,43 +201,13 @@ def update_annealing(
 
 def update_delta_ct(old: dict[str, None | float], new: dict[str, None | float]):
     for k, v in new.items():
+        if v is None:
+            continue
         if k not in old or old[k] is None:
             old[k] = v
         else:
             old[k] = max([old[k], v])  # type: ignore  TODO: creating the additive scoring model
     return old
-
-
-def score_dct(G, seq: str, ps: PrimerScorer, config: Config) -> dict[str, float | None]:
-    con_nodes = G.neighbors(seq)
-    s = {con_node: ps.score_seq(con_node, seq, config) for con_node in con_nodes}
-    s[seq] = 0
-    return s
-
-
-def find_best_score_dct(
-    G,
-    seq,
-    ps: PrimerScorer,
-    config: Config,
-    seq_counts: dict[str, float],
-    seq_delta_ct: dict[str, None | float],
-    dct_threshold: float,
-):
-    # Score the primer
-    scores = score_dct(G, seq, ps, config)
-
-    # Filter scores to above threshold
-    scores = {
-        s: dct for s, dct in scores.items() if dct is not None and dct >= dct_threshold
-    }
-
-    # Remove scores which are above dct_threshold
-    score = 0
-    for i in scores:
-        if seq_delta_ct[i] is None or seq_delta_ct[i] < dct_threshold:  # type: ignore
-            score += seq_counts[i]
-    return score
 
 
 def delta_ct_downsample_seqs(
@@ -256,7 +230,7 @@ def delta_ct_downsample_seqs(
 
     valid_edit_dist = []
     for n1, n2 in itertools.combinations(seq_counts.keys(), 2):
-        if primer_edit_dist(n1, n2) <= 1:
+        if primer_edit_dist(n1, n2) == 1:
             valid_edit_dist.append((n1, n2))
 
     # Create a graph
@@ -266,9 +240,28 @@ def delta_ct_downsample_seqs(
     G.add_edges_from(valid_edit_dist)
     pos = nx.spring_layout(G, seed=42)
 
+    # Pre-calculate all mismatch scores for edges in the graph
+    edge_list = list(G.edges())
+    # For each edge (u, v), we need to score both ways: (u, v) and (v, u)
+    score_pairs = []
+    for u, v in edge_list:
+        score_pairs.append((u, v))  # ref=u, query=v
+        score_pairs.append((v, u))  # ref=v, query=u
+
+    scores_flat = ps.score_seq_batch(score_pairs, config)
+
+    # Store scores in a nested dictionary for fast lookup: score_cache[query][ref]
+    score_cache: dict[str, dict[str, float | None]] = {
+        s: {s: 0.0} for s in seq_counts.keys()
+    }
+    for (ref, query), score in zip(score_pairs, scores_flat, strict=True):
+        if query not in score_cache:
+            score_cache[query] = {query: 0.0}
+        score_cache[query][ref] = score
+
     all_seqs_count = sum(seq_counts.values())
-    always_add_prop = 0.2
-    always_add_count = always_add_prop * all_seqs_count
+
+    always_add_count = ALWAYS_ADD_PROP * all_seqs_count
 
     # Start downsampling
     added_seqs = set()
@@ -286,49 +279,53 @@ def delta_ct_downsample_seqs(
         # Skip failed or already added
         if seq not in failed_seqs and count >= always_add_count:
             # Calc dct for neighbors
-            s = score_dct(G, seq, ps, config)
+            s = score_cache[seq]
             seq_delta_ct = update_delta_ct(seq_delta_ct, s)
             added_seqs.add(seq)
             possible_seqs.remove(seq)
 
-    max_dct = -2.0
-    required_prop = 0.90
     # Loop over other sequences to add the best for each iter.
-    # While proportion of seqs covered above max_dct is less than required
+    # While proportion of seqs covered above MAX_DCT is less than required
     while (
         sum(
-            {
-                seq_counts[s]
-                for s, v in seq_delta_ct.items()
-                if v is not None and v > max_dct
-            }
+            seq_counts[s]
+            for s, v in seq_delta_ct.items()
+            if v is not None and v > MAX_DCT
         )
         / all_seqs_count
-        < required_prop
+        < TARGET_COVERAGE_PROP
     ):
         # Sort the sequences to find the ones with highest count-weighted dCt
-        tmp_scores = {
-            s: score
-            for s in possible_seqs
-            if (
-                score := find_best_score_dct(
-                    G=G,
-                    seq=s,
-                    ps=ps,
-                    config=config,
-                    seq_counts=seq_counts,
-                    seq_delta_ct=seq_delta_ct,
-                    dct_threshold=max_dct,
-                )
-                > 0
-            )
-        }
-        tmp_scores_list = sorted(tmp_scores, key=tmp_scores.get, reverse=True)
+        tmp_scores = {}
+        for s in possible_seqs:
+            # Score the primer from cache
+            scores = score_cache[s]
+
+            # Filter scores to above threshold
+            filtered_scores = {
+                ref: dct
+                for ref, dct in scores.items()
+                if dct is not None and dct >= MAX_DCT
+            }
+
+            # Calculate the score based on unaccounted count
+            score = 0
+            for i in filtered_scores:
+                if seq_delta_ct[i] is None or seq_delta_ct[i] < MAX_DCT:  # type: ignore
+                    score += seq_counts[i]
+
+            if score > 0:
+                tmp_scores[s] = score
+
+        if not tmp_scores:
+            break
+
+        tmp_scores_list = sorted(tmp_scores, key=tmp_scores.get, reverse=True)  # type: ignore
 
         added_seq = False
         for tmp in tmp_scores_list:
             if tmp_scores[tmp] > 0:
-                s = score_dct(G, tmp, ps, config)
+                s = score_cache.get(tmp, {tmp: 0.0})
                 seq_delta_ct = update_delta_ct(seq_delta_ct, s)
                 added_seqs.add(tmp)
                 possible_seqs.remove(tmp)
@@ -340,23 +337,15 @@ def delta_ct_downsample_seqs(
         else:
             break
 
+    account_seqs = {s for s, v in seq_delta_ct.items() if v is not None and v > MAX_DCT}
+    accounted_count = sum(
+        seq_counts[s] for s, v in seq_delta_ct.items() if v is not None and v >= MAX_DCT
+    )
+    tmp_target_prop = accounted_count / all_seqs_count
     if visualise:
-        account_seqs = {
-            s for s, v in seq_delta_ct.items() if v is not None and v > max_dct
-        }
         visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs, account_seqs)  # type: ignore
-
-    if (
-        sum(
-            {
-                seq_counts[s]
-                for s, v in seq_delta_ct.items()
-                if v is not None and v > max_dct
-            }
-        )
-        / all_seqs_count
-        >= required_prop
-    ):
+    if tmp_target_prop >= TARGET_COVERAGE_PROP:
+        visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs, account_seqs)  # type: ignore
         return sorted(added_seqs)
     else:
         return None

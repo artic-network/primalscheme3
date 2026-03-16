@@ -55,37 +55,20 @@ class PrimerScorer:
         # Load data
         self.model = joblib.load(model_path)
 
-    def _score(self, idx, dg, ddg, p3_dg, dinu1, dinu2, idx_prop, mut_base):
+    def _score(self, features_list: list[dict]):
         """
-        Predicts the Delta Ct cycle shift for a primer mismatch.
+        Predicts the Delta Ct cycle shift for a list of primer mismatch features.
+        """
+        if not features_list:
+            return []
+        df = pd.DataFrame(features_list)
+        predictions = self.model.predict(df)
+        return [round(float(p), 3) for p in predictions]
 
-                Expected dictionary format:
-                {
-                    "dg": -4.1, "ddg": 2.0, "p3_dg": -3.5,
-                    "idx": 15, "idx_prop": 0.75,
-                    "mut_base": "A>G", "dinu1": "GC/CC", "dinu2": "AT/TG"
-                }
+    def _get_features(self, ref: str, query: str, config: Config) -> dict | None:
         """
-        # Convert dictionary to DataFrame and predict
-        primer_features = {
-            "dg": dg,
-            "ddg": ddg,
-            "p3_dg": p3_dg,
-            "idx": idx,
-            "idx_prop": idx_prop,
-            "mut_base": mut_base,
-            "dinu1": dinu1,
-            "dinu2": dinu2,
-        }
-        df = pd.DataFrame([primer_features])
-        prediction = self.model.predict(df)
-        return round(float(prediction[0]), 3)
-
-    def score_seq(self, ref: str, query: str, config: Config) -> None | float:
+        Extracts features for the model from a ref/query pair.
         """
-        Generates  used in the model
-        """
-        #  Append '.' to allow terminal dinus
         aref = "." + ref + "."
         aquery = "." + query + "."
 
@@ -96,11 +79,10 @@ class PrimerScorer:
         # find the mismatch
         r = find_mismatch(aref, aquery)
         if r is None:
-            print(aref, aquery)
             return None
+
         idx, dinu1, dinu2, mut_base = r
         idx -= 1  # Account for the terminal "."
-
         idx_prop = idx / len(query)
 
         # Calc params
@@ -110,16 +92,55 @@ class PrimerScorer:
         else:
             p3_dg = 0
 
-        return self._score(
-            idx=idx,
-            dg=query_dg,
-            idx_prop=idx_prop,
-            ddg=ddg,
-            p3_dg=p3_dg,
-            dinu1=dinu1,
-            dinu2=dinu2,
-            mut_base=mut_base,
-        )
+        return {
+            "dg": query_dg,
+            "ddg": ddg,
+            "p3_dg": p3_dg,
+            "idx": idx,
+            "idx_prop": idx_prop,
+            "mut_base": mut_base,
+            "dinu1": dinu1,
+            "dinu2": dinu2,
+        }
+
+    def score_seq_batch(
+        self, pairs: list[tuple[str, str]], config: Config
+    ) -> list[float | None]:
+        """
+        Predicts Delta Ct for a list of (ref, query) pairs.
+        """
+        features_list = []
+        valid_indices = []
+
+        for i, (ref, query) in enumerate(pairs):
+            features = self._get_features(ref, query, config)
+            if features:
+                features_list.append(features)
+                valid_indices.append(i)
+
+        if not features_list:
+            return [None] * len(pairs)
+
+        # Batch predict
+        predictions = self._score(features_list)
+
+        # Map back to original list
+        results = [None] * len(pairs)
+        for idx, pred in zip(valid_indices, predictions, strict=True):
+            results[idx] = pred
+
+        return results
+
+    def score_seq(self, ref: str, query: str, config: Config) -> None | float:
+        """
+        Generates prediction for a single sequence.
+        """
+        features = self._get_features(ref, query, config)
+        if features is None:
+            return None
+
+        results = self._score([features])
+        return results[0] if results else None
 
 
 if __name__ == "__main__":
