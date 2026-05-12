@@ -1,3 +1,4 @@
+import os
 import pathlib
 import re
 from uuid import uuid4
@@ -259,20 +260,24 @@ class MSA:
             for s in logs:
                 self.logger.debug(s)
 
-            self.logger.info("Starting Primer Hairpin Check")
-
         # Start the downsample
         if config.downsample:
-            ps = PrimerScorer(
-                pathlib.Path(
-                    "/Users/kentcg/qpcr-single-mm/dinucleotide/q5_gam_surrogate_training_data.joblib"
+            model_path = config.primer_scorer_model_path
+            if model_path is None:
+                env_path = os.getenv("PRIMALSCHEME3_PRIMER_SCORER_MODEL")
+                if env_path:
+                    model_path = pathlib.Path(env_path)
+            if model_path is None:
+                raise ValueError(
+                    "Primer scorer model path is required for downsampling. "
+                    "Set --primer-scorer-model-path or PRIMALSCHEME3_PRIMER_SCORER_MODEL."
                 )
-            )
+            ps = PrimerScorer(pathlib.Path(model_path))
             # fkmers
             new_fkmers = []
             for fkmer in tqdm.tqdm(self.fkmers):
                 new_seqs = downsample_kmer(
-                    kmer=fkmer, config=config, ps=ps, visualise=False
+                    kmer=fkmer, config=config, ps=ps, visualise=True
                 )
                 if new_seqs is None:
                     continue
@@ -313,8 +318,12 @@ class MSA:
 
             self.rkmers = new_rkmers
 
-        if py_hairpin:
+        if (
+            py_hairpin and not config.downsample
+        ):  # Downsample handles it own hairpins checks
             ## Hairpin check the kmers
+            if self.logger:
+                self.logger.info("Starting Primer Hairpin Check")
             self.fkmers = [
                 x for x in self.fkmers if not forms_hairpin(x.seqs(), config)
             ]
