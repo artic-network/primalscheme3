@@ -11,7 +11,11 @@ import typer
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.downsample import downsample_scheme
 from primalscheme3.core.msa import parse_msa
-from primalscheme3.core.primer_visual import bedfile_plot_html, primer_mismatch_heatmap
+from primalscheme3.core.primer_visual import (
+    bedfile_plot_html,
+    primer_dct_heatmap,
+    primer_mismatch_heatmap,
+)
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.interaction.interaction import (
     visualise_interactions,
@@ -191,6 +195,15 @@ def scheme_create(
             hidden=True,
         ),
     ] = Config.downsample_target,
+    primer_scorer_model_path: Annotated[
+        pathlib.Path | None,
+        typer.Option(
+            help="Path to the PrimerScorer model (required if using downsampling)",
+            exists=True,
+            readable=True,
+            resolve_path=True,
+        ),
+    ] = Config.primer_scorer_model_path,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -426,6 +439,15 @@ def panel_create(
             hidden=True,
         ),
     ] = Config.downsample_target,
+    primer_scorer_model_path: Annotated[
+        pathlib.Path | None,
+        typer.Option(
+            help="Path to the PrimerScorer model (required if using downsampling)",
+            exists=True,
+            readable=True,
+            resolve_path=True,
+        ),
+    ] = Config.primer_scorer_model_path,
 ):
     """
     Creates a primer panel
@@ -578,6 +600,73 @@ def visualise_primer_mismatches(
                 array=array,
                 seqdict=seqdict,
                 bedfile=bedfile,
+                offline_plots=offline_plots,
+                include_seqs=include_seqs,
+            )
+        )
+
+
+@app.command(no_args_is_help=True)
+def visualise_primer_dct(
+    msa: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The MSA used to design the scheme",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    bedfile: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The bedfile containing the primers",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    model: Annotated[
+        pathlib.Path,
+        typer.Option(
+            help="The path to the primer scorer model",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ] = pathlib.Path("q5_gam_surrogate_training_data.joblib"),
+    output: Annotated[
+        pathlib.Path,
+        typer.Option(help="Output location of the plot", dir_okay=False, writable=True),
+    ] = pathlib.Path("primer_dct.html"),
+    include_seqs: Annotated[
+        bool,
+        typer.Option(help="Reduces plot filesize, by excluding primer sequences"),
+    ] = True,
+    offline_plots: Annotated[
+        bool,
+        typer.Option(
+            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+        ),
+    ] = True,
+):
+    """
+    Visualise primer mismatch penalty (DCT) between primers and the input genomes
+    """
+    config = Config(primer_scorer_model_path=model)
+
+    array, seqdict = parse_msa(msa)
+
+    with open(output, "w") as outfile:
+        outfile.write(
+            primer_dct_heatmap(
+                array=array,
+                seqdict=seqdict,
+                bedfile=bedfile,
+                config=config,
                 offline_plots=offline_plots,
                 include_seqs=include_seqs,
             )
