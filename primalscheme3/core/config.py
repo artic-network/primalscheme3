@@ -1,4 +1,3 @@
-import os
 import pathlib
 from enum import Enum
 from importlib.metadata import version
@@ -45,6 +44,7 @@ class Config:
     downsample_target = 0.99
     downsample_always_add_prop = 0.25
     downsample_max_dct = -4.0
+    primer_scorer_model_path: pathlib.Path | None = None
     # Amplicon Settings
     amplicon_size: int = 400
     amplicon_size_min: int = 0
@@ -61,7 +61,7 @@ class Config:
     # Thermo
     primer_tm_min: float = 59.5
     primer_tm_max: float = 62.5
-    primer_annealing_tempc = 65
+    primer_annealing_tempc = 70
     primer_annealing_prop: float | None = None
     primer_annealing_diff: float = 5
     _primer_annealing_prop_default: float = 30.0
@@ -125,26 +125,19 @@ class Config:
 
         return items
 
-    def to_dict(self, *, relative_to: pathlib.Path | None = None) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
-        Return a dict (key, val) for non-private, non-callable members.
-        If relative_to is provided, Path values are stored relative to that path.
+        Return a dict (key, val) for non-private, non-callable members
         """
-        result: dict[str, Any] = {}
-        for key in [x for x in dir(self) if not x.startswith("_")]:
-            if callable(getattr(self, key)):
-                continue
-            value = getattr(self, key)
-            if isinstance(value, Enum):
-                result[key] = value.value
-            elif isinstance(value, pathlib.Path):
-                if relative_to is None:
-                    result[key] = str(value)
-                else:
-                    result[key] = os.path.relpath(value, relative_to)
+        dict = {}
+        for key, val in self.items().items():
+            if isinstance(val, Enum):
+                dict[key] = val.value
+            elif isinstance(val, pathlib.Path):
+                dict[key] = str(val)
             else:
-                result[key] = value
-        return result
+                dict[key] = val
+        return dict
 
     def __str__(self) -> str:
         return "\n".join(f"{key}: {val}" for key, val in self.items())
@@ -155,7 +148,7 @@ class Config:
             if value is None:
                 continue
 
-            if key == "input_bedfile":
+            if key in {"input_bedfile", "primer_scorer_model_path"}:
                 setattr(self, key, pathlib.Path(value))
                 continue
 
