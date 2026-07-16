@@ -100,6 +100,8 @@ def check_for_end_on_gap(ref_index_to_msa: dict[int, int], ref_index) -> bool:
     - fix_end_on_gap() will return in indexes to slice the array without the gap ie "TGTGGGGGTAGTGTTACG"
 
     """
+    if ref_index - 1 not in ref_index_to_msa:
+        return False
     exclusive_msa_end = ref_index_to_msa[ref_index]
     inclusive_msa_end = ref_index_to_msa[ref_index - 1]
     return exclusive_msa_end - inclusive_msa_end != 1

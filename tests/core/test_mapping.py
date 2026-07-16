@@ -219,6 +219,11 @@ class Test_CheckForEndOnGap(unittest.TestCase):
         result = check_for_end_on_gap(self.ref_index_to_msa_dict, 3)
         self.assertFalse(result)
 
+    def test_check_for_end_on_gap_ref_index_zero(self):
+        # ref_index=0 has no prior position; should return False, not raise KeyError
+        result = check_for_end_on_gap(self.ref_index_to_msa_dict, 0)
+        self.assertFalse(result)
+
 
 class Test_FixEndOnGap(unittest.TestCase):
     input = np.array(
