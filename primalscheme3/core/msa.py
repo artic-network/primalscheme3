@@ -7,11 +7,6 @@ import dnaio
 import numpy as np
 import tqdm
 from primalbedtools.bedfiles import CHROM_REGEX
-from primalschemers import (
-    Digester,
-    FKmer,
-    RKmer,
-)
 
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config, MappingType
@@ -26,6 +21,11 @@ from primalscheme3.core.mapping import create_mapping, ref_index_to_msa
 from primalscheme3.core.primerscorer import PrimerScorer
 from primalscheme3.core.seq_functions import remove_end_insertion
 from primalscheme3.core.thermo import forms_hairpin
+from primalschemers import (
+    Digester,
+    FKmer,
+    RKmer,
+)
 
 
 def parse_chrom_name(old_chrom: str) -> str:
@@ -273,11 +273,24 @@ class MSA:
                     "Set --primer-scorer-model-path or PRIMALSCHEME3_PRIMER_SCORER_MODEL."
                 )
             ps = PrimerScorer(pathlib.Path(model_path))
+            # Optionally dump a downsample graph SVG per (non-trivial) cloud plus a
+            # downsample_summary.csv (pre -> post counts + coverage prop). Gated by
+            # config.downsample_plot as it is slow and verbose.
+            plot_dir = None
+            if config.downsample_plot:
+                plot_dir = config.output / "work" / "downsample_plots"
+                os.makedirs(plot_dir, exist_ok=True)
+            plot_outdir = str(plot_dir) if plot_dir is not None else None
             # fkmers
             new_fkmers = []
-            for fkmer in tqdm.tqdm(self.fkmers):
+            for fkmer in tqdm.tqdm(self.fkmers, desc="downsampling FPrimers"):
                 new_seqs = downsample_kmer(
-                    kmer=fkmer, config=config, ps=ps, visualise=True
+                    kmer=fkmer,
+                    config=config,
+                    ps=ps,
+                    visualise=config.downsample_plot and len(fkmer.seqs()) > 1,
+                    outdir=plot_outdir,
+                    name=f"{self._chrom_name}_F_{fkmer.end}",
                 )
                 if new_seqs is None:
                     continue
@@ -300,7 +313,12 @@ class MSA:
             new_rkmers = []
             for rkmer in self.rkmers:
                 new_seqs = downsample_kmer(
-                    kmer=rkmer, config=config, ps=ps, visualise=False
+                    kmer=rkmer,
+                    config=config,
+                    ps=ps,
+                    visualise=config.downsample_plot and len(rkmer.seqs()) > 1,
+                    outdir=plot_outdir,
+                    name=f"{self._chrom_name}_R_{rkmer.start}",
                 )
                 if new_seqs is None:
                     continue

@@ -1,16 +1,19 @@
 # Downsample to count
+import csv
 import itertools
+import math
+import os
 
 import matplotlib.pyplot as plt
 import networkx as nx
 from primalbedtools.bedfiles import group_amplicons
 from primalbedtools.scheme import Scheme
-from primalschemers import FKmer, RKmer
 
 from primalscheme3.core.config import PRIMER_COUNT_ATTR_STRING, Config
 from primalscheme3.core.primerscorer import PrimerScorer
 from primalscheme3.core.seq_functions import primer_edit_dist
 from primalscheme3.core.thermo import THERMO_RESULT, calc_annealing_hetro, thermo_check
+from primalschemers import FKmer, RKmer
 
 MIN_ANNEALING = 3
 NAIVE_ANNEALING = 20
@@ -19,133 +22,200 @@ TARGET_ANNEALING = 20
 
 VISUALISE_LABEL_LEN = 20
 
+# Edge-length multiplier for the spring layout. Higher = longer edges => connected
+# nodes sit further apart, so the fixed-size markers stop overlapping. ~10 clears
+# overlaps for typical clouds; lower it if clusters look too sparse.
+SPRING_K = 14.0
+
+# Node marker AREA is proportional to the raw read count of that sequence, so
+# abundance is comparable across clouds and rare sequences read as tiny dots.
+# area = NODE_MIN_AREA + NODE_AREA_PER_COUNT * count  (matplotlib size == area).
+NODE_MIN_AREA = 8.0
+NODE_AREA_PER_COUNT = 1.0
+
+
+def _layout(G):
+    """
+    Organic force-directed (Fruchterman-Reingold) layout. A large SPRING_K makes
+    edges long relative to the marker size, which is what actually stops nodes
+    overlapping; disconnected clusters push apart on their own.
+    """
+    n = G.number_of_nodes()
+    if n == 0:
+        return {}
+    return nx.spring_layout(
+        G,
+        seed=42,
+        k=SPRING_K / math.sqrt(n),
+        iterations=400,
+    )
+
 
 def visualise_graph(
-    G, seq_counts, seq_thermo_dict, pos, added_seqs=None, accounted_seqs=None
+    G,
+    seq_counts,
+    seq_thermo_dict,
+    pos,
+    added_seqs=None,
+    accounted_seqs=None,
+    save_path=None,
+    score_cache=None,
+    max_dct=None,
 ):
-    # Create node sizes based on sequence counts
-    # Scale the counts to reasonable node sizes (multiply by a scaling factor)
-    node_sizes = [
-        seq_counts[node] * 10 for node in G.nodes()
-    ]  # Adjust scaling factor as needed
+    # Colourblind-safe palette (Okabe-Ito)
+    C_PASS = "#009E73"  # bluish green  -> thermo pass
+    C_FAIL = "#D55E00"  # vermillion    -> thermo fail
+    C_ADDED_EDGE = "#E69F00"  # orange   -> selected/added primer
+    C_ACC_EDGE = "#0072B2"  # blue       -> accounted for
+    C_EDGE = "#000000"
 
-    # Create node colors based on thermodynamic check results and added status
+    # Node area == raw read count (see NODE_* constants), so a dominant sequence
+    # is a big disc and rare ones are small dots.
+    node_sizes = [
+        NODE_MIN_AREA + NODE_AREA_PER_COUNT * seq_counts[node] for node in G.nodes()
+    ]
+
     node_colors = []
     node_edge_colors = []
     node_edge_widths = []
-
     for node in G.nodes():
-        thermo_result = seq_thermo_dict[node]
+        passed = seq_thermo_dict[node] == THERMO_RESULT.PASS
         is_added = added_seqs is not None and node in added_seqs
         is_accounted = accounted_seqs is not None and node in accounted_seqs
 
+        # Fill = thermo result; darker/opaque when added
+        node_colors.append(C_PASS if passed else C_FAIL)
         if is_added:
-            # Added sequences get a special color scheme
-            if thermo_result == THERMO_RESULT.PASS:
-                node_colors.append("darkgreen")  # Dark green for added + good thermo
-            else:
-                node_colors.append("darkred")  # Dark red for added + poor thermo
-            node_edge_colors.append("gold")  # Gold border for added sequences
-            node_edge_widths.append(3.0)  # Thicker border for added sequences
+            node_edge_colors.append(C_ADDED_EDGE)
+            node_edge_widths.append(2.5)
+        elif is_accounted:
+            node_edge_colors.append(C_ACC_EDGE)
+            node_edge_widths.append(2.0)
         else:
-            # Non-added sequences use the original color scheme
-            if thermo_result == THERMO_RESULT.PASS:
-                node_colors.append("lightgreen")  # Light green for good thermo
-            else:
-                node_colors.append("lightcoral")  # Light coral for poor thermo
+            node_edge_colors.append("white")
+            node_edge_widths.append(0.6)
 
-            if is_accounted:
-                node_edge_colors.append("blue")
-                node_edge_widths.append(3.0)
-            else:
-                node_edge_colors.append("black")  # Black border for non-added sequences
-                node_edge_widths.append(0.5)  # Thinner border for non-added sequences
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=200)
 
-    # Create edge weights for visualization
-    edge_weights = [G[u][v].get("score", 5) for u, v in G.edges()]
+    directional = score_cache is not None and max_dct is not None
+    if directional:
+        # Directed edges: an arrow primer -> template shows how well that primer
+        # would amplify that (edit-distance-1) variant. Scores are asymmetric, so
+        # each undirected edge becomes two arrows. Solid = amplifies within the
+        # ΔCt cutoff (accounts for the target); dashed = below cutoff.
+        DG = nx.DiGraph()
+        DG.add_nodes_from(G.nodes())
+        covered, uncovered = [], []
+        for query in G.nodes():
+            for ref, dct in score_cache.get(query, {}).items():
+                if ref == query or ref not in G or dct is None:
+                    continue
+                (covered if dct >= max_dct else uncovered).append((query, ref))
+        for elist, style, col, a in (
+            (covered, "solid", "#333333", 0.6),
+            (uncovered, "dashed", "#c00000", 0.45),
+        ):
+            if elist:
+                nx.draw_networkx_edges(
+                    DG,
+                    pos,
+                    ax=ax,
+                    edgelist=elist,
+                    edge_color=col,
+                    style=style,
+                    width=0.9,
+                    alpha=a,
+                    arrows=True,
+                    arrowsize=8,
+                    arrowstyle="-|>",
+                    connectionstyle="arc3,rad=0.08",
+                    node_size=node_sizes,  # type: ignore
+                )
+    else:
+        edge_weights = [G[u][v].get("score", 5) for u, v in G.edges()]
+        if edge_weights:
+            nx.draw_networkx_edges(
+                G,
+                pos,
+                ax=ax,
+                width=[0.4 + (w / MIN_ANNEALING) * 0.6 for w in edge_weights],  # type: ignore
+                alpha=0.35,
+                edge_color=C_EDGE,
+            )
 
-    # Plot the graph
-    plt.figure(figsize=(12, 8))
-
-    # Draw nodes with sizes based on counts and colors based on thermo + added status
     nx.draw_networkx_nodes(
         G,
         pos,
+        ax=ax,
         node_size=node_sizes,  # type: ignore
         node_color=node_colors,  # type: ignore
         edgecolors=node_edge_colors,  # type: ignore
         linewidths=node_edge_widths,  # type: ignore
     )
 
-    # Draw edges with thickness based on annealing scores
-    if edge_weights:  # Only draw edges if they exist
-        nx.draw_networkx_edges(
-            G,
-            pos,
-            width=[(w / MIN_ANNEALING) ** 2 for w in edge_weights],  # type: ignore
-            alpha=0.5,
-            edge_color="gray",
+    ax.set_aspect("equal")  # keep markers circular + spacing uniform in x/y
+    ax.set_axis_off()
+    ax.margins(0.08)
+
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    def _dot(edge, lw, label):
+        return Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="none",
+            markerfacecolor="#bbbbbb",
+            markeredgecolor=edge,
+            markeredgewidth=lw,
+            markersize=11,
+            label=label,
         )
 
-    # Add labels (you might want to truncate long sequences)
-    # node_labels = {
-    #    node: f"{node[:VISUALISE_LABEL_LEN]}..."
-    #    if len(node) > VISUALISE_LABEL_LEN
-    #    else node
-    #    for node in G.nodes()
-    # }
-    # nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8)
-
-    # Add edge labels showing annealing scores
-    # if G.edges():  # Only add edge labels if edges exist
-    #     edge_labels = {(u, v): f"{G[u][v].get('score', 10):.1f}" for u, v in G.edges()}
-    #     nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=6)
-
-    plt.title(
-        "Sequence Annealing Network\n(Node size = sequence count, Node color = thermo check, Gold border = added sequences)"
-    )
-    plt.axis("off")
-
-    # Add legend for color scheme
-    if added_seqs is not None:
-        from matplotlib.patches import Patch
-
-        legend_elements = [
-            Patch(
-                facecolor="darkgreen",
-                edgecolor="gold",
-                linewidth=2,
-                label="Added + Thermo Pass",
+    legend_elements = [
+        Patch(facecolor=C_PASS, edgecolor="none", label="Thermo pass"),
+        Patch(facecolor=C_FAIL, edgecolor="none", label="Thermo fail"),
+        _dot(C_ADDED_EDGE, 2.5, "Selected (added)"),
+        _dot(C_ACC_EDGE, 2.0, "Accounted for"),
+    ]
+    if directional:
+        legend_elements += [
+            Line2D(
+                [0], [0], color="#333333", lw=1.2, label="primer→variant: amplifies"
             ),
-            Patch(
-                facecolor="darkred",
-                edgecolor="gold",
-                linewidth=2,
-                label="Added + Thermo Fail",
-            ),
-            Patch(
-                facecolor="lightgreen",
-                edgecolor="black",
-                linewidth=1,
-                label="Not Added + Thermo Pass",
-            ),
-            Patch(
-                facecolor="lightcoral",
-                edgecolor="black",
-                linewidth=1,
-                label="Not Added + Thermo Fail",
-            ),
-            Patch(
-                facecolor="white",
-                edgecolor="blue",
-                linewidth=2,
-                label="Accounted for",
+            Line2D(
+                [0],
+                [0],
+                color="#c00000",
+                lw=1.2,
+                ls="--",
+                label="primer→variant: below cutoff",
             ),
         ]
-        plt.legend(handles=legend_elements, loc="upper right", bbox_to_anchor=(1, 1))
+    ax.legend(
+        handles=legend_elements,
+        loc="lower right",
+        frameon=False,
+        fontsize=9,
+        handletextpad=0.6,
+    )
+    total_reads = int(sum(seq_counts.values())) if seq_counts else 0
+    ax.text(
+        0.0,
+        0.0,
+        f"Node area ∝ read count   (cloud total = {total_reads} reads)",
+        transform=ax.transAxes,
+        fontsize=8,
+        color="#666666",
+    )
 
     plt.tight_layout()
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path, format="svg", bbox_inches="tight")
+        plt.close()
+    else:
+        plt.show()
 
 
 def calc_scores(
@@ -240,6 +310,8 @@ def delta_ct_downsample_seqs(
     config: Config,
     ps: PrimerScorer,
     visualise: bool = False,
+    outdir: str | None = None,
+    name: str = "downsample",
 ):
     """
     Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
@@ -263,7 +335,7 @@ def delta_ct_downsample_seqs(
     G.add_nodes_from(seq_counts.keys())
     # Add edges for passing edit distance
     G.add_edges_from(valid_edit_dist)
-    pos = nx.spring_layout(G, seed=42)
+    pos = _layout(G)
 
     # Pre-calculate all mismatch scores for edges in the graph
     edge_list = list(G.edges())
@@ -382,13 +454,53 @@ def delta_ct_downsample_seqs(
         config.downsample_max_dct,
     )
     tmp_target_prop = accounted_count_val / all_seqs_count
+
+    # Quick + dirty per-cloud summary CSV (pre -> post + coverage prop)
+    if outdir:
+        summary_path = os.path.join(outdir, "downsample_summary.csv")
+        write_header = not os.path.exists(summary_path)
+        with open(summary_path, "a", newline="") as fh:
+            w = csv.writer(fh)
+            if write_header:
+                w.writerow(
+                    [
+                        "name",
+                        "n_seqs_pre",
+                        "n_seqs_post",
+                        "total_count",
+                        "coverage_prop",
+                        "passed",
+                    ]
+                )
+            w.writerow(
+                [
+                    name,
+                    len(seq_counts),
+                    len(added_seqs),
+                    all_seqs_count,
+                    round(tmp_target_prop, 4),
+                    tmp_target_prop >= config.downsample_target,
+                ]
+            )
+
     if visualise:
         account_seqs = {
             s
             for s, v in seq_delta_ct.items()
             if v is not None and v > config.downsample_max_dct
         }
-        visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs, account_seqs)  # type: ignore
+        save_path = os.path.join(outdir, f"{name}.svg") if outdir else None
+        visualise_graph(
+            G,
+            seq_counts,
+            seq_thermo_dict,
+            pos,
+            added_seqs,
+            account_seqs,
+            save_path=save_path,  # type: ignore
+            score_cache=score_cache,
+            max_dct=config.downsample_max_dct,
+        )
     if tmp_target_prop >= config.downsample_target:
         return sorted(added_seqs)
     else:
@@ -399,6 +511,8 @@ def downsample_seqs(
     seq_counts: dict[str, float],
     config: Config,
     visualise: bool = False,
+    outdir: str | None = None,
+    name: str = "downsample",
 ):
     """
     Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
@@ -435,8 +549,7 @@ def downsample_seqs(
         G.add_edge(s1, s2, score=an)
 
     if visualise:
-        pos = nx.spring_layout(G, seed=42)
-        visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs=set())
+        pos = _layout(G)
 
     # Start downsampling
     annealing_scores = {seq: 0.0 for seq in seq_counts.keys()}
@@ -502,7 +615,15 @@ def downsample_seqs(
 
         # Show final visualization with added sequences highlighted
     if visualise:
-        visualise_graph(G, seq_counts, seq_thermo_dict, pos, added_seqs)  # type: ignore
+        save_path = os.path.join(outdir, f"{name}.svg") if outdir else None
+        visualise_graph(
+            G,
+            seq_counts,
+            seq_thermo_dict,
+            pos,  # type: ignore
+            added_seqs,
+            save_path=save_path,
+        )
 
     # If we have not reached the target annealing, add more sequences
     if (
@@ -561,6 +682,8 @@ def downsample_kmer(
     config: Config,
     ps: PrimerScorer,
     visualise: bool = False,
+    outdir: str | None = None,
+    name: str = "downsample",
 ) -> list[str] | None:
     """
     Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
@@ -569,24 +692,43 @@ def downsample_kmer(
     # Sort seqs in desc
     seq_counts = {k: v for k, v in zip(kmer.seqs(), kmer.counts(), strict=True)}
     return delta_ct_downsample_seqs(
-        seq_counts=seq_counts, config=config, visualise=visualise, ps=ps
+        seq_counts=seq_counts,
+        config=config,
+        visualise=visualise,
+        ps=ps,
+        outdir=outdir,
+        name=name,
     )
 
 
 def downsample_scheme(path, config, visualise: bool = False):
     scheme = Scheme.from_file(path)
 
+    # Save the per-amplicon graphs as SVG into the run's output directory
+    outdir = str(config.output) if visualise else None
+    if outdir is not None:
+        os.makedirs(outdir, exist_ok=True)
+
     new_scheme = Scheme([], [])
 
-    for amps in group_amplicons(scheme.bedlines):
+    for i, amps in enumerate(group_amplicons(scheme.bedlines)):
         f_bls = amps["LEFT"]
+
+        # Build a unique, human-readable name per amplicon for the SVG files
+        amp_name = f"amp{i:03d}"
+        if f_bls and getattr(f_bls[0], "chrom", None):
+            amp_name = f"{f_bls[0].chrom}_amp{i:03d}"
 
         fseq_counts = {
             bl.sequence: float(bl.attributes.get(PRIMER_COUNT_ATTR_STRING, 1.0))
             for bl in f_bls
         }
         kept_fseqs = downsample_seqs(
-            seq_counts=fseq_counts, config=config, visualise=visualise
+            seq_counts=fseq_counts,
+            config=config,
+            visualise=visualise,
+            outdir=outdir,
+            name=f"{amp_name}_LEFT",
         )
 
         # Find which bedlines are being kept
@@ -600,7 +742,11 @@ def downsample_scheme(path, config, visualise: bool = False):
             for bl in r_bls
         }
         kept_rseqs = downsample_seqs(
-            seq_counts=rseq_counts, config=config, visualise=visualise
+            seq_counts=rseq_counts,
+            config=config,
+            visualise=visualise,
+            outdir=outdir,
+            name=f"{amp_name}_RIGHT",
         )
 
         # Find which bedlines are being kept
