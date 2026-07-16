@@ -222,6 +222,12 @@ GC_RICH_DINU2 = {"CC/GC", "GC/CT", "GC/CC", "CT/GC"}
 def find_mismatch(ref, query) -> tuple[int, str, str, str] | None:
     mismatches = []
     for i, (rb, qb) in enumerate(zip(ref[::-1], query[::-1], strict=False)):
+        # ref/query are padded with "." at both ends. A position where one side
+        # is padding and the other is a base is a 5'-length difference between two
+        # 3'-anchored primers, NOT a substitution, so it must not be counted.
+        # (Padding-vs-padding at the shared 3' terminus is a match anyway.)
+        if rb == "." or qb == ".":
+            continue
         if rb != qb:
             mismatches.append(i)
 
