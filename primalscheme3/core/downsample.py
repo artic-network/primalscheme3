@@ -8,12 +8,12 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from primalbedtools.bedfiles import group_amplicons
 from primalbedtools.scheme import Scheme
+from primalschemers import FKmer, RKmer
 
 from primalscheme3.core.config import PRIMER_COUNT_ATTR_STRING, Config
 from primalscheme3.core.primerscorer import PrimerScorer
 from primalscheme3.core.seq_functions import primer_edit_dist
 from primalscheme3.core.thermo import THERMO_RESULT, calc_annealing_hetro, thermo_check
-from primalschemers import FKmer, RKmer
 
 MIN_ANNEALING = 3
 NAIVE_ANNEALING = 20
@@ -335,7 +335,7 @@ def delta_ct_downsample_seqs(
     G.add_nodes_from(seq_counts.keys())
     # Add edges for passing edit distance
     G.add_edges_from(valid_edit_dist)
-    pos = _layout(G)
+    pos = None
 
     # Pre-calculate all mismatch scores for edges in the graph
     edge_list = list(G.edges())
@@ -490,6 +490,8 @@ def delta_ct_downsample_seqs(
             if v is not None and v > config.downsample_max_dct
         }
         save_path = os.path.join(outdir, f"{name}.svg") if outdir else None
+        if pos is None:
+            pos = _layout(G)
         visualise_graph(
             G,
             seq_counts,
