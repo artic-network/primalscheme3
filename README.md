@@ -179,7 +179,7 @@ $ primalscheme3 visualise-bedfile [OPTIONS] BEDFILE REF_PATH
 **Arguments**:
 
 * `BEDFILE`: The bedfile containing the primers  [required]
-* `REF_PATH`: The bedfile containing the primers  [required]
+* `REF_PATH`: The reference.fasta file  [required]
 
 **Options**:
 
