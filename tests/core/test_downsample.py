@@ -657,3 +657,125 @@ class TestDownsampleScheme(unittest.TestCase):
             ["downsample-existing-scheme", str(bed), "--primer-scorer-model", "nope"],
         )
         self.assertNotEqual(bad.exit_code, 0)
+
+
+class FakeReturnAllKmer:
+    """The parts of a return_all FKmer/RKmer that downsampling reads."""
+
+    def __init__(self, seqs, counts, statuses, errors=(), dimers=()):
+        self._seqs, self._counts, self._statuses = seqs, counts, statuses
+        self._errors, self._dimers = list(errors), list(dimers)
+
+    def seqs(self):
+        return self._seqs
+
+    def counts(self):
+        return self._counts
+
+    def statuses(self):
+        return self._statuses
+
+    def errors(self):
+        return self._errors
+
+    def dimers(self):
+        return self._dimers
+
+
+class TestDownsampleCloud(unittest.TestCase):
+    def test_failures_and_low_freq(self):
+        kmer = FakeReturnAllKmer(
+            [BASE, variant(3), variant(5)],
+            [10.0, 2.0, 1.0],
+            [[], ["LowTm", "Hairpin"], ["LowFreq"]],
+        )
+        cloud = ds.downsample_cloud(kmer)
+        # LowFreq sequences are dropped, as the normal digest drops them
+        self.assertEqual(cloud.seqs, [BASE, variant(3)])
+        self.assertEqual(cloud.counts, [10.0, 2.0])
+        self.assertEqual(cloud.failed, {variant(3)})
+
+    def test_untagged_error_drops_the_cloud(self):
+        kmer = FakeReturnAllKmer([BASE], [1.0], [[]], errors=[(["ContainsN"], 1.0)])
+        self.assertIsNone(ds.downsample_cloud(kmer))
+
+    def test_ignored_and_low_freq_errors_keep_the_cloud(self):
+        kmer = FakeReturnAllKmer(
+            [BASE],
+            [5.0],
+            [[]],
+            errors=[
+                (["ContainsN", "Ignored"], 1.0),
+                (["GapOnSetBase", "LowFreq"], 0.1),
+            ],
+        )
+        self.assertEqual(ds.downsample_cloud(kmer).seqs, [BASE])
+
+    def test_only_low_freq_left_drops_the_cloud(self):
+        kmer = FakeReturnAllKmer([BASE], [1.0], [["LowFreq"]])
+        self.assertIsNone(ds.downsample_cloud(kmer))
+
+    def test_dimers_only_count_between_kept_seqs(self):
+        kmer = FakeReturnAllKmer(
+            [BASE, variant(3), variant(5)],
+            [5.0, 1.0, 1.0],
+            [[], [], []],
+            dimers=[(0, 2)],
+        )
+        cloud = ds.downsample_cloud(kmer)
+        self.assertEqual(cloud.dimers, [(BASE, variant(5))])
+        self.assertTrue(ds.forms_dimer(cloud, [BASE, variant(5)]))
+        # The partner was downsampled away
+        self.assertFalse(ds.forms_dimer(cloud, [BASE, variant(3)]))
+
+    def test_failed_seqs_replace_the_python_thermo_check(self):
+        from unittest import mock
+
+        config = Config(downsample=True, downsample_target=0.9)
+        seqs = {BASE: 10.0, variant(3): 1.0}
+        with mock.patch.object(
+            ds, "thermo_check", side_effect=AssertionError("called")
+        ):
+            kept = ds.delta_ct_downsample_seqs(
+                seqs, config, FakeScorerAlwaysPass(), failed_seqs=set()
+            )
+            self.assertEqual(kept, [BASE])
+            # A failed sequence is never kept, and can't cover itself: BASE
+            # alone covers 10/11, short of a 0.95 target
+            config.downsample_target = 0.95
+            kept = ds.delta_ct_downsample_seqs(
+                seqs, config, FakeScorerAlwaysFail(), failed_seqs={variant(3)}
+            )
+            self.assertIsNone(kept)
+
+
+class TestMSADownsampleReturnAll(unittest.TestCase):
+    """Downsampled clouds come from the Rust digest's passing sequences."""
+
+    msa_path = pathlib.Path("tests/core/test_mismatch.fasta")
+
+    def test_kept_seqs_pass_the_rust_checks(self):
+        from primalschemers import Digester
+
+        from primalscheme3.core.msa import digest_kwargs
+
+        config = Config(downsample=True, ncores=1)
+        msa = MSA("test", self.msa_path, 0, ProgressManager(), config)
+        msa.digest_rs(config=config)
+        self.assertTrue(msa.fkmers)
+        # Every kept sequence passes all checks in a return_all digest
+        f, _, _ = Digester(str(self.msa_path), 1, False).digest(
+            findexes=[k.end for k in msa.fkmers],
+            rindexes=[],
+            thermo_check=True,
+            return_all=True,
+            **digest_kwargs(config),
+        )
+        statuses = {
+            (k.end, s): tags
+            for k in f
+            for s, tags in zip(k.seqs(), k.statuses(), strict=False)
+        }
+        for k in msa.fkmers:
+            for s in k.seqs():
+                self.assertEqual(statuses[(k.end, s)], [], (k.end, s))
