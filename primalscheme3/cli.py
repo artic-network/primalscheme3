@@ -11,7 +11,11 @@ import typer
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.downsample import downsample_scheme
 from primalscheme3.core.msa import parse_msa
-from primalscheme3.core.primer_visual import bedfile_plot_html, primer_mismatch_heatmap
+from primalscheme3.core.primer_visual import (
+    bedfile_plot_html,
+    primer_dct_heatmap,
+    primer_mismatch_heatmap,
+)
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.interaction.interaction import (
     visualise_interactions,
@@ -180,17 +184,24 @@ def scheme_create(
     downsample: Annotated[
         bool,
         typer.Option(
-            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
             hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
-            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
             hidden=True,
         ),
     ] = Config.downsample_target,
+    primer_scorer_model: Annotated[
+        str,
+        typer.Option(
+            help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
+            hidden=True,
+        ),
+    ] = Config.primer_scorer_model,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -415,17 +426,24 @@ def panel_create(
     downsample: Annotated[
         bool,
         typer.Option(
-            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
             hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
-            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
             hidden=True,
         ),
     ] = Config.downsample_target,
+    primer_scorer_model: Annotated[
+        str,
+        typer.Option(
+            help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
+            hidden=True,
+        ),
+    ] = Config.primer_scorer_model,
 ):
     """
     Creates a primer panel
@@ -585,6 +603,69 @@ def visualise_primer_mismatches(
 
 
 @app.command(no_args_is_help=True)
+def visualise_primer_dct(
+    msa: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The MSA used to design the scheme",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    bedfile: Annotated[
+        pathlib.Path,
+        typer.Argument(
+            help="The bedfile containing the primers",
+            readable=True,
+            exists=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ],
+    model: Annotated[
+        str,
+        typer.Option(
+            help="Primer scorer model: a bundled model id, or the path to a model's .json manifest",
+        ),
+    ] = Config.primer_scorer_model,
+    output: Annotated[
+        pathlib.Path,
+        typer.Option(help="Output location of the plot", dir_okay=False, writable=True),
+    ] = pathlib.Path("primer_dct.html"),
+    include_seqs: Annotated[
+        bool,
+        typer.Option(help="Reduces plot filesize, by excluding primer sequences"),
+    ] = True,
+    offline_plots: Annotated[
+        bool,
+        typer.Option(
+            help="Includes 3Mb of dependencies into the plots, so they can be viewed offline"
+        ),
+    ] = True,
+):
+    """
+    Visualise primer mismatch penalty (DCT) between primers and the input genomes
+    """
+    config = Config(primer_scorer_model=model)
+
+    array, seqdict = parse_msa(msa)
+
+    with open(output, "w") as outfile:
+        outfile.write(
+            primer_dct_heatmap(
+                array=array,
+                seqdict=seqdict,
+                bedfile=bedfile,
+                config=config,
+                offline_plots=offline_plots,
+                include_seqs=include_seqs,
+            )
+        )
+
+
+@app.command(no_args_is_help=True)
 def visualise_bedfile(
     bedfile: Annotated[
         pathlib.Path,
@@ -600,7 +681,7 @@ def visualise_bedfile(
     ref_path: Annotated[
         pathlib.Path,
         typer.Argument(
-            help="The bedfile containing the primers",
+            help="The reference.fasta file containing the --ref-id genome",
             readable=True,
             exists=True,
             dir_okay=False,
@@ -656,17 +737,27 @@ def downsample_existing_scheme(
         float,
         typer.Option(min=0, max=1),
     ] = Config.downsample_target,
+    downsample_max_dct: Annotated[
+        float,
+        typer.Option(help="Lowest ΔCt at which a primer still covers a variant"),
+    ] = Config.downsample_max_dct,
+    primer_scorer_model: Annotated[
+        str,
+        typer.Option(
+            help="Primer scorer model: a bundled model id, or the path to a model's .json manifest",
+        ),
+    ] = Config.primer_scorer_model,
     visualise: Annotated[
         bool,
         typer.Option(help="Will print graph visualisations of downsampling"),
     ] = False,
 ):
-    """Will try and reduce number of primers in a cloud by calculating inter-primercloud annealing"""
+    """Will try and reduce number of primers in a cloud using the primer scorer's ΔCt predictions"""
 
     config = Config(**locals())
     config.downsample = True
 
-    downsample_scheme(bedfile, config, visualise)
+    print(downsample_scheme(bedfile, config, visualise).to_str(), end="")
 
 
 if __name__ == "__main__":

@@ -57,6 +57,35 @@ class TestMain(unittest.TestCase):
             self.check_file(tempdir_path / "primer.html")
             self.check_file(tempdir_path / "config.json")
 
+    def test_schemecreate_downsample_records_model(self):
+        import json
+
+        from primalscheme3.models import DEFAULT_MODEL, MODELS_DIR, file_sha256
+
+        with tempfile.TemporaryDirectory(
+            dir="tests/integration", suffix="-schemecreate-ds"
+        ) as tempdir:
+            tempdir_path = pathlib.Path(tempdir)
+            self.config.downsample = True
+            self.config.ncores = 2
+
+            # Runs with the bundled model: no model path needed
+            schemecreate(
+                msa=self.msa_paths,
+                output_dir=tempdir_path,
+                pm=ProgressManager(),
+                config=self.config,
+                force=True,
+                offline_plots=False,
+            )
+            self.check_file(tempdir_path / "primer.bed")
+            cfg = json.loads((tempdir_path / "config.json").read_text())
+            self.assertEqual(cfg["primer_scorer_model"], DEFAULT_MODEL)
+            self.assertEqual(
+                cfg["primer_scorer_model_sha256"],
+                file_sha256(MODELS_DIR / f"{DEFAULT_MODEL}.joblib"),
+            )
+
     def test_schemecreate_circular(self):
         with tempfile.TemporaryDirectory(
             dir="tests/integration", suffix="-schemecreate"

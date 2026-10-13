@@ -3,6 +3,8 @@ from enum import Enum
 from importlib.metadata import version
 from typing import Any
 
+from primalscheme3.models import DEFAULT_MODEL
+
 
 # Written by Andy Smith, modified by: Chris Kent
 class MappingType(Enum):
@@ -43,6 +45,14 @@ class Config:
     downsample: bool = False
     downsample_target = 0.99
     downsample_always_add_prop = 0.25
+    downsample_max_dct = -2.0
+    # When True, write a per-cloud downsample graph SVG (+ summary CSV) to
+    # <output>/work/downsample_plots. Off by default as it is slow and verbose.
+    downsample_plot: bool = False
+    # Bundled model id (see primalscheme3.models) or a path to a model's
+    # .json manifest. The sha256 of the model used is recorded on load.
+    primer_scorer_model: str = DEFAULT_MODEL
+    primer_scorer_model_sha256: str = ""
     # Amplicon Settings
     amplicon_size: int = 400
     amplicon_size_min: int = 0
@@ -54,17 +64,18 @@ class Config:
     _primer_size_hgc_max: int = 30
     _primer_gc_default_min: int = 30
     _primer_gc_default_max: int = 55
-    _primer_gc_hgc_min: int = 40
-    _primer_gc_hgc_max: int = 65
+    _primer_gc_hgc_min: int = 30
+    _primer_gc_hgc_max: int = 67
     # Thermo
     primer_tm_min: float = 59.5
     primer_tm_max: float = 62.5
     primer_annealing_tempc = 65
     primer_annealing_prop: float | None = None
-    _primer_annealing_prop_default = 20
+    primer_annealing_diff: float = 5
+    _primer_annealing_prop_default: float = 30.0
     use_annealing: bool = False
 
-    primer_hairpin_th_max: float = 51
+    primer_hairpin_th_max: float = 55
     primer_homopolymer_max: int = 5
     primer_max_walk: int = 80
     # MatchDB Settings
@@ -74,7 +85,6 @@ class Config:
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min
     mismatch_product_size: int = 0
-    mismatch_in_memory: bool = False  # Use an in memory dict rather than a dbm file
     # Thermodynamic Parameters
     mv_conc: float = 100.0
     dv_conc: float = 2.0
@@ -146,7 +156,11 @@ class Config:
             if value is None:
                 continue
 
-            if key == "input_bedfile":
+            # Configs written before primer scorer models were bundled
+            if key == "primer_scorer_model_path":
+                key, value = "primer_scorer_model", str(value)
+
+            if key in {"input_bedfile"}:
                 setattr(self, key, pathlib.Path(value))
                 continue
 
@@ -290,4 +304,5 @@ AMBIGUOUS_DNA_COMPLEMENT = {
     "X": "X",
     "N": "N",
     "-": "-",
+    ".": ".",
 }

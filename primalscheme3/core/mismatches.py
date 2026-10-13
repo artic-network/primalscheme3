@@ -29,10 +29,14 @@ class MatchDB:
     """
 
     def __init__(self, path, msas_paths: list[str], config: Config) -> None:
+        # The file written, if any (dbm adds its own extension to it)
+        self.path: str | None = None
+        self.n_msas = len(msas_paths)
         if config.in_memory_db or not msas_paths:
             self.db = {}  # Using an dict will have same api as dbm but not write a file
         else:
-            self.db = db.open(str(path), "n")
+            self.path = str(path)
+            self.db = db.open(self.path, "n")
 
         # Read in and digest each MSA
         for msa_index, msa_path in enumerate(msas_paths):
@@ -43,6 +47,14 @@ class MatchDB:
                         self._digest_kmers_into_db(
                             entry.sequence.upper(), config.mismatch_kmersize, msa_index
                         )
+
+    def describe(self) -> str:
+        """What was built, for the log: in memory, on disk, or nothing."""
+        if self.n_msas == 0:
+            return "Mismatch database not used"
+        if self.path is None:
+            return f"Created in-memory mismatch database ({len(self.db)} kmers)"
+        return f"[green]Created[/green]: {self.path} ({db.__name__})"
 
     def _write_unique(self, sequence, match: tuple[int, int]):
         """This will only write unqiue values to the db"""

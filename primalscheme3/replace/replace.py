@@ -1,3 +1,4 @@
+import json
 import pathlib
 from collections import Counter
 from enum import Enum
@@ -237,7 +238,18 @@ def replace(
         return
 
     # Sort the pp depending on a score
-    valid_pp.sort(key=lambda pp: len(pp.all_seqs()))
+    #  The primer which adds the most coverage (bool array so low sum means lots of uncovered bases)
+    valid_pp.sort(
+        key=lambda pp: (
+            multiplex._coverage[pp.msa_index][pp.fprimer.end : pp.rprimer.start].sum(),
+            len(pp.all_seqs()),
+        )
+    )
+
+    # Write the config out
+    cfg_dict = config.to_dict()
+    with open(output / "config.json", "w") as outfile:
+        outfile.write(json.dumps(cfg_dict, sort_keys=True))
 
     # Write all valid primers to file
     if mode == ReplaceRunModes.ListAll:
@@ -256,6 +268,13 @@ def replace(
     with open(output / "primer.bed", "w") as outfile:
         primer_bed_str = multiplex.to_bed()
         outfile.write(primer_bed_str)
+
+    # Write amplicon bed file
+    with open(output / "amplicon.bed", "w") as outfile:
+        amp_bed_str = multiplex.to_amplicons(trim_primers=False)
+        outfile.write(amp_bed_str)
+    with open(output / "primertrim.amplicon.bed", "w") as outfile:
+        outfile.write(multiplex.to_amplicons(trim_primers=True))
 
     # Writing plot data
     plot_data = generate_all_plotdata(

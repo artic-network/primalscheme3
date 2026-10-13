@@ -80,11 +80,19 @@ class Test_ReverseComplement(unittest.TestCase):
         self.assertEqual(reverse_complement("NNNN"), "NNNN")
         self.assertEqual(reverse_complement("ACGTN"), "NACGT")
 
+    def test_reverse_complement_padding(self):
+        """
+        "." is a permitted padding character (used by the primer-scorer 3'
+        alignment) and is its own complement.
+        """
+        self.assertEqual(reverse_complement("."), ".")
+        self.assertEqual(reverse_complement("A.CG."), ".CG.T")
+
     def test_reverse_complement_error(self):
         """
-        Should raise keys error if invalid base is passed
+        Should raise a KeyError if an invalid base is passed
         """
-        self.assertRaises(KeyError, reverse_complement, ".")
+        self.assertRaises(KeyError, reverse_complement, "Z")
 
 
 class Test_ExtendAmbiguousBase(unittest.TestCase):

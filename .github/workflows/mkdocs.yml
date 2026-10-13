@@ -1,10 +1,10 @@
 name: ci
+# Deploy the website only for a published release (as python-publish.yml),
+# or by hand from the Actions tab. Pushes and PRs never deploy.
 on:
-  push:
-    paths:
-      - "docs/**"
-      - "mkdocs.yml"
-      - ".github/workflows/mkdocs.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:

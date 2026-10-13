@@ -4,7 +4,6 @@ import pathlib
 from enum import Enum
 
 from click import UsageError
-from primalschemers import do_pool_interact  # type: ignore
 
 # Core imports
 from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
@@ -17,6 +16,7 @@ from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.thermo import THERMO_RESULT, thermo_check
+from primalschemers import do_pool_interact  # type: ignore
 
 
 def primers_equal(s1, s2) -> bool:
@@ -24,6 +24,19 @@ def primers_equal(s1, s2) -> bool:
         if b2 != b1:
             return False
     return True
+
+
+def required_n_pools(primerpairs, min_pools: int) -> int:
+    """
+    Number of pool buckets needed to index every primerpair by its (0-indexed)
+    ``pool`` attribute.
+
+    Sized by the highest pool index present, not the count of distinct pools, so
+    sparse / non-contiguous pool numbering (e.g. pools {0, 2}) does not under-size
+    the list and cause an IndexError when indexing ``pools[pp.pool]``.
+    """
+    max_pool = max((pp.pool for pp in primerpairs), default=-1)
+    return max(min_pools, max_pool + 1)
 
 
 class NewPrimerStatus(Enum):
@@ -231,7 +244,8 @@ def repair(
         )
 
     # Get all the seqs in each pool
-    seqs_bytes_in_pools = [[] for _ in range(config.n_pools)]
+    n_pools = required_n_pools(all_primerpairs, config.n_pools)
+    seqs_bytes_in_pools = [[] for _ in range(n_pools)]
     for pp in primerpairs_in_msa:
         seqs_bytes_in_pools[pp.pool].extend(
             [*pp.fprimer.seqs_bytes(), *pp.rprimer.seqs_bytes()]
