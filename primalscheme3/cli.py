@@ -735,17 +735,27 @@ def downsample_existing_scheme(
         float,
         typer.Option(min=0, max=1),
     ] = Config.downsample_target,
+    downsample_max_dct: Annotated[
+        float,
+        typer.Option(help="Lowest ΔCt at which a primer still covers a variant"),
+    ] = Config.downsample_max_dct,
+    primer_scorer_model: Annotated[
+        str,
+        typer.Option(
+            help="Primer scorer model: a bundled model id, or the path to a model's .json manifest",
+        ),
+    ] = Config.primer_scorer_model,
     visualise: Annotated[
         bool,
         typer.Option(help="Will print graph visualisations of downsampling"),
     ] = False,
 ):
-    """Will try and reduce number of primers in a cloud by calculating inter-primercloud annealing"""
+    """Will try and reduce number of primers in a cloud using the primer scorer's ΔCt predictions"""
 
     config = Config(**locals())
     config.downsample = True
 
-    downsample_scheme(bedfile, config, visualise)
+    print(downsample_scheme(bedfile, config, visualise).to_str(), end="")
 
 
 if __name__ == "__main__":

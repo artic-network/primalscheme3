@@ -521,8 +521,10 @@ def downsample_seqs(
     name: str = "downsample",
 ):
     """
-    Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
-    the count of how often that sequence appeared in the MSA
+    Legacy annealing-based downsampling (superseded by
+    delta_ct_downsample_seqs). Takes a raw Kmer object from PrimalSchemers Kmer.
+    Contains the un-thermo-checked sequence and the count of how often that
+    sequence appeared in the MSA
     """
 
     # Sort the seq_counts in descending order by value
@@ -732,57 +734,54 @@ def _ds_pool_worker(task):
     return idx, kept
 
 
-def downsample_scheme(path, config, visualise: bool = False):
+def downsample_scheme(path, config, visualise: bool = False) -> Scheme:
+    """
+    Downsample each primer cloud of an existing scheme with the ΔCt model,
+    as scheme-create --downsample does. Primer counts come from each
+    bedline's ``pc`` attribute (1 if absent). Headers and probes are kept.
+    A side whose cloud can't reach ``downsample_target`` is dropped.
+    """
     scheme = Scheme.from_file(path)
+    ps = PrimerScorer(
+        os.getenv("PRIMALSCHEME3_PRIMER_SCORER_MODEL") or config.primer_scorer_model
+    )
 
     # Save the per-amplicon graphs as SVG into the run's output directory
     outdir = str(config.output) if visualise else None
     if outdir is not None:
         os.makedirs(outdir, exist_ok=True)
 
-    new_scheme = Scheme([], [])
+    new_scheme = Scheme(scheme.headers, [])
 
     for i, amps in enumerate(group_amplicons(scheme.bedlines)):
-        f_bls = amps["LEFT"]
-
+        bedlines = [bl for side in amps.values() for bl in side]
         # Build a unique, human-readable name per amplicon for the SVG files
         amp_name = f"amp{i:03d}"
-        if f_bls and getattr(f_bls[0], "chrom", None):
-            amp_name = f"{f_bls[0].chrom}_amp{i:03d}"
+        if bedlines and getattr(bedlines[0], "chrom", None):
+            amp_name = f"{bedlines[0].chrom}_amp{i:03d}"
 
-        fseq_counts = {
-            bl.sequence: float(bl.attributes.get(PRIMER_COUNT_ATTR_STRING, 1.0))
-            for bl in f_bls
-        }
-        kept_fseqs = downsample_seqs(
-            seq_counts=fseq_counts,
-            config=config,
-            visualise=visualise,
-            outdir=outdir,
-            name=f"{amp_name}_LEFT",
-        )
+        for primer_class in ("LEFT", "PROBE", "RIGHT"):
+            bls = amps.get(primer_class, [])
+            if primer_class == "PROBE":
+                new_scheme.bedlines.extend(bls)
+                continue
 
-        # Find which bedlines are being kept
-        for fbl in f_bls:
-            if kept_fseqs is not None and fbl.sequence in kept_fseqs:
-                new_scheme.bedlines.append(fbl)
+            seq_counts = {
+                bl.sequence: float(bl.attributes.get(PRIMER_COUNT_ATTR_STRING, 1.0))
+                for bl in bls
+            }
+            if not seq_counts:
+                continue
+            kept = delta_ct_downsample_seqs(
+                seq_counts=seq_counts,
+                config=config,
+                ps=ps,
+                visualise=visualise,
+                outdir=outdir,
+                name=f"{amp_name}_{primer_class}",
+            )
+            # Find which bedlines are being kept
+            if kept is not None:
+                new_scheme.bedlines.extend(bl for bl in bls if bl.sequence in kept)
 
-        r_bls = amps["RIGHT"]
-        rseq_counts = {
-            bl.sequence: float(bl.attributes.get(PRIMER_COUNT_ATTR_STRING, 1.0))
-            for bl in r_bls
-        }
-        kept_rseqs = downsample_seqs(
-            seq_counts=rseq_counts,
-            config=config,
-            visualise=visualise,
-            outdir=outdir,
-            name=f"{amp_name}_RIGHT",
-        )
-
-        # Find which bedlines are being kept
-        for rbl in r_bls:
-            if kept_rseqs is not None and rbl.sequence in kept_rseqs:
-                new_scheme.bedlines.append(rbl)
-
-    print(new_scheme.to_str())
+    return new_scheme
