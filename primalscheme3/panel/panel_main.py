@@ -485,6 +485,9 @@ def panelcreate(
     # Add the bedfile to the cfg
     config_dict["region_bedfile"] = str(region_bedfile)
     config_dict["input_bedfile"] = str(input_bedfile)
+    # Set during downsampling, after config_dict was taken
+    config_dict["primer_scorer_model"] = config.primer_scorer_model
+    config_dict["primer_scorer_model_sha256"] = config.primer_scorer_model_sha256
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
         outfile.write(json.dumps(config_dict, sort_keys=True))
 

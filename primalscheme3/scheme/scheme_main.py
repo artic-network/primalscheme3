@@ -350,6 +350,9 @@ def schemecreate(
     cfg_dict["reference.fasta.md5"] = ref_md5
 
     # Write the config dict to file
+    # Set during downsampling, after cfg_dict was taken
+    cfg_dict["primer_scorer_model"] = config.primer_scorer_model
+    cfg_dict["primer_scorer_model_sha256"] = config.primer_scorer_model_sha256
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
         outfile.write(json.dumps(cfg_dict, sort_keys=True))
 
