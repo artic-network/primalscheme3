@@ -43,10 +43,10 @@ class Config:
     downsample: bool = False
     downsample_target = 0.99
     downsample_always_add_prop = 0.25
-    downsample_max_dct = -2.0
+    downsample_max_dct = -3.0
     # When True, write a per-cloud downsample graph SVG (+ summary CSV) to
     # <output>/work/downsample_plots. Off by default as it is slow and verbose.
-    downsample_plot: bool = False
+    downsample_plot: bool = True
     primer_scorer_model_path: pathlib.Path | None = None
     # Amplicon Settings
     amplicon_size: int = 400
@@ -56,7 +56,7 @@ class Config:
     _primer_size_default_min: int = 19
     _primer_size_default_max: int = 36
     _primer_size_hgc_min: int = 17
-    _primer_size_hgc_max: int = 30
+    _primer_size_hgc_max: int = 36
     _primer_gc_default_min: int = 30
     _primer_gc_default_max: int = 55
     _primer_gc_hgc_min: int = 30
