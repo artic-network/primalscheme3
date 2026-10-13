@@ -12,6 +12,9 @@
 - **`repair-mode` reports every reason.** It digests the existing primer sites with `return_all` and logs each sequence's failed checks (e.g. `LowTm, Hairpin`), minor alleles, and how many genomes have no usable sequence and why (e.g. `ContainsN in 2 genomes`).
 - **`repair-mode` treats a sequence as already present** when an existing primer shares its 3′ end (one is a 3′-suffix of the other: the same site walked to another length). Previously a prefix match was used.
 
+- **Python 3.14 is supported** (`requires-python >=3.11,<3.15`) and tested in CI. Now possible with primer3-py removed.
+- **joblib ≥ 1.6 is required.** Earlier versions emit thousands of NumPy 2.5 deprecation warnings when loading the primer scorer model (on Python 3.14, which uses NumPy 2.5), and a future NumPy could stop them loading it.
+
 ### Fixed
 - `repair-mode` now adds the valid new primers to `primer.bed` (they were reported but never written), and its `config.json` keeps the new MSA's `msa_data` entry.
 - `work/file.log` is written by every run, not only the first in a Python process.
