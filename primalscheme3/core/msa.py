@@ -31,9 +31,18 @@ from primalscheme3.core.primerscorer import PrimerScorer
 from primalscheme3.core.seq_functions import remove_end_insertion
 from primalscheme3.core.thermo import forms_hairpin
 
+_INVALID_CHROM_CHARS = re.compile(r"[^a-zA-Z0-9_.]")
+
 
 def parse_chrom_name(old_chrom: str) -> str:
-    return old_chrom.replace("/", "_").replace("-", "_")
+    """
+    Sanitize a raw FASTA/genome id into a valid bed chrom name, replacing every
+    character not allowed by primalbedtools' CHROM_REGEX (e.g. '|', '/', '-', spaces)
+    with '_'. Applied to every genome id at MSA parse time, so anything read back out
+    of ``_seq_dict`` (representative-subset headers, write_msa_to_file, etc.) is
+    already a valid chrom name.
+    """
+    return _INVALID_CHROM_CHARS.sub("_", old_chrom)
 
 
 def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict[str, str]]:
@@ -458,9 +467,12 @@ class MSA:
         self._ref_to_msa = ref_index_to_msa(self._mapping_array)
 
         # Parse the chrom name
-        if "/" in self._chrom_name or "-" in self._chrom_name:
-            new_chromname = self._chrom_name.replace("/", "_").replace("-", "_")
-            warning_str = f"Replacing '/' and '-' with '_'. '{self._chrom_name}' -> '{new_chromname}'"
+        new_chromname = parse_chrom_name(self._chrom_name)
+        if new_chromname != self._chrom_name:
+            warning_str = (
+                f"Sanitizing chrom name to match '{CHROM_REGEX}'. "
+                f"'{self._chrom_name}' -> '{new_chromname}'"
+            )
             if self.logger:
                 self.logger.warning(warning_str)
             else:
