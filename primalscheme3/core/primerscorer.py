@@ -1,7 +1,8 @@
 import pathlib
 
+import joblib
 import numpy as np
-import xgboost as xgb
+from threadpoolctl import threadpool_limits
 
 from primalscheme3.core.config import Config
 from primalscheme3.core.seq_functions import complement
@@ -328,23 +329,28 @@ class PrimerScorer:
                 f"{model_file} does not match its manifest's sha256 "
                 f"({self.sha256} != {self.manifest['model_sha256']})"
             )
-        self.booster = xgb.Booster()
-        self.booster.load_model(model_file)
+        # Only load a file whose sha256 the manifest vouches for
+        self.model = joblib.load(model_file)
         self.thermo: dict = self.manifest["thermo"]
         features = self.manifest["features"]
         self._numeric: list[str] = features["numeric"]
-        self._categorical: dict[str, list] = features["categorical"]
+        self._codes: dict[str, dict] = {
+            name: {c: i for i, c in enumerate(categories)}
+            for name, categories in features["categorical"].items()
+        }
 
     def _encode(self, features_list: list[dict]) -> np.ndarray:
         """
-        The model's input matrix: the numeric features, then a one-hot column
-        per category in manifest order (all zero for an unseen category).
+        The model's input matrix: the numeric features, then each categorical
+        feature as its index in the manifest's category list (NaN, i.e.
+        missing, for an unseen category).
         """
         rows = []
         for f in features_list:
             row = [float(f[name]) for name in self._numeric]
-            for name, categories in self._categorical.items():
-                row.extend(1.0 if f[name] == c else 0.0 for c in categories)
+            row.extend(
+                float(codes.get(f[name], np.nan)) for name, codes in self._codes.items()
+            )
             rows.append(row)
         return np.array(rows, dtype=np.float64)
 
@@ -352,7 +358,10 @@ class PrimerScorer:
         """Unrounded ΔCt for each feature dict."""
         if not features_list:
             return []
-        preds = self.booster.inplace_predict(self._encode(features_list))
+        # One thread: scikit-learn's per-call OpenMP start-up costs ~20 ms,
+        # and downsampling already runs clouds in parallel processes
+        with threadpool_limits(1):
+            preds = self.model.predict(self._encode(features_list))
         return [float(p) for p in preds]
 
     def _score(self, features_list: list[dict]):

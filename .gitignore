@@ -10,6 +10,7 @@ site/
 
 # Local model artifacts and scratch
 *.joblib
+!primalscheme3/models/*.joblib
 docker-test/
 .vscode/
 profile

@@ -1,9 +1,9 @@
 """
 Parity tests for the bundled primer scorer models.
 
-Each model's manifest carries golden predictions made by the original training
-pipeline at export time. These must keep matching through xgboost upgrades,
-changes to feature extraction, and changes to the thermodynamics library.
+Each model's manifest carries golden predictions made when the model was
+trained. These must keep matching through scikit-learn upgrades, changes to
+feature extraction, and changes to the thermodynamics library.
 """
 
 import json
@@ -83,15 +83,15 @@ class TestModelResolution(unittest.TestCase):
 
     def test_model_by_path(self):
         with tempfile.TemporaryDirectory() as d:
-            for suffix in (".json", ".ubj"):
+            for suffix in (".json", ".joblib"):
                 shutil.copy(MODELS_DIR / f"{DEFAULT_MODEL}{suffix}", d)
-            for name in (f"{DEFAULT_MODEL}.json", f"{DEFAULT_MODEL}.ubj"):
+            for name in (f"{DEFAULT_MODEL}.json", f"{DEFAULT_MODEL}.joblib"):
                 scorer = PrimerScorer(f"{d}/{name}")
                 self.assertEqual(scorer.id, DEFAULT_MODEL)
 
     def test_tampered_model_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
-            shutil.copy(MODELS_DIR / f"{DEFAULT_MODEL}.ubj", d)
+            shutil.copy(MODELS_DIR / f"{DEFAULT_MODEL}.joblib", d)
             manifest = json.loads((MODELS_DIR / f"{DEFAULT_MODEL}.json").read_text())
             manifest["model_sha256"] = "0" * 64
             manifest_path = f"{d}/{DEFAULT_MODEL}.json"

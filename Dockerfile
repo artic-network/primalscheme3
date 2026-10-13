@@ -21,11 +21,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12-slim-bookworm
 
-# libgomp1 is required at runtime by xgboost
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
 RUN groupadd --gid 1000 primalscheme3 \
     && useradd --uid 1000 --gid primalscheme3 --create-home --shell /bin/bash primalscheme3
 

@@ -19,7 +19,10 @@ dependencies = [
     "numpy>=2.3.0",
     "primalbedtools>=1.0.0",
     "scipy>=1.17.1",
-    "xgboost>=3.2.0,<4",
+    # Primer scorer model: pinned to the minor version it was saved with
+    "scikit-learn>=1.8,<1.9",
+    "joblib>=1.5.3",
+    "threadpoolctl>=3.1",
 ]
 
 [project.urls]
@@ -38,12 +41,10 @@ dev = [
     "pytest-xdist>=3.6.1,<4",
     "coverage>=7.8.0,<8",
 ]
-# Training and exporting primer scorer models (scripts/)
+# Training primer scorer models (scripts/train_primer_scorer.py)
 train = [
     "pandas>=3.0.1",
     "pyarrow>=23.0.1",
-    "joblib>=1.5.3",
-    "scikit-learn>=1.8.0",
 ]
 docs = [
     "mkdocs-material>=9.5.27,<10",

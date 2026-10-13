@@ -83,7 +83,7 @@ class TestMain(unittest.TestCase):
             self.assertEqual(cfg["primer_scorer_model"], DEFAULT_MODEL)
             self.assertEqual(
                 cfg["primer_scorer_model_sha256"],
-                file_sha256(MODELS_DIR / f"{DEFAULT_MODEL}.ubj"),
+                file_sha256(MODELS_DIR / f"{DEFAULT_MODEL}.joblib"),
             )
 
     def test_schemecreate_circular(self):

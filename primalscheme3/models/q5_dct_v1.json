@@ -1,11 +1,11 @@
 {
  "id": "q5_dct_v1",
- "format_version": 1,
- "description": "ΔCt of a primer with one mismatch to its template: an XGBoost surrogate of a GAM fitted to qPCR data",
+ "format_version": 2,
+ "description": "ΔCt of a primer with one mismatch to its template: a scikit-learn HistGradientBoostingRegressor surrogate of a GAM fitted to qPCR data",
  "polymerase": "Q5",
  "target": "delta_ct",
- "model_file": "q5_dct_v1.ubj",
- "model_sha256": "a0e81d7c6ad0686e8c16d7c9c56b80ad87b2c8cd2e42bb93e6b21915f78837e8",
+ "model_file": "q5_dct_v1.joblib",
+ "model_sha256": "bb4730362556e1a4cefb469f371cb393a6abaf571f4955bc07073b0ad493dbf9",
  "features": {
   "numeric": [
    "p3_dg",
@@ -45,16 +45,26 @@
   "data_file": "q5_gam_surrogate_training_data.csv",
   "data_sha256": "5cd1bea06a3bdce51ff046ce967497a5a4721f5d1b4e5944545c9e39f78b8cfc",
   "rows": 1440000,
-  "trainer": "scripts/train_primer_scorer.py",
+  "target": "predicted_delta_ct",
+  "test_size": 0.2,
+  "split_seed": 42,
+  "estimator": "sklearn.ensemble.HistGradientBoostingRegressor",
   "hyperparameters": {
-   "learning_rate": 0.05,
-   "max_depth": 6,
-   "n_estimators": 500,
+   "max_iter": 500,
+   "learning_rate": 0.1,
+   "max_leaf_nodes": 63,
+   "early_stopping": false,
    "random_state": 42
   },
-  "xgboost_version": "3.2.0",
+  "held_out_metrics": {
+   "r2": 0.9995685911257697,
+   "rmse": 0.032291539520760124,
+   "max_abs_error": 0.32742357615037054
+  },
+  "trainer": "scripts/train_primer_scorer.py",
   "scikit_learn_version": "1.8.0",
-  "source_joblib_sha256": "bb5548451b305ba7b5ede50aa1a6f9affac216945593cc5d72dbb70a53292764"
+  "numpy_version": "2.3.2",
+  "python_version": "3.12.9"
  },
  "golden": [
   {
@@ -68,7 +78,7 @@
     "mut_base": "G>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 0.3908502757549286
+   "delta_ct": -0.46294610509701406
   },
   {
    "ref": "ATGCGACCCCTAAGTAGGAGCGTATGCGA",
@@ -81,7 +91,7 @@
     "mut_base": "A>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.2542039155960083
+   "delta_ct": -2.122663213273544
   },
   {
    "ref": "GTAACCAATGCCTGTTAA",
@@ -94,7 +104,7 @@
     "mut_base": "A>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.287700653076172
+   "delta_ct": -2.883950203582253
   },
   {
    "ref": "GCCAGACGCGTAACCAAAACATAGC",
@@ -107,7 +117,7 @@
     "mut_base": "C>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 0.3908502757549286
+   "delta_ct": -0.46294610509701406
   },
   {
    "ref": "CATCAATAGACAGGTCATAAC",
@@ -120,7 +130,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.043532609939575
+   "delta_ct": -2.910112732853919
   },
   {
    "ref": "TCCACCGGATCATTGGTGCATAGAGCGTGGGC",
@@ -133,7 +143,7 @@
     "mut_base": "G>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.589735746383667
+   "delta_ct": -1.378970951296833
   },
   {
    "ref": "TAACGCCCTTTATTACTAGCTTGATGGTA",
@@ -146,7 +156,7 @@
     "mut_base": "G>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.0316011905670166
+   "delta_ct": -2.8821695024141043
   },
   {
    "ref": "ACATTGACAAACACGGCATTG",
@@ -159,7 +169,7 @@
     "mut_base": "G>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.9546083807945251
+   "delta_ct": -2.1183611246819973
   },
   {
    "ref": "AGCGACGAAACGGGATTTGCCTGAGCGGGG",
@@ -172,7 +182,7 @@
     "mut_base": "G>C",
     "dinu2_gc_rich": 1
    },
-   "delta_ct": -2.245032787322998
+   "delta_ct": -1.6610593110246967
   },
   {
    "ref": "AAGCCGGTCGATCAGCAGTGGTAATTGGAC",
@@ -185,7 +195,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 0.4941788613796234
+   "delta_ct": -0.3650237865305892
   },
   {
    "ref": "AGGCCTGAACCATAATGTTCTAGC",
@@ -198,7 +208,7 @@
     "mut_base": "G>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.6024765968322754
+   "delta_ct": -2.6662055034631527
   },
   {
    "ref": "CTCGAAATCATTGCACCACTTGGATCT",
@@ -211,7 +221,7 @@
     "mut_base": "G>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -5.317934036254883
+   "delta_ct": -5.679702735348321
   },
   {
    "ref": "TGTTCCAGGGACGCTGTAAAACCAGATGCTTG",
@@ -224,7 +234,7 @@
     "mut_base": "T>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -4.390997409820557
+   "delta_ct": -3.272048495605047
   },
   {
    "ref": "AAATCGTTTCAACGGGATGGTTTATC",
@@ -237,7 +247,7 @@
     "mut_base": "T>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -4.076261520385742
+   "delta_ct": -4.964022836963829
   },
   {
    "ref": "GAATTCTACGTATTTAATCAACGAGCTCAAT",
@@ -250,7 +260,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.900693655014038
+   "delta_ct": -3.0834356651227135
   },
   {
    "ref": "AGCTGACATTGCTGAAATGGCCATGACT",
@@ -263,7 +273,7 @@
     "mut_base": "G>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 1.0722576379776
+   "delta_ct": 0.6858481844808489
   },
   {
    "ref": "AATAATCATTTATGGAGAAGAGGCACGTCCAC",
@@ -276,7 +286,7 @@
     "mut_base": "T>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.2122384011745453
+   "delta_ct": -1.0353360497810329
   },
   {
    "ref": "AAGGACCCTATGGCACGGTGGGCAAGCTCACG",
@@ -289,7 +299,7 @@
     "mut_base": "A>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.9356558322906494
+   "delta_ct": -3.3643982537148376
   },
   {
    "ref": "CGGTACATAACTGTCTGGACTGATTATGCC",
@@ -302,7 +312,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.7338942289352417
+   "delta_ct": -0.7339210910831495
   },
   {
    "ref": "CAGACTTCTTCCTCCGTAT",
@@ -315,7 +325,7 @@
     "mut_base": "C>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.5971643924713135
+   "delta_ct": -2.564952037691867
   },
   {
    "ref": "TTACGAGCTAATCTGAAG",
@@ -328,7 +338,7 @@
     "mut_base": "A>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.3120540380477905
+   "delta_ct": -2.1256449245770503
   },
   {
    "ref": "GTTTAGGGCAAAGGGACG",
@@ -341,7 +351,7 @@
     "mut_base": "G>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -4.401313781738281
+   "delta_ct": -5.09858777980039
   },
   {
    "ref": "CCATTGGTGCCAATTTCGGGTC",
@@ -354,7 +364,7 @@
     "mut_base": "G>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.6000405550003052
+   "delta_ct": -2.368736904692257
   },
   {
    "ref": "GTATGCTACAGTTAAATAGAGAGGCC",
@@ -367,7 +377,7 @@
     "mut_base": "G>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.345118284225464
+   "delta_ct": -2.3106217263637245
   },
   {
    "ref": "ATTGTCGTTCTCGCCCTGTAT",
@@ -380,7 +390,7 @@
     "mut_base": "A>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.4463152885437012
+   "delta_ct": -1.6198720485791172
   },
   {
    "ref": "CTCATACACGACCGAGGTTATTTGTCGGAG",
@@ -393,7 +403,7 @@
     "mut_base": "G>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 0.3908502757549286
+   "delta_ct": -0.46294610509701406
   },
   {
    "ref": "GACATCTCTCGAAGGTGA",
@@ -406,7 +416,7 @@
     "mut_base": "A>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.9910060167312622
+   "delta_ct": -2.9794455993591136
   },
   {
    "ref": "GACGCCGGGTGTGCAGAATTC",
@@ -419,7 +429,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 0.4941788613796234
+   "delta_ct": -0.3650237865305892
   },
   {
    "ref": "TTAAACACTCTATTACCTCCGCGTA",
@@ -432,7 +442,7 @@
     "mut_base": "C>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.0301895141601562
+   "delta_ct": -3.027355587663855
   },
   {
    "ref": "CGTTGGCAAACTCCGATAATGAGCGCG",
@@ -445,7 +455,7 @@
     "mut_base": "G>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.059953212738037
+   "delta_ct": -2.7677885543487672
   },
   {
    "ref": "GCGTGCCAGGACTCCACCTCCCCTACTA",
@@ -458,7 +468,7 @@
     "mut_base": "A>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.5037618279457092
+   "delta_ct": -0.5546901059866319
   },
   {
    "ref": "GTTGACCTTGAGCTCGGTACAGCGGC",
@@ -471,7 +481,7 @@
     "mut_base": "G>T",
     "dinu2_gc_rich": 1
    },
-   "delta_ct": -0.9268280863761902
+   "delta_ct": -1.241093895196833
   },
   {
    "ref": "GAGACGATAACCACGAAGTC",
@@ -484,7 +494,7 @@
     "mut_base": "C>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.418857455253601
+   "delta_ct": -1.3612253351888306
   },
   {
    "ref": "TCGGCGTTATGTACTTCACCAGCCC",
@@ -497,7 +507,7 @@
     "mut_base": "C>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 1.1046427488327026
+   "delta_ct": 1.0877650244148618
   },
   {
    "ref": "CATATCAGGTAATAGGCTCGCTGGTAAGG",
@@ -510,7 +520,7 @@
     "mut_base": "A>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.519765019416809
+   "delta_ct": -1.9555721086157813
   },
   {
    "ref": "GATTATGTAAGAGGCGTGCAGCGCCGAATG",
@@ -523,7 +533,7 @@
     "mut_base": "T>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.2801246643066406
+   "delta_ct": -3.6979599086492683
   },
   {
    "ref": "GTTTCACATCGATGCATGTCAC",
@@ -536,7 +546,7 @@
     "mut_base": "T>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -5.446432590484619
+   "delta_ct": -5.895088922188814
   },
   {
    "ref": "TTGGGATGGGGCTCACTGTATCAGCCGG",
@@ -549,7 +559,7 @@
     "mut_base": "G>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 1.0972601175308228
+   "delta_ct": 0.2554184335456907
   },
   {
    "ref": "CGCTATCTACCTATTGGTGCA",
@@ -562,7 +572,7 @@
     "mut_base": "C>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.16967511177063
+   "delta_ct": -2.9701232598584353
   },
   {
    "ref": "GCTTTTATGCGGATCCAA",
@@ -575,7 +585,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.2980453968048096
+   "delta_ct": -3.2541912365998926
   },
   {
    "ref": "AACATAGAGTCGTCCTGTCCCTA",
@@ -588,7 +598,7 @@
     "mut_base": "T>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.8938039541244507
+   "delta_ct": -1.8228681805274345
   },
   {
    "ref": "TCGAACGCGGGGTATCAC",
@@ -601,7 +611,7 @@
     "mut_base": "A>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.441859006881714
+   "delta_ct": -3.761779381924753
   },
   {
    "ref": "GACTCTCGCTAAGAAATGTGTGACGACCAACA",
@@ -614,7 +624,7 @@
     "mut_base": "A>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.6472179889678955
+   "delta_ct": -0.5546901059866319
   },
   {
    "ref": "GTACGATATGGGTTCATGCTAGAAATACT",
@@ -627,7 +637,7 @@
     "mut_base": "T>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.7764445543289185
+   "delta_ct": -2.5753563197565272
   },
   {
    "ref": "AGTTTAATGAAAGGATACGTATGCCCCCCGAT",
@@ -640,7 +650,7 @@
     "mut_base": "T>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.761242628097534
+   "delta_ct": -2.7389673282602844
   },
   {
    "ref": "TACCGGCCGCCTTGCTACATCAAAGAAA",
@@ -653,7 +663,7 @@
     "mut_base": "A>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.026782512664795
+   "delta_ct": -2.052750733956533
   },
   {
    "ref": "CCTATTGCCGCTACTGCTTCTTCTCTT",
@@ -666,7 +676,7 @@
     "mut_base": "C>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 1.1318457126617432
+   "delta_ct": 1.104829586957755
   },
   {
    "ref": "GGGATCGAGTAACTATTTATTCCGTTCGAGC",
@@ -679,7 +689,7 @@
     "mut_base": "C>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 0.3908502757549286
+   "delta_ct": -0.463028383099915
   },
   {
    "ref": "TACGCGGTAGTATGTCGCCAGCATTTAATA",
@@ -692,7 +702,7 @@
     "mut_base": "A>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.2542039155960083
+   "delta_ct": -2.122663213273544
   },
   {
    "ref": "CACTGGGAGGCGGCTGCTGT",
@@ -705,7 +715,7 @@
     "mut_base": "G>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.4859396815299988
+   "delta_ct": -1.1782955270970616
   },
   {
    "ref": "TTACCAACAGCTAAAAGTCATG",
@@ -718,7 +728,7 @@
     "mut_base": "C>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -3.41580867767334
+   "delta_ct": -3.3619657291410245
   },
   {
    "ref": "TCCACACTCTTGACTCTATACGCTATAG",
@@ -731,7 +741,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.436227798461914
+   "delta_ct": -2.3220786263335023
   },
   {
    "ref": "TTGCCGCGCTAATTTAGTCCGCGACA",
@@ -744,7 +754,7 @@
     "mut_base": "C>A",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 1.6568820476531982
+   "delta_ct": 1.5755982206256796
   },
   {
    "ref": "CAATTATGGAACCAGGCATGGAAGTCG",
@@ -757,7 +767,7 @@
     "mut_base": "A>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": 0.38272175192832947
+   "delta_ct": 0.2942143861278181
   },
   {
    "ref": "GCTGGTCATGTAGGTGGTGAT",
@@ -770,7 +780,7 @@
     "mut_base": "A>C",
     "dinu2_gc_rich": 1
    },
-   "delta_ct": -1.7375216484069824
+   "delta_ct": -1.5523369326135645
   },
   {
    "ref": "CGCCGTCAGTTTCTGTCGAATGTCT",
@@ -783,7 +793,7 @@
     "mut_base": "G>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.5771209597587585
+   "delta_ct": -1.0534075920483565
   },
   {
    "ref": "ATAGCGCACGACAATACACATCATACCATT",
@@ -796,7 +806,7 @@
     "mut_base": "A>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.9113965034484863
+   "delta_ct": -2.267647648046387
   },
   {
    "ref": "CTAGAGGGTCAGAAGACCTCTCTA",
@@ -809,7 +819,7 @@
     "mut_base": "T>G",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -2.6979546546936035
+   "delta_ct": -2.72936946630753
   },
   {
    "ref": "TATTCTGCTGTAGCTCGTTATATTCTCGTCCC",
@@ -822,7 +832,7 @@
     "mut_base": "C>T",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -1.0563913583755493
+   "delta_ct": -1.109140928307476
   },
   {
    "ref": "TCACGAACGAGCTTCTTCTTAGCGCTCT",
@@ -835,7 +845,7 @@
     "mut_base": "T>C",
     "dinu2_gc_rich": 0
    },
-   "delta_ct": -0.4261663258075714
+   "delta_ct": 0.2503774874576194
   }
  ]
 }
