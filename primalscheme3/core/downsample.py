@@ -61,6 +61,7 @@ def visualise_graph(
     save_path=None,
     score_cache=None,
     max_dct=None,
+    covered_prop=None,
 ):
     # Colourblind-safe palette (Okabe-Ito)
     C_PASS = "#009E73"  # bluish green  -> thermo pass
@@ -200,11 +201,13 @@ def visualise_graph(
         fontsize=9,
         handletextpad=0.6,
     )
-    total_reads = int(sum(seq_counts.values())) if seq_counts else 0
+    footer = "Node area ∝ read count"
+    if covered_prop is not None:
+        footer += f"   (total diversity covered = {covered_prop:.1%})"
     ax.text(
         0.0,
         0.0,
-        f"Node area ∝ read count   (cloud total = {total_reads} reads)",
+        footer,
         transform=ax.transAxes,
         fontsize=8,
         color="#666666",
@@ -502,6 +505,7 @@ def delta_ct_downsample_seqs(
             save_path=save_path,  # type: ignore
             score_cache=score_cache,
             max_dct=config.downsample_max_dct,
+            covered_prop=tmp_target_prop,
         )
     if tmp_target_prop >= config.downsample_target:
         return sorted(added_seqs)
@@ -625,6 +629,8 @@ def downsample_seqs(
             pos,  # type: ignore
             added_seqs,
             save_path=save_path,
+            covered_prop=annealing_weight_sum
+            / (TARGET_ANNEALING * sum(seq_counts.values())),
         )
 
     # If we have not reached the target annealing, add more sequences
@@ -701,6 +707,29 @@ def downsample_kmer(
         outdir=outdir,
         name=name,
     )
+
+
+_WORKER_PS = None
+_WORKER_CFG = None
+
+
+def _ds_pool_init(model_path, config):
+    global _WORKER_PS, _WORKER_CFG
+    _WORKER_PS = PrimerScorer(model_path)
+    _WORKER_CFG = config
+
+
+def _ds_pool_worker(task):
+    idx, seqs, counts = task
+    seq_counts = {s: c for s, c in zip(seqs, counts, strict=True)}
+    kept = delta_ct_downsample_seqs(
+        seq_counts=seq_counts,
+        config=_WORKER_CFG,
+        ps=_WORKER_PS,
+        visualise=False,
+        outdir=None,
+    )
+    return idx, kept
 
 
 def downsample_scheme(path, config, visualise: bool = False):

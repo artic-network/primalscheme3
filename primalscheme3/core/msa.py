@@ -7,11 +7,20 @@ import dnaio
 import numpy as np
 import tqdm
 from primalbedtools.bedfiles import CHROM_REGEX
+from primalschemers import (
+    Digester,
+    FKmer,
+    RKmer,
+)
 
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config, MappingType
 from primalscheme3.core.digestion import digest, generate_valid_primerpairs
-from primalscheme3.core.downsample import downsample_kmer
+from primalscheme3.core.downsample import (
+    _ds_pool_init,
+    _ds_pool_worker,
+    downsample_kmer,
+)
 from primalscheme3.core.errors import (
     MSAFileInvalid,
     MSAFileInvalidBase,
@@ -21,11 +30,6 @@ from primalscheme3.core.mapping import create_mapping, ref_index_to_msa
 from primalscheme3.core.primerscorer import PrimerScorer
 from primalscheme3.core.seq_functions import remove_end_insertion
 from primalscheme3.core.thermo import forms_hairpin
-from primalschemers import (
-    Digester,
-    FKmer,
-    RKmer,
-)
 
 
 def parse_chrom_name(old_chrom: str) -> str:
@@ -272,7 +276,7 @@ class MSA:
                     "Primer scorer model path is required for downsampling. "
                     "Set --primer-scorer-model-path or PRIMALSCHEME3_PRIMER_SCORER_MODEL."
                 )
-            ps = PrimerScorer(pathlib.Path(model_path))
+            model_path = pathlib.Path(model_path)
             # Optionally dump a downsample graph SVG per (non-trivial) cloud plus a
             # downsample_summary.csv (pre -> post counts + coverage prop). Gated by
             # config.downsample_plot as it is slow and verbose.
@@ -281,60 +285,100 @@ class MSA:
                 plot_dir = config.output / "work" / "downsample_plots"
                 os.makedirs(plot_dir, exist_ok=True)
             plot_outdir = str(plot_dir) if plot_dir is not None else None
-            # fkmers
-            new_fkmers = []
-            for fkmer in tqdm.tqdm(self.fkmers, desc="downsampling FPrimers"):
-                new_seqs = downsample_kmer(
-                    kmer=fkmer,
-                    config=config,
-                    ps=ps,
-                    visualise=config.downsample_plot and len(fkmer.seqs()) > 1,
-                    outdir=plot_outdir,
-                    name=f"{self._chrom_name}_F_{fkmer.end}",
-                )
-                if new_seqs is None:
-                    continue
 
-                # Create a dict to keep track of seq counts
+            def rebuild(kmer, new_seqs, kmer_cls, pos):
+                if new_seqs is None:
+                    return None
                 seq_counts = {
                     s: c
-                    for s, c in zip(fkmer.seqs(), fkmer.counts(), strict=True)  # type: ignore
+                    for s, c in zip(kmer.seqs(), kmer.counts(), strict=True)  # type: ignore
                 }
-                new_fkmers.append(
-                    FKmer(
-                        [s.encode() for s in new_seqs],
-                        fkmer.end,
-                        [seq_counts[s] for s in new_seqs],
-                    )
+                return kmer_cls(
+                    [s.encode() for s in new_seqs],
+                    pos,
+                    [seq_counts[s] for s in new_seqs],
                 )
 
-            self.fkmers = new_fkmers
-            # rkmers
-            new_rkmers = []
-            for rkmer in self.rkmers:
-                new_seqs = downsample_kmer(
-                    kmer=rkmer,
-                    config=config,
-                    ps=ps,
-                    visualise=config.downsample_plot and len(rkmer.seqs()) > 1,
-                    outdir=plot_outdir,
-                    name=f"{self._chrom_name}_R_{rkmer.start}",
-                )
-                if new_seqs is None:
-                    continue
-                seq_counts = {
-                    s: c
-                    for s, c in zip(rkmer.seqs(), rkmer.counts(), strict=True)  # type: ignore
-                }
-                new_rkmers.append(
-                    RKmer(
-                        [s.encode() for s in new_seqs],
-                        rkmer.start,
-                        [seq_counts[s] for s in new_seqs],
+            # Plotting writes SVGs via matplotlib and does not parallelise cleanly,
+            # so the plot/debug path stays serial. ncores <= 1 also runs serially.
+            if config.downsample_plot or config.ncores <= 1:
+                ps = PrimerScorer(model_path)
+                new_fkmers = []
+                for fkmer in tqdm.tqdm(self.fkmers, desc="downsampling FPrimers"):
+                    new_seqs = downsample_kmer(
+                        kmer=fkmer,
+                        config=config,
+                        ps=ps,
+                        visualise=config.downsample_plot and len(fkmer.seqs()) > 1,
+                        outdir=plot_outdir,
+                        name=f"{self._chrom_name}_F_{fkmer.end}",
                     )
-                )
+                    kmer = rebuild(fkmer, new_seqs, FKmer, fkmer.end)
+                    if kmer is not None:
+                        new_fkmers.append(kmer)
+                self.fkmers = new_fkmers
 
-            self.rkmers = new_rkmers
+                new_rkmers = []
+                for rkmer in tqdm.tqdm(self.rkmers, desc="downsampling RPrimers"):
+                    new_seqs = downsample_kmer(
+                        kmer=rkmer,
+                        config=config,
+                        ps=ps,
+                        visualise=config.downsample_plot and len(rkmer.seqs()) > 1,
+                        outdir=plot_outdir,
+                        name=f"{self._chrom_name}_R_{rkmer.start}",
+                    )
+                    kmer = rebuild(rkmer, new_seqs, RKmer, rkmer.start)
+                    if kmer is not None:
+                        new_rkmers.append(kmer)
+                self.rkmers = new_rkmers
+            else:
+                from multiprocessing import Pool
+
+                f_tasks = [(i, k.seqs(), k.counts()) for i, k in enumerate(self.fkmers)]
+                r_tasks = [(i, k.seqs(), k.counts()) for i, k in enumerate(self.rkmers)]
+                chunk = max(1, (len(f_tasks) + len(r_tasks)) // (config.ncores * 4))
+                with Pool(
+                    config.ncores,
+                    initializer=_ds_pool_init,
+                    initargs=(model_path, config),
+                ) as pool:
+                    f_res = list(
+                        tqdm.tqdm(
+                            pool.imap_unordered(
+                                _ds_pool_worker, f_tasks, chunksize=chunk
+                            ),
+                            total=len(f_tasks),
+                            desc="downsampling FPrimers",
+                        )
+                    )
+                    r_res = list(
+                        tqdm.tqdm(
+                            pool.imap_unordered(
+                                _ds_pool_worker, r_tasks, chunksize=chunk
+                            ),
+                            total=len(r_tasks),
+                            desc="downsampling RPrimers",
+                        )
+                    )
+
+                new_fkmers = []
+                for idx, new_seqs in sorted(f_res, key=lambda x: x[0]):
+                    kmer = rebuild(
+                        self.fkmers[idx], new_seqs, FKmer, self.fkmers[idx].end
+                    )
+                    if kmer is not None:
+                        new_fkmers.append(kmer)
+                self.fkmers = new_fkmers
+
+                new_rkmers = []
+                for idx, new_seqs in sorted(r_res, key=lambda x: x[0]):
+                    kmer = rebuild(
+                        self.rkmers[idx], new_seqs, RKmer, self.rkmers[idx].start
+                    )
+                    if kmer is not None:
+                        new_rkmers.append(kmer)
+                self.rkmers = new_rkmers
 
         if (
             py_hairpin and not config.downsample
