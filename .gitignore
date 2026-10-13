@@ -7,3 +7,10 @@ __pycache__
 dist
 outputs/
 site/
+
+# Local model artifacts and scratch
+*.joblib
+docker-test/
+.vscode/
+profile
+*.tar
