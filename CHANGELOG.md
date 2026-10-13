@@ -13,6 +13,7 @@
   - See `docs/primer-scorer-models.md` for how the model is made, the versioning rules, and how to train a new model.
 - **`visualise-primer-dct`**: a heatmap of the predicted mismatch penalty (ΔCt) between each primer and each genome in an MSA.
 - **Downsampling options and output**:
+  - `scheme-create` and `panel-create` show `--downsample`, `--downsample-target` and `--primer-scorer-model` in `--help` (they were hidden), and add `--downsample-max-dct` and `--downsample-always-add-prop`.
   - The downsampling step runs in parallel with `--ncores`.
   - The optional `downsample_plot` config flag writes a per-cloud graph (SVG) and `downsample_summary.csv` to `work/downsample_plots`.
 - **`ps3` command**, a short alias for `primalscheme3`.

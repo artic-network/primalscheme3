@@ -185,21 +185,35 @@ def scheme_create(
         bool,
         typer.Option(
             help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
-            hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
             help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
-            hidden=True,
+            min=0.0,
+            max=1.0,
         ),
     ] = Config.downsample_target,
+    downsample_max_dct: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Lowest predicted ΔCt at which a primer still covers a genome (if using downsampling)",
+            max=0.0,
+        ),
+    ] = Config.downsample_max_dct,
+    downsample_always_add_prop: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Always keep primers found in at least this proportion of genomes (if using downsampling)",
+            min=0.0,
+            max=1.0,
+        ),
+    ] = Config.downsample_always_add_prop,
     primer_scorer_model: Annotated[
         str,
         typer.Option(
             help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
-            hidden=True,
         ),
     ] = Config.primer_scorer_model,
 ):
@@ -427,21 +441,35 @@ def panel_create(
         bool,
         typer.Option(
             help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
-            hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
             help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
-            hidden=True,
+            min=0.0,
+            max=1.0,
         ),
     ] = Config.downsample_target,
+    downsample_max_dct: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Lowest predicted ΔCt at which a primer still covers a genome (if using downsampling)",
+            max=0.0,
+        ),
+    ] = Config.downsample_max_dct,
+    downsample_always_add_prop: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Always keep primers found in at least this proportion of genomes (if using downsampling)",
+            min=0.0,
+            max=1.0,
+        ),
+    ] = Config.downsample_always_add_prop,
     primer_scorer_model: Annotated[
         str,
         typer.Option(
             help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
-            hidden=True,
         ),
     ] = Config.primer_scorer_model,
 ):
