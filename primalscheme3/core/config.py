@@ -90,6 +90,8 @@ class Config:
     dv_conc: float = 2.0
     dntp_conc: float = 0.8
     dna_conc: float = 15.0
+    # Formamide (mol/l) in the primer Tm, as the Rust digest uses it
+    formamide_conc: float = 0.8
     dimer_score: float = -26.0
 
     def __init__(self, **kwargs: Any) -> None:

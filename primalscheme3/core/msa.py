@@ -11,23 +11,27 @@ from primalschemers import (
     Digester,
     FKmer,
     RKmer,
+    do_pool_interact,
 )
 
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config, MappingType
-from primalscheme3.core.digestion import digest, generate_valid_primerpairs
 from primalscheme3.core.downsample import (
     _ds_pool_init,
     _ds_pool_worker,
-    downsample_kmer,
+    delta_ct_downsample_seqs,
+    downsample_cloud,
+    forms_dimer,
 )
 from primalscheme3.core.errors import (
     MSAFileInvalid,
     MSAFileInvalidBase,
     MSAFileInvalidLength,
 )
+from primalscheme3.core.get_window import get_r_window_FAST2
 from primalscheme3.core.mapping import create_mapping, ref_index_to_msa
 from primalscheme3.core.primerscorer import PrimerScorer
+from primalscheme3.core.progress_tracker import ProgressManager
 from primalscheme3.core.seq_functions import remove_end_insertion
 from primalscheme3.core.thermo import forms_hairpin
 
@@ -119,6 +123,80 @@ def parse_msa(msa_path: pathlib.Path) -> tuple[np.ndarray, dict[str, str]]:
     array = remove_end_insertion(array)
 
     return array, records_index
+
+
+def generate_valid_primerpairs(
+    fkmers: list[FKmer],
+    rkmers: list[RKmer],
+    amplicon_size_min: int,
+    amplicon_size_max: int,
+    dimerscore: float,
+    msa_index: int,
+    progress_manager: ProgressManager,
+    chrom: str = "",
+) -> list[PrimerPair]:
+    """Generates valid primer pairs for a given set of forward and reverse kmers.
+
+    Args:
+        fkmers: A list of forward kmers.
+        rkmers: A list of reverse kmers.
+        cfg: A dictionary containing configuration parameters.
+        msa_index: An integer representing the index of the multiple sequence alignment.
+        disable_progress_bar: A boolean indicating whether to disable the progress bar.
+
+    Returns:
+        A list of valid primer pairs.
+    """
+    ## Generate all primerpairs without checking
+    checked_pp = []
+    pt = progress_manager.create_sub_progress(
+        iter=fkmers, process="Generating primer pairs", chrom=chrom
+    )
+    for fkmer in pt:
+        fkmer_start = min(fkmer.starts())
+        # Get all rkmers that would make a valid amplicon
+        pos_rkmer = get_r_window_FAST2(
+            kmers=rkmers,
+            start=fkmer_start + amplicon_size_min,
+            end=fkmer_start + amplicon_size_max,
+        )
+        for rkmer in pos_rkmer:
+            # Check for interactions
+            if not do_pool_interact(fkmer.seqs_bytes(), rkmer.seqs_bytes(), dimerscore):
+                checked_pp.append(PrimerPair(fkmer, rkmer, msa_index))
+
+        # Update the count
+        pt.manual_update(count=len(checked_pp))
+
+    checked_pp.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
+    return checked_pp
+
+
+def digest_kwargs(config: Config) -> dict:
+    """The primer design and reaction settings Digester.digest takes from a
+    Config: everything except the indexes, thermo_check and return_all."""
+    return {
+        "primer_len_min": config.primer_size_min,
+        "primer_len_max": config.primer_size_max,
+        "primer_gc_max": config.primer_gc_max / 100,
+        "primer_gc_min": config.primer_gc_min / 100,
+        "primer_tm_max": config.primer_tm_max,
+        "primer_tm_min": config.primer_tm_min,
+        "primer_annealing_prop": config.primer_annealing_prop,  # None: use Tm
+        "primer_annealing_diff": config.primer_annealing_diff,
+        "annealing_temp_c": config.primer_annealing_tempc,
+        "max_walk": config.primer_max_walk,
+        "max_homopolymers": config.primer_homopolymer_max,
+        "min_freq": config.min_base_freq,
+        "ignore_n": config.ignore_n,
+        "dimerscore": config.dimer_score,
+        "primer_hairpin_th_max": config.primer_hairpin_th_max,
+        "mv_conc": config.mv_conc,
+        "dv_conc": config.dv_conc,
+        "dntp_conc": config.dntp_conc,
+        "dna_conc": config.dna_conc,
+        "formamide_conc": config.formamide_conc,
+    }
 
 
 class MSA:
@@ -233,8 +311,8 @@ class MSA:
         Args:
             config (Config): Configuration object with all primer design parameters.
             indexes (tuple[list[int], list[int]] | None): Optional tuple of indexes for FKmers and RKmers to digest.
-            rs_thermo (bool): If True, enables Rust-side thermo checking. Automatically disabled if downsampling.
-            py_hairpin (bool): If True, applies Python-side hairpin filtering after downsampling.
+            rs_thermo (bool): If True, enables the Rust thermo checks (including hairpins). Always on when downsampling, which digests with return_all and uses the checks' per-sequence statuses.
+            py_hairpin (bool): If True and rs_thermo is False, applies the Python hairpin filter.
 
         Returns:
             None. Updates self.fkmers and self.rkmers in place.
@@ -245,28 +323,17 @@ class MSA:
         if indexes is None:
             indexes: tuple[None, None] = (None, None)
 
-        # If using downsample override thermo check in rust
+        # Downsampling needs every primer in each cloud, failing ones too, with
+        # the Rust checks' verdict on each: return_all gives them with statuses
         if config.downsample:
-            rs_thermo = False
+            rs_thermo = True
 
         self.fkmers, self.rkmers, logs = self._digester.digest(
             findexes=indexes[0],
             rindexes=indexes[1],
-            primer_len_min=config.primer_size_min,
-            primer_len_max=config.primer_size_max,
-            primer_gc_max=config.primer_gc_max / 100,
-            primer_gc_min=config.primer_gc_min / 100,
-            primer_tm_max=config.primer_tm_max,
-            primer_tm_min=config.primer_tm_min,
-            primer_annealing_prop=config.primer_annealing_prop,  # if None will use TM
-            primer_annealing_diff=config.primer_annealing_diff,
-            annealing_temp_c=config.primer_annealing_tempc,
-            max_walk=config.primer_max_walk,
-            max_homopolymers=config.primer_homopolymer_max,
-            min_freq=config.min_base_freq,
-            ignore_n=config.ignore_n,
-            dimerscore=config.dimer_score,
             thermo_check=rs_thermo,
+            return_all=config.downsample,
+            **digest_kwargs(config),
         )
         # Log
         if self.logger:
@@ -292,64 +359,58 @@ class MSA:
                 os.makedirs(plot_dir, exist_ok=True)
             plot_outdir = str(plot_dir) if plot_dir is not None else None
 
-            def rebuild(kmer, new_seqs, kmer_cls, pos):
-                if new_seqs is None:
+            # One cloud per kmer: the sequences a normal digest would consider,
+            # their counts, which fail the Rust checks, and dimer pairs
+            f_clouds = [(k, downsample_cloud(k)) for k in self.fkmers]
+            r_clouds = [(k, downsample_cloud(k)) for k in self.rkmers]
+            f_clouds = [(k, c) for k, c in f_clouds if c is not None]
+            r_clouds = [(k, c) for k, c in r_clouds if c is not None]
+
+            def rebuild(cloud, new_seqs, kmer_cls, pos):
+                if new_seqs is None or forms_dimer(cloud, new_seqs):
                     return None
-                seq_counts = {
-                    s: c
-                    for s, c in zip(kmer.seqs(), kmer.counts(), strict=True)  # type: ignore
-                }
+                counts = dict(zip(cloud.seqs, cloud.counts, strict=True))
                 return kmer_cls(
-                    [s.encode() for s in new_seqs],
-                    pos,
-                    [seq_counts[s] for s in new_seqs],
+                    [s.encode() for s in new_seqs], pos, [counts[s] for s in new_seqs]
                 )
 
             # Plotting writes SVGs via matplotlib and does not parallelise cleanly,
             # so the plot/debug path stays serial. ncores <= 1 also runs serially.
             if config.downsample_plot or config.ncores <= 1:
-                ps = loaded
-                new_fkmers = []
-                for fkmer in tqdm.tqdm(self.fkmers, desc="downsampling FPrimers"):
-                    new_seqs = downsample_kmer(
-                        kmer=fkmer,
-                        config=config,
-                        ps=ps,
-                        visualise=config.downsample_plot and len(fkmer.seqs()) > 1,
-                        outdir=plot_outdir,
-                        name=f"{self._chrom_name}_F_{fkmer.end}",
-                    )
-                    kmer = rebuild(fkmer, new_seqs, FKmer, fkmer.end)
-                    if kmer is not None:
-                        new_fkmers.append(kmer)
-                self.fkmers = new_fkmers
 
-                new_rkmers = []
-                for rkmer in tqdm.tqdm(self.rkmers, desc="downsampling RPrimers"):
-                    new_seqs = downsample_kmer(
-                        kmer=rkmer,
-                        config=config,
-                        ps=ps,
-                        visualise=config.downsample_plot and len(rkmer.seqs()) > 1,
-                        outdir=plot_outdir,
-                        name=f"{self._chrom_name}_R_{rkmer.start}",
-                    )
-                    kmer = rebuild(rkmer, new_seqs, RKmer, rkmer.start)
-                    if kmer is not None:
-                        new_rkmers.append(kmer)
-                self.rkmers = new_rkmers
+                def run(clouds, label, prefix, pos_of):
+                    kept = []
+                    for kmer, cloud in tqdm.tqdm(clouds, desc=label):
+                        new_seqs = delta_ct_downsample_seqs(
+                            seq_counts=dict(zip(cloud.seqs, cloud.counts, strict=True)),
+                            config=config,
+                            ps=loaded,
+                            visualise=config.downsample_plot and len(cloud.seqs) > 1,
+                            outdir=plot_outdir,
+                            name=f"{self._chrom_name}_{prefix}_{pos_of(kmer)}",
+                            failed_seqs=cloud.failed,
+                        )
+                        kept.append(new_seqs)
+                    return kept
+
+                f_res = run(f_clouds, "downsampling FPrimers", "F", lambda k: k.end)
+                r_res = run(r_clouds, "downsampling RPrimers", "R", lambda k: k.start)
             else:
                 from multiprocessing import Pool
 
-                f_tasks = [(i, k.seqs(), k.counts()) for i, k in enumerate(self.fkmers)]
-                r_tasks = [(i, k.seqs(), k.counts()) for i, k in enumerate(self.rkmers)]
+                f_tasks = [
+                    (i, c.seqs, c.counts, c.failed) for i, (_, c) in enumerate(f_clouds)
+                ]
+                r_tasks = [
+                    (i, c.seqs, c.counts, c.failed) for i, (_, c) in enumerate(r_clouds)
+                ]
                 chunk = max(1, (len(f_tasks) + len(r_tasks)) // (config.ncores * 4))
                 with Pool(
                     config.ncores,
                     initializer=_ds_pool_init,
                     initargs=(model_path, config),
                 ) as pool:
-                    f_res = list(
+                    f_out = list(
                         tqdm.tqdm(
                             pool.imap_unordered(
                                 _ds_pool_worker, f_tasks, chunksize=chunk
@@ -358,7 +419,7 @@ class MSA:
                             desc="downsampling FPrimers",
                         )
                     )
-                    r_res = list(
+                    r_out = list(
                         tqdm.tqdm(
                             pool.imap_unordered(
                                 _ds_pool_worker, r_tasks, chunksize=chunk
@@ -367,28 +428,23 @@ class MSA:
                             desc="downsampling RPrimers",
                         )
                     )
+                f_res = [kept for _, kept in sorted(f_out, key=lambda x: x[0])]
+                r_res = [kept for _, kept in sorted(r_out, key=lambda x: x[0])]
 
-                new_fkmers = []
-                for idx, new_seqs in sorted(f_res, key=lambda x: x[0]):
-                    kmer = rebuild(
-                        self.fkmers[idx], new_seqs, FKmer, self.fkmers[idx].end
-                    )
-                    if kmer is not None:
-                        new_fkmers.append(kmer)
-                self.fkmers = new_fkmers
+            new_fkmers = [
+                rebuild(c, kept, FKmer, k.end)
+                for (k, c), kept in zip(f_clouds, f_res, strict=True)
+            ]
+            new_rkmers = [
+                rebuild(c, kept, RKmer, k.start)
+                for (k, c), kept in zip(r_clouds, r_res, strict=True)
+            ]
+            self.fkmers = [k for k in new_fkmers if k is not None]
+            self.rkmers = [k for k in new_rkmers if k is not None]
 
-                new_rkmers = []
-                for idx, new_seqs in sorted(r_res, key=lambda x: x[0]):
-                    kmer = rebuild(
-                        self.rkmers[idx], new_seqs, RKmer, self.rkmers[idx].start
-                    )
-                    if kmer is not None:
-                        new_rkmers.append(kmer)
-                self.rkmers = new_rkmers
-
-        if (
-            py_hairpin and not config.downsample
-        ):  # Downsample handles it own hairpins checks
+        # The Rust thermo check includes the hairpin check (and downsampling
+        # uses it), so the Python filter is only for unchecked digests
+        if py_hairpin and not rs_thermo:
             ## Hairpin check the kmers
             if self.logger:
                 self.logger.info("Starting Primer Hairpin Check")
@@ -397,46 +453,6 @@ class MSA:
             ]
             self.rkmers = [
                 x for x in self.rkmers if not forms_hairpin(x.seqs(), config)
-            ]
-
-    def digest(
-        self,
-        config: Config,
-        indexes: tuple[list[int], list[int]] | None = None,
-    ) -> None:
-        """
-        Digest the given MSA array and return the FKmers and RKmers.
-
-        :param cfg: A dictionary containing configuration parameters.
-        :param indexes: A tuple of MSA indexes for (FKmers, RKmers), or False to use all indexes.
-        :return: None (Class is updated inplace)
-        """
-        # Create all the kmers
-        self.fkmers, self.rkmers = digest(
-            msa_array=self.array,
-            config=config,
-            indexes=indexes,
-            logger=self.logger,
-            progress_manager=self.progress_manager,
-            chrom=self.name,
-        )
-        # remap the fkmer and rkmers if needed
-        if self._mapping_array is not None:
-            mapping_set = set(self._mapping_array)
-
-            remaped_fkmers = [fkmer.remap(self._mapping_array) for fkmer in self.fkmers]  # type: ignore
-            self.fkmers = [
-                x
-                for x in remaped_fkmers
-                if x is not None and x.end in mapping_set and min(x.starts()) >= 0
-            ]
-            remaped_rkmers = [rkmer.remap(self._mapping_array) for rkmer in self.rkmers]  # type: ignore
-            self.rkmers = [
-                x
-                for x in remaped_rkmers
-                if x is not None
-                and x.start in mapping_set
-                and max(x.ends()) < self.array.shape[1]
             ]
 
     def set_reference_genome(self, mapping: MappingType | int):

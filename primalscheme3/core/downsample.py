@@ -3,6 +3,7 @@ import csv
 import itertools
 import math
 import os
+from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -308,6 +309,55 @@ def coverage_prop(
     return accounted_count(seq_counts, seq_delta_ct, max_dct) / total
 
 
+# Tags on a return_all kmer's statuses/errors that are not failures
+LOW_FREQ = "LowFreq"
+IGNORED = "Ignored"
+
+
+@dataclass
+class DownsampleCloud:
+    """A primer cloud from a return_all digest, ready to downsample."""
+
+    seqs: list[str]
+    counts: list[float]
+    # Sequences failing the Rust digest's checks (kept for coverage only)
+    failed: set[str]
+    # Interacting sequence pairs within the cloud
+    dimers: list[tuple[str, str]]
+
+
+def downsample_cloud(kmer: FKmer | RKmer) -> DownsampleCloud | None:
+    """
+    The cloud a normal digest would consider from a return_all ``kmer``:
+    sequences below min_freq are dropped, as the digest drops them. None if
+    the digest would reject the position outright (an error such as
+    ContainsN, unless ignored) or no sequence is left.
+    """
+    if any(IGNORED not in tags and LOW_FREQ not in tags for tags, _ in kmer.errors()):
+        return None
+    all_seqs = kmer.seqs()
+    statuses = kmer.statuses() or [[] for _ in all_seqs]
+    rows = [
+        (seq, count, tags)
+        for seq, count, tags in zip(all_seqs, kmer.counts(), statuses, strict=True)
+        if LOW_FREQ not in tags
+    ]
+    if not rows:
+        return None
+    return DownsampleCloud(
+        seqs=[seq for seq, _, _ in rows],
+        counts=[count for _, count, _ in rows],
+        failed={seq for seq, _, tags in rows if tags},
+        dimers=[(all_seqs[i], all_seqs[j]) for i, j in kmer.dimers()],
+    )
+
+
+def forms_dimer(cloud: DownsampleCloud, kept: list[str]) -> bool:
+    """Whether two of the kept sequences interact."""
+    kept_set = set(kept)
+    return any(a in kept_set and b in kept_set for a, b in cloud.dimers)
+
+
 def delta_ct_downsample_seqs(
     seq_counts: dict[str, float],
     config: Config,
@@ -315,6 +365,7 @@ def delta_ct_downsample_seqs(
     visualise: bool = False,
     outdir: str | None = None,
     name: str = "downsample",
+    failed_seqs: set[str] | None = None,
 ):
     """
     Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
@@ -325,8 +376,14 @@ def delta_ct_downsample_seqs(
         k: v for k, v in sorted(seq_counts.items(), key=lambda x: x[1], reverse=True)
     }
 
-    # Thermo check each sequence.
-    seq_thermo_dict = {seq: thermo_check(seq, config) for seq in seq_counts.keys()}
+    # Thermo check each sequence, unless the Rust digest already did
+    if failed_seqs is None:
+        seq_thermo_dict = {seq: thermo_check(seq, config) for seq in seq_counts}
+    else:
+        seq_thermo_dict = {
+            seq: THERMO_RESULT.FAIL if seq in failed_seqs else THERMO_RESULT.PASS
+            for seq in seq_counts
+        }
 
     valid_edit_dist = []
     for n1, n2 in itertools.combinations(seq_counts.keys(), 2):
@@ -722,7 +779,7 @@ def _ds_pool_init(model_path, config):
 
 
 def _ds_pool_worker(task):
-    idx, seqs, counts = task
+    idx, seqs, counts, failed_seqs = task
     seq_counts = {s: c for s, c in zip(seqs, counts, strict=True)}
     kept = delta_ct_downsample_seqs(
         seq_counts=seq_counts,
@@ -730,6 +787,7 @@ def _ds_pool_worker(task):
         ps=_WORKER_PS,
         visualise=False,
         outdir=None,
+        failed_seqs=failed_seqs,
     )
     return idx, kept
 

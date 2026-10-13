@@ -1,8 +1,21 @@
 def setup_rich_logger(logfile: str | None = None):
+    """
+    A logger writing INFO to the console and, if ``logfile`` is given, DEBUG
+    to that file. Handlers are attached to this logger rather than through
+    logging.basicConfig, which only takes effect once per process, so every
+    run (e.g. several in one Python session) writes its own log file.
+    """
     import logging
 
     from rich.console import Console
     from rich.logging import RichHandler
+
+    log = logging.getLogger(f"rich-{hash(logfile)}")
+    log.setLevel(logging.DEBUG)
+    # Replace the handlers of an earlier run with the same logfile
+    for handler in list(log.handlers):
+        log.removeHandler(handler)
+        handler.close()
 
     handlers = [RichHandler(level=logging.INFO, markup=True, show_path=False)]
     # Add an optional file handler
@@ -16,10 +29,8 @@ def setup_rich_logger(logfile: str | None = None):
                 omit_repeated_times=False,
             )
         )
-
-    logging.basicConfig(
-        level="NOTSET", format="%(message)s", datefmt="[%X]", handlers=handlers
-    )
-    log = logging.getLogger(f"rich-{hash(logfile)}")
+    for handler in handlers:
+        handler.setFormatter(logging.Formatter("%(message)s", datefmt="[%X]"))
+        log.addHandler(handler)
 
     return log

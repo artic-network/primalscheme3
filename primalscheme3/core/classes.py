@@ -129,6 +129,7 @@ class PrimerPair:
                 dv_conc=config.dv_conc,
                 dna_conc=config.dna_conc,
                 dntp_conc=config.dntp_conc,
+                formamide_conc=config.formamide_conc,
             )
             for seq in self.all_seqs()
         ]

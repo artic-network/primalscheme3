@@ -1,13 +1,12 @@
 [project]
 name = "primalscheme3"
-version = "3.4.0"
+version = "3.5.0"
 description = "Generation of highly multiplexed primer schemes"
 authors = [{ name = "ChrisKent", email = "chrisgkent@gmail.com" }]
 requires-python = ">=3.11,<3.14"
 readme = "README.md"
 license = "GPL-3.0-only"
 dependencies = [
-    "primer3-py>=2.2.0,<3",
     "networkx~=3.1",
     "kaleido==0.2.1",
     "plotly>=5.16.1,<6",
@@ -15,7 +14,7 @@ dependencies = [
     "typer>=0.16.1,<0.17",
     "dnaio>=1.2.3,<2",
     "matplotlib>=3.10.5,<4",
-    "primalschemers>=0.1.13,<0.2",
+    "primalschemers>=0.3,<0.4",
     "numpy>=2.3.0",
     "primalbedtools>=1.0.0",
     "scipy>=1.17.1",

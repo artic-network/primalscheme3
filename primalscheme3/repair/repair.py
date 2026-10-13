@@ -4,26 +4,18 @@ import pathlib
 from enum import Enum
 
 from click import UsageError
+from primalschemers import FKmer, RKmer, do_pool_interact  # type: ignore
 
 # Core imports
 from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
 from primalscheme3.core.config import Config
-from primalscheme3.core.digestion import (
-    DIGESTION_ERROR,
-    DIGESTION_RESULT,
-)
 from primalscheme3.core.logger import setup_rich_logger
-from primalscheme3.core.msa import MSA
+from primalscheme3.core.msa import MSA, digest_kwargs
 from primalscheme3.core.progress_tracker import ProgressManager
-from primalscheme3.core.thermo import THERMO_RESULT, thermo_check
-from primalschemers import do_pool_interact  # type: ignore
 
-
-def primers_equal(s1, s2) -> bool:
-    for b1, b2 in zip(s1, s2, strict=False):
-        if b2 != b1:
-            return False
-    return True
+# Tags on a return_all digest's statuses and errors that are not failures
+LOW_FREQ = "LowFreq"
+IGNORED = "Ignored"
 
 
 def required_n_pools(primerpairs, min_pools: int) -> int:
@@ -45,92 +37,60 @@ class NewPrimerStatus(Enum):
     FAILED = "failed"
 
 
-class SeqStatus:
-    seq: str | None
-    count: int
-    thermo_status: THERMO_RESULT | DIGESTION_ERROR
-
-    def __init__(
-        self,
-        seq: str | None,
-        count: int,
-        thermo_status: THERMO_RESULT | DIGESTION_ERROR,
-    ):
-        self.seq = seq
-        self.count = count
-        self.thermo_status = thermo_status
-
-    def __str__(self) -> str:
-        return f"{self.seq}\t{self.count}\t{self.thermo_status}"
-
-
-def detect_early_return(seq_counts: list[DIGESTION_RESULT]) -> bool:
-    """
-    Checks for an early return condition, will return True condition is met
-    """
-    # Check for early return conditions
-    for dr in seq_counts:
-        if dr.count == -1:
-            return True
-    return False
+def covered_by(seq: str, primer_seqs) -> bool:
+    """Whether an existing primer has the same 3' end as ``seq``: equal, or
+    one is a 3'-suffix of the other. Primers are 5'->3' with the 3' end last,
+    for LEFT and RIGHT alike."""
+    return any(seq.endswith(p) or p.endswith(seq) for p in primer_seqs)
 
 
 def report_check(
     seq: str,
     count: float,
+    statuses: list[str],
     current_primer_seqs: set[str],
-    seqs_bytes_in_pools: list[list[str]],
+    seqs_bytes_in_pools: list[list[bytes]],
     pool: int,
     dimerscore: float,
     logger,
     config: Config,
 ) -> bool:
     """
-    Will carry out the checks and report the results via the logger. Will return False if the seq should not be added
+    Report whether ``seq`` can be added to the primer, and why not. Returns
+    True if it should be added. ``statuses`` are the digest's verdicts on the
+    sequence (failed checks, plus the LowFreq tag).
     """
+    report_seq = seq.rjust(config.primer_size_max + 5, " ")
+    failures = [s for s in statuses if s != LOW_FREQ]
 
-    report_seq = seq if isinstance(seq, str) else "DIGESTION_ERROR"
-    report_seq = report_seq.rjust(config.primer_size_max + 5, " ")
-
-    thermo_status = thermo_check(seq, config)
-
-    # Check it passed thermo
-    if thermo_status != THERMO_RESULT.PASS or seq is None:
-        logger.warning(
-            f"{report_seq}\t{round(count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: {thermo_status.name}",
+    def log(status: NewPrimerStatus, reason: str, colour: str, level=logger.warning):
+        level(
+            f"{report_seq}\t{round(count, 4)}\t"
+            f"[{colour}]{status.value}[/{colour}]: {reason}"
         )
+
+    # Already covered: an existing primer shares this 3' end (one is a
+    # 3'-suffix of the other), i.e. the same site walked to another length
+    if covered_by(seq, current_primer_seqs):
+        log(NewPrimerStatus.PRESENT, "In scheme", "blue", logger.info)
         return False
 
-    # Check it is a new seq
-    if any([primers_equal(seq, x) for x in current_primer_seqs]):
-        logger.info(
-            f"{report_seq}\t{round(count, 4)}\t[blue]{NewPrimerStatus.PRESENT.value}[/blue]: In scheme",
-        )
+    # Every check the sequence fails
+    if failures:
+        log(NewPrimerStatus.FAILED, ", ".join(failures), "red")
         return False
 
-    # Check for minor allele
-    if count < config.min_base_freq:
-        logger.warning(
-            f"{report_seq}\t{round(count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Minor allele",
-        )
+    # Below min_base_freq
+    if LOW_FREQ in statuses:
+        log(NewPrimerStatus.FAILED, "Minor allele", "red")
         return False
 
-    # Check for dimer with pool
-    if do_pool_interact(
-        [seq.encode()],  # type: ignore
-        seqs_bytes_in_pools[pool],
-        dimerscore,
-    ):
-        logger.warning(
-            f"{report_seq}\t{round(count, 4)}\t[red]{NewPrimerStatus.FAILED.value}[/red]: Interaction with pool",
-        )
+    # Dimer with the primers in its pool
+    if do_pool_interact([seq.encode()], seqs_bytes_in_pools[pool], dimerscore):
+        log(NewPrimerStatus.FAILED, "Interaction with pool", "red")
         return False
 
-    # Log the seq
-    logger.info(
-        f"{report_seq}\t{round(count, 4)}\t[green]{NewPrimerStatus.VALID.value}[/green]: Can be added",
-    )
-
+    log(NewPrimerStatus.VALID, "Can be added", "green", logger.info)
     return True
 
 
@@ -251,96 +211,78 @@ def repair(
             [*pp.fprimer.seqs_bytes(), *pp.rprimer.seqs_bytes()]
         )
 
-    # Update the MSA Digester to use the MSA index
+    # Digest at the existing primer sites (MSA coordinates), returning every
+    # sequence with the checks it fails, rather than only passing primers
     msa_obj.create_digester(local_msa_path, config.ncores, remap=False)
 
-    fp_indexes = [msa_obj._ref_to_msa[pp.fprimer.end] for pp in primerpairs_in_msa]
-    rp_indexes = [msa_obj._ref_to_msa[pp.rprimer.start] for pp in primerpairs_in_msa]
+    def site(ref_index) -> int | None:
+        return msa_obj._ref_to_msa.get(ref_index)  # type: ignore
 
-    # Digest the positions, returning all seqs
-    msa_obj.digest_rs(
-        config=config,
-        indexes=(fp_indexes, rp_indexes),
-        rs_thermo=False,
-        py_hairpin=False,
+    fp_sites = {pp.fprimer.end: site(pp.fprimer.end) for pp in primerpairs_in_msa}
+    rp_sites = {pp.rprimer.start: site(pp.rprimer.start) for pp in primerpairs_in_msa}
+    fkmers, rkmers, logs = msa_obj._digester.digest(
+        findexes=sorted({i for i in fp_sites.values() if i is not None}),
+        rindexes=sorted({i for i in rp_sites.values() if i is not None}),
+        thermo_check=True,
+        return_all=True,
+        **digest_kwargs(config),
     )
+    for line in logs:
+        logger.debug(line)
+    fkmer_at = {fk.end: fk for fk in fkmers}
+    rkmer_at = {rk.start: rk for rk in rkmers}
 
-    # For primerpair in the bedfile, check if new seqs need to be added by digestion the MSA
+    def check_side(pp, side: str, ref_pos: int, kmer_at, existing, kmer_cls):
+        """Report every sequence at one primer site; return the primer with
+        the valid new sequences added."""
+        name = f"{pp.amplicon_prefix}_{pp.amplicon_number}_{side}"
+        logger.info(f"Checking {name}")
+        msa_pos = site(ref_pos)
+        kmer = kmer_at.get(msa_pos) if msa_pos is not None else None
+        if kmer is None:
+            logger.critical(f"{name}: no sequences at this site in the MSA")
+            return existing
+
+        # Genomes with no usable sequence here, and why
+        for tags, count in kmer.errors():
+            logger.warning(f"{name}: {', '.join(tags)} in {count:g} genomes")
+        for status in kmer.kmer_statuses():
+            logger.warning(f"{name}: {status} between the sequences found here")
+
+        current = set(existing.seqs())
+        new_seqs, new_counts = [], []
+        statuses = kmer.statuses() or [[] for _ in kmer.seqs()]
+        for seq, count, tags in zip(kmer.seqs(), kmer.counts(), statuses, strict=True):
+            if report_check(
+                seq=seq,
+                count=count,
+                statuses=tags,
+                current_primer_seqs=current,
+                seqs_bytes_in_pools=seqs_bytes_in_pools,
+                pool=pp.pool,
+                dimerscore=config.dimer_score,
+                logger=logger,
+                config=config,
+            ):
+                new_seqs.append(seq)
+                new_counts.append(count)
+                seqs_bytes_in_pools[pp.pool].append(seq.encode())
+        if not new_seqs:
+            return existing
+
+        # Add the new sequences to the primer
+        old_counts = existing.counts()
+        counts = None if old_counts is None else [*old_counts, *new_counts]
+        pos = existing.end if kmer_cls is FKmer else existing.start
+        return kmer_cls(
+            [*existing.seqs_bytes(), *(s.encode() for s in new_seqs)], pos, counts
+        )
+
     for pp in primerpairs_in_msa:
-        logger.info(
-            f"Checking {pp.amplicon_prefix}_{pp.amplicon_number}_LEFT",
+        pp.fprimer = check_side(pp, "LEFT", pp.fprimer.end, fkmer_at, pp.fprimer, FKmer)
+        pp.rprimer = check_side(
+            pp, "RIGHT", pp.rprimer.start, rkmer_at, pp.rprimer, RKmer
         )
-        msa_fkmer_end = msa_obj._ref_to_msa[pp.fprimer.end]
-
-        if msa_fkmer_end is None:
-            continue
-
-        # Find the FKmer object
-        new_fkmers = [fk for fk in msa_obj.fkmers if fk.end == msa_fkmer_end]
-        if len(new_fkmers) != 1:
-            logger.critical(f"Digestion failed for FKmer:{msa_fkmer_end}")
-            continue
-        new_fkmer = new_fkmers[0]
-
-        fseq_count = {
-            seq: count
-            for seq, count in zip(new_fkmer.seqs(), new_fkmer.counts(), strict=True)
-        }
-
-        # Decide if the new seqs should be added
-        for seq in fseq_count:
-            if not report_check(
-                seq=seq,
-                count=fseq_count[seq],
-                current_primer_seqs=pp.fprimer.seqs(),
-                seqs_bytes_in_pools=seqs_bytes_in_pools,
-                pool=pp.pool,
-                dimerscore=config.dimer_score,
-                logger=logger,
-                config=config,
-            ):
-                continue
-
-            # Add the new seq
-            seqs_bytes_in_pools[pp.pool].append(seq.encode())  # type: ignore
-
-        # Handle the right primer
-        logger.info(
-            f"Checking {pp.amplicon_prefix}_{pp.amplicon_number}_RIGHT",
-        )
-        msa_rkmer_end = msa_obj._ref_to_msa[pp.rprimer.start]
-
-        if msa_rkmer_end is None:
-            continue
-
-        # Find the FKmer object
-        new_rkmers = [rk for rk in msa_obj.rkmers if rk.start == msa_rkmer_end]
-        if len(new_rkmers) != 1:
-            logger.critical(f"Digestion failed for RKmer:{msa_rkmer_end}")
-            continue
-        new_rkmer = new_rkmers[0]
-
-        rseq_count = {
-            seq: count
-            for seq, count in zip(new_rkmer.seqs(), new_rkmer.counts(), strict=True)
-        }
-
-        # Decide if the new seqs should be added
-        for seq in rseq_count:
-            if not report_check(
-                seq=seq,
-                count=rseq_count[seq],
-                current_primer_seqs=pp.rprimer.seqs(),
-                seqs_bytes_in_pools=seqs_bytes_in_pools,
-                pool=pp.pool,
-                dimerscore=config.dimer_score,
-                logger=logger,
-                config=config,
-            ):
-                continue
-
-            # Add the new seq
-            seqs_bytes_in_pools[pp.pool].append(seq.encode())  # type: ignore
 
     # Write out the new bedfile
     with open(OUTPUT_DIR / "primer.bed", "w") as f:
@@ -352,6 +294,6 @@ def repair(
     # Not sure how to handle the amplicon names, as the primerstem has changed?
     ## Keep original names for now
 
-    # Write the config dict to file
+    # Write the config, with the new MSA's entry
     with open(OUTPUT_DIR / "config.json", "w") as outfile:
-        outfile.write(json.dumps(config.to_dict(), sort_keys=True))
+        outfile.write(json.dumps(base_cfg, sort_keys=True))

@@ -52,6 +52,9 @@ class RecordingScorer:
 
 # A thermo-passing primer and single-substitution variants of it
 BASE = "GGTATAGTCAATTGCCTAGTCTTCTGTTC"
+# Selection tests use a wide Tm window: with the digest's formamide, some
+# single-base variants of BASE fall just under the default 59.5 °C minimum
+TM_MIN = 55.0
 
 
 def variant(pos_from_3p: int, seq: str = BASE) -> str:
@@ -283,6 +286,7 @@ class TestDeltaCtDownsampleBehaviour(unittest.TestCase):
             downsample_always_add_prop=0.5,
             downsample_target=0.9,
             downsample_max_dct=-4.0,
+            primer_tm_min=TM_MIN,
         )
 
     def run_ds(self, seq_counts, ps, **kw):
@@ -358,7 +362,9 @@ class TestDeltaCtDownsampleBehaviour(unittest.TestCase):
 
 class TestDownsampleWithBundledModel(unittest.TestCase):
     def setUp(self):
-        self.config = Config(downsample=True, downsample_target=0.9)
+        self.config = Config(
+            downsample=True, downsample_target=0.9, primer_tm_min=TM_MIN
+        )
         self.ps = PrimerScorer()
 
     def test_mild_3p_distal_mismatches_are_covered(self):
@@ -383,7 +389,7 @@ class TestDownsampleWithBundledModel(unittest.TestCase):
         seqs = [BASE, variant(1), variant(15)]
         counts = [20.0, 5.0, 1.0]
         ds._ds_pool_init(DEFAULT_MODEL, self.config)
-        idx, kept = ds._ds_pool_worker((7, seqs, counts))
+        idx, kept = ds._ds_pool_worker((7, seqs, counts, None))
         self.assertEqual(idx, 7)
         direct = ds.delta_ct_downsample_seqs(
             dict(zip(seqs, counts, strict=True)), self.config, self.ps
@@ -395,7 +401,9 @@ class TestAnnealingDownsample(unittest.TestCase):
     """downsample_seqs: the annealing-based selection used by downsample_scheme."""
 
     def setUp(self):
-        self.config = Config(downsample_always_add_prop=0.5, downsample_target=0.9)
+        self.config = Config(
+            downsample_always_add_prop=0.5, downsample_target=0.9, primer_tm_min=TM_MIN
+        )
 
     def test_single_seq(self):
         self.assertEqual(ds.downsample_seqs({BASE: 1.0}, self.config), [BASE])
@@ -475,7 +483,7 @@ class TestDownsampleScheme(unittest.TestCase):
 
     def run_ds(self, rows, visualise=False, **cfg):
         bed = write_bed(self.tmp / "primer.bed", rows)
-        config = Config(downsample=True, **cfg)
+        config = Config(downsample=True, **{"primer_tm_min": TM_MIN, **cfg})
         config.output = self.tmp / "out"
         return ds.downsample_scheme(bed, config, visualise=visualise)
 
