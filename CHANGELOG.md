@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.5.0 (unreleased, draft)
+
+### Changed
+- **primer3-py is no longer used.** Every thermodynamic calculation comes from primalschemers 0.3 (≥0.3, <0.4): thal for hairpins and dimers (identical to primer3 2.3.0), and the same nearest-neighbour model for primer Tm and annealing, so the Python checks and the Rust digest agree.
+- **One Tm standard.** The Python checks (downsampling, `downsample-existing-scheme`, reported Tm) now use the digest's: Tm with 0.8 M formamide (new `formamide_conc` config field), failing at or above `primer_tm_max`. Previously they used primer3's Tm with no formamide, about 2 °C higher, and allowed `primer_tm_max + 2`.
+- **Primer lengths:** the digest's Tm model changed (primalschemers 0.1 → 0.3), so at about 13% of positions on the test MSA the digest's walk now stops one base shorter at the 5′ end (same 3′ end). Schemes designed with 3.5.0 differ slightly from 3.4.0.
+- **The digest gets the run's conditions and hairpin limit.** `mv_conc`, `dv_conc`, `dntp_conc`, `dna_conc`, `formamide_conc` and `primer_hairpin_th_max` are passed to primalschemers instead of its fixed defaults. The hairpin check now runs in Rust (values identical to before); the Python hairpin pass runs only for unchecked digests.
+- **Downsampling uses the Rust digest's verdicts.** It digests with `return_all` and takes each sequence's pass/fail from the digest's statuses, instead of re-checking every sequence in Python. Sequences below `min_base_freq`, and positions the digest rejects outright (e.g. Ns without `--ignore-n`), are excluded as before.
+- **Downsampled clouds are dimer-checked.** A cloud is rejected if two of its kept primers interact. Previously the downsampling path skipped the dimer check.
+- **`repair-mode` reports every reason.** It digests the existing primer sites with `return_all` and logs each sequence's failed checks (e.g. `LowTm, Hairpin`), minor alleles, and how many genomes have no usable sequence and why (e.g. `ContainsN in 2 genomes`).
+- **`repair-mode` treats a sequence as already present** when an existing primer shares its 3′ end (one is a 3′-suffix of the other: the same site walked to another length). Previously a prefix match was used.
+
+### Fixed
+- `repair-mode` now adds the valid new primers to `primer.bed` (they were reported but never written), and its `config.json` keeps the new MSA's `msa_data` entry.
+- `work/file.log` is written by every run, not only the first in a Python process.
+
+### Removed
+- The legacy Python digest (`core/digestion.py`, `MSA.digest`); all digestion is in primalschemers.
+
 ## 3.4.0 (unreleased, draft)
 
 ### Added

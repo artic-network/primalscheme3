@@ -28,7 +28,7 @@ Choose a model with `--primer-scorer-model <id>`, or give the path to a model's 
 | `mut_base` | The substitution, e.g. `A>C` (categorical) |
 | `dinu2_gc_rich` | Whether the 3′ flanking dinucleotide is GC-rich (categorical) |
 
-The ΔG features are computed with primer3 at 100 mM monovalent, 2 mM Mg²⁺, 0.8 mM dNTP, 15 nM DNA and 65 °C. These are the conditions the training data was generated at. `PrimerScorer` always uses the conditions in the model's manifest, whatever the run's settings, so its inputs match what the model learned.
+The ΔG features are computed with primalschemers' thal (identical to primer3 2.3.0's; the training data was computed with primer3) at 100 mM monovalent, 2 mM Mg²⁺, 0.8 mM dNTP, 15 nM DNA and 65 °C. These are the conditions the training data was generated at. `PrimerScorer` always uses the conditions in the model's manifest, whatever the run's settings, so its inputs match what the model learned.
 
 ## Files
 
