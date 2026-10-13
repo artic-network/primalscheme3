@@ -275,17 +275,14 @@ class MSA:
 
         # Start the downsample
         if config.downsample:
-            model_path = config.primer_scorer_model_path
-            if model_path is None:
-                env_path = os.getenv("PRIMALSCHEME3_PRIMER_SCORER_MODEL")
-                if env_path:
-                    model_path = pathlib.Path(env_path)
-            if model_path is None:
-                raise ValueError(
-                    "Primer scorer model path is required for downsampling. "
-                    "Set --primer-scorer-model-path or PRIMALSCHEME3_PRIMER_SCORER_MODEL."
-                )
-            model_path = pathlib.Path(model_path)
+            model_path = (
+                os.getenv("PRIMALSCHEME3_PRIMER_SCORER_MODEL")
+                or config.primer_scorer_model
+            )
+            # Load once here to fail early, and record exactly which model ran
+            loaded = PrimerScorer(model_path)
+            config.primer_scorer_model = str(model_path)
+            config.primer_scorer_model_sha256 = loaded.sha256
             # Optionally dump a downsample graph SVG per (non-trivial) cloud plus a
             # downsample_summary.csv (pre -> post counts + coverage prop). Gated by
             # config.downsample_plot as it is slow and verbose.
@@ -311,7 +308,7 @@ class MSA:
             # Plotting writes SVGs via matplotlib and does not parallelise cleanly,
             # so the plot/debug path stays serial. ncores <= 1 also runs serially.
             if config.downsample_plot or config.ncores <= 1:
-                ps = PrimerScorer(model_path)
+                ps = loaded
                 new_fkmers = []
                 for fkmer in tqdm.tqdm(self.fkmers, desc="downsampling FPrimers"):
                     new_seqs = downsample_kmer(

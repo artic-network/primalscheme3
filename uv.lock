@@ -979,19 +979,14 @@ version = "3.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "dnaio" },
-    { name = "joblib" },
     { name = "kaleido" },
     { name = "matplotlib" },
     { name = "networkx" },
     { name = "numpy" },
-    { name = "pandas" },
     { name = "plotly" },
     { name = "primalbedtools" },
     { name = "primalschemers" },
     { name = "primer3-py" },
-    { name = "pyarrow" },
-    { name = "pydot" },
-    { name = "scikit-learn" },
     { name = "scipy" },
     { name = "tqdm" },
     { name = "typer" },
@@ -1011,27 +1006,28 @@ docs = [
     { name = "mkdocs" },
     { name = "mkdocs-material" },
 ]
+train = [
+    { name = "joblib" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "scikit-learn" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "dnaio", specifier = ">=1.2.3,<2" },
-    { name = "joblib", specifier = ">=1.5.3" },
     { name = "kaleido", specifier = "==0.2.1" },
     { name = "matplotlib", specifier = ">=3.10.5,<4" },
     { name = "networkx", specifier = "~=3.1" },
     { name = "numpy", specifier = ">=2.3.0" },
-    { name = "pandas", specifier = ">=3.0.1" },
     { name = "plotly", specifier = ">=5.16.1,<6" },
     { name = "primalbedtools", specifier = ">=1.0.0" },
     { name = "primalschemers", specifier = ">=0.1.13,<0.2" },
     { name = "primer3-py", specifier = ">=2.2.0,<3" },
-    { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "pydot", specifier = ">=4.0.1" },
-    { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "tqdm", specifier = ">=4.66.1,<5" },
     { name = "typer", specifier = ">=0.16.1,<0.17" },
-    { name = "xgboost", specifier = ">=3.2.0" },
+    { name = "xgboost", specifier = ">=3.2.0,<4" },
 ]
 
 [package.metadata.requires-dev]
@@ -1046,6 +1042,12 @@ dev = [
 docs = [
     { name = "mkdocs", specifier = ">=1.6.1,<2" },
     { name = "mkdocs-material", specifier = ">=9.5.27,<10" },
+]
+train = [
+    { name = "joblib", specifier = ">=1.5.3" },
+    { name = "pandas", specifier = ">=3.0.1" },
+    { name = "pyarrow", specifier = ">=23.0.1" },
+    { name = "scikit-learn", specifier = ">=1.8.0" },
 ]
 
 [[package]]
@@ -1161,18 +1163,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/84/a7/90007d476b9f0dc308e3bc57b832d004f848fd6c0da601375d20d92d1519/pyarrow-23.0.1-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:c2139549494445609f35a5cda4eb94e2c9e4d704ce60a095b342f82460c73a83", size = 48236269, upload-time = "2026-02-16T10:12:04.47Z" },
     { url = "https://files.pythonhosted.org/packages/b0/3f/b16fab3e77709856eb6ac328ce35f57a6d4a18462c7ca5186ef31b45e0e0/pyarrow-23.0.1-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:7044b442f184d84e2351e5084600f0d7343d6117aabcbc1ac78eb1ae11eb4125", size = 50604794, upload-time = "2026-02-16T10:12:11.797Z" },
     { url = "https://files.pythonhosted.org/packages/e9/a1/22df0620a9fac31d68397a75465c344e83c3dfe521f7612aea33e27ab6c0/pyarrow-23.0.1-cp313-cp313t-win_amd64.whl", hash = "sha256:a35581e856a2fafa12f3f54fce4331862b1cfb0bef5758347a858a4aa9d6bae8", size = 27660642, upload-time = "2026-02-16T10:12:17.746Z" },
-]
-
-[[package]]
-name = "pydot"
-version = "4.0.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyparsing" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/50/35/b17cb89ff865484c6a20ef46bf9d95a5f07328292578de0b295f4a6beec2/pydot-4.0.1.tar.gz", hash = "sha256:c2148f681c4a33e08bf0e26a9e5f8e4099a82e0e2a068098f32ce86577364ad5", size = 162594, upload-time = "2025-06-17T20:09:56.454Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/32/a7125fb28c4261a627f999d5fb4afff25b523800faed2c30979949d6facd/pydot-4.0.1-py3-none-any.whl", hash = "sha256:869c0efadd2708c0be1f916eb669f3d664ca684bc57ffb7ecc08e70d5e93fee6", size = 37087, upload-time = "2025-06-17T20:09:55.25Z" },
 ]
 
 [[package]]

@@ -1,4 +1,15 @@
-# train_surrogate.py
+"""
+Train the primer scorer surrogate: an XGBoost regressor on features from the
+GAM fitted in qpcr-single-mm (q5_gam_surrogate_training_data.csv), saved as a
+joblib pipeline. Bundle it with scripts/export_primer_scorer.py under a new
+model id.
+
+    uv run --group train python scripts/train_primer_scorer.py \
+        q5_gam_surrogate_training_data.csv q5_dct_vN.joblib
+"""
+
+import sys
+
 import joblib
 import pandas as pd
 import xgboost as xgb
@@ -65,7 +76,4 @@ def train_and_evaluate(csv_filepath, model_save_path):
 
 
 if __name__ == "__main__":
-    train_and_evaluate(
-        "/Users/kentcg/qpcr-single-mm/dinucleotide/q5_gam_surrogate_training_data.csv",
-        "q5_gam_surrogate_training_data.joblib",
-    )
+    train_and_evaluate(sys.argv[1], sys.argv[2])

@@ -1,11 +1,12 @@
 import pathlib
 
-import joblib
-import pandas as pd
+import numpy as np
+import xgboost as xgb
 
 from primalscheme3.core.config import Config
 from primalscheme3.core.seq_functions import complement
-from primalscheme3.core.thermo import calc_binding
+from primalscheme3.core.thermo import calc_binding_at
+from primalscheme3.models import DEFAULT_MODEL, file_sha256, load_manifest
 
 # Allawi/SantaLucia internal mismatch NN ΔG₃₇ (cal/mol)
 # Computed as dH - 310.15 * dS
@@ -260,69 +261,117 @@ def lookup_mm_dg(dinu_key: str, is_terminal: bool) -> float:
     return table.get(key, 0)
 
 
+def extract_features(ref: str, query: str, thermo: dict) -> dict | None:
+    """
+    The model features for primer ``query`` on template ``ref`` (one
+    mismatch), with ΔG computed at the ``thermo`` conditions (mv_conc,
+    dv_conc, dntp_conc, dna_conc, temp_c). None unless there is exactly one
+    mismatch.
+    """
+    aref = "." + ref + "."
+    aquery = "." + query + "."
+
+    r = find_mismatch(aref, aquery)
+    if r is None:
+        return None
+
+    idx, dinu1, dinu2, mut_base = r
+    idx -= 1  # Account for terminal "."
+    is_terminal = idx == 0
+    idx_prop = idx / len(query)
+
+    # p3_dg: stability of 3' segment
+    p3_seq = query[len(query) - idx :]
+    p3_dg = calc_binding_at(p3_seq, p3_seq, **thermo).dg if p3_seq else 0
+
+    # prdg: proofread correction energy
+    # Correct the mutant base back to the reference base
+    ref_base = complement(dinu1[4])  # original primer base
+    proof_seq_l = list(query)
+    proof_seq_l[len(query) - idx - 1] = ref_base
+    proof_seq = "".join(proof_seq_l)
+    prdg = calc_binding_at(query, proof_seq, **thermo).dg
+
+    # mm_dg2: mismatch NN ΔG at the 3' flanking context
+    if is_terminal:
+        mm_dg2 = 0
+    else:
+        mm_dg2 = lookup_mm_dg(dinu2, False)
+
+    # dinu2_gc_rich
+    dinu2_gc_rich = 1 if dinu2 in GC_RICH_DINU2 else 0
+
+    return {
+        "p3_dg": p3_dg,
+        "prdg": prdg,
+        "idx_prop": idx_prop,
+        "mm_dg2": mm_dg2,
+        "mut_base": mut_base,
+        "dinu2_gc_rich": dinu2_gc_rich,
+    }
+
+
 class PrimerScorer:
-    def __init__(self, model_path: pathlib.Path):
-        # Load data
-        self.model = joblib.load(model_path)
+    """
+    Predicts the ΔCt of a primer with one mismatch to its template, from a
+    bundled model id (see ``primalscheme3.models``) or a path to a model's
+    manifest. Features are always computed at the conditions in the model's
+    manifest, the ones it was trained on, whatever the run's config.
+    """
+
+    def __init__(self, model: str | pathlib.Path = DEFAULT_MODEL):
+        self.manifest, model_file = load_manifest(model)
+        self.id: str = self.manifest["id"]
+        self.sha256 = file_sha256(model_file)
+        if self.sha256 != self.manifest["model_sha256"]:
+            raise ValueError(
+                f"{model_file} does not match its manifest's sha256 "
+                f"({self.sha256} != {self.manifest['model_sha256']})"
+            )
+        self.booster = xgb.Booster()
+        self.booster.load_model(model_file)
+        self.thermo: dict = self.manifest["thermo"]
+        features = self.manifest["features"]
+        self._numeric: list[str] = features["numeric"]
+        self._categorical: dict[str, list] = features["categorical"]
+
+    def _encode(self, features_list: list[dict]) -> np.ndarray:
+        """
+        The model's input matrix: the numeric features, then a one-hot column
+        per category in manifest order (all zero for an unseen category).
+        """
+        rows = []
+        for f in features_list:
+            row = [float(f[name]) for name in self._numeric]
+            for name, categories in self._categorical.items():
+                row.extend(1.0 if f[name] == c else 0.0 for c in categories)
+            rows.append(row)
+        return np.array(rows, dtype=np.float64)
+
+    def predict(self, features_list: list[dict]) -> list[float]:
+        """Unrounded ΔCt for each feature dict."""
+        if not features_list:
+            return []
+        preds = self.booster.inplace_predict(self._encode(features_list))
+        return [float(p) for p in preds]
 
     def _score(self, features_list: list[dict]):
         """
         Predicts the Delta Ct cycle shift for a list of primer mismatch features.
         """
-        if not features_list:
-            return []
-        df = pd.DataFrame(features_list)
-        predictions = self.model.predict(df)
-        return [round(float(p), 3) for p in predictions]
+        return [round(p, 3) for p in self.predict(features_list)]
 
-    def _get_features(self, ref: str, query: str, config: Config) -> dict | None:
+    def _get_features(
+        self, ref: str, query: str, config: Config | None = None
+    ) -> dict | None:
         """
-        Extracts features for the model from a ref/query pair.
+        Extracts features for the model from a ref/query pair, at the
+        model's conditions (``config`` is not used).
         """
-        aref = "." + ref + "."
-        aquery = "." + query + "."
-
-        r = find_mismatch(aref, aquery)
-        if r is None:
-            return None
-
-        idx, dinu1, dinu2, mut_base = r
-        idx -= 1  # Account for terminal "."
-        is_terminal = idx == 0
-        idx_prop = idx / len(query)
-
-        # p3_dg: stability of 3' segment
-        p3_seq = query[len(query) - idx :]
-        p3_dg = calc_binding(p3_seq, p3_seq, config).dg if p3_seq else 0
-
-        # prdg: proofread correction energy
-        # Correct the mutant base back to the reference base
-        ref_base = complement(dinu1[4])  # original primer base
-        proof_seq_l = list(query)
-        proof_seq_l[len(query) - idx - 1] = ref_base
-        proof_seq = "".join(proof_seq_l)
-        prdg = calc_binding(query, proof_seq, config).dg
-
-        # mm_dg2: mismatch NN ΔG at the 3' flanking context
-        if is_terminal:
-            mm_dg2 = 0
-        else:
-            mm_dg2 = lookup_mm_dg(dinu2, False)
-
-        # dinu2_gc_rich
-        dinu2_gc_rich = 1 if dinu2 in GC_RICH_DINU2 else 0
-
-        return {
-            "p3_dg": p3_dg,
-            "prdg": prdg,
-            "idx_prop": idx_prop,
-            "mm_dg2": mm_dg2,
-            "mut_base": mut_base,
-            "dinu2_gc_rich": dinu2_gc_rich,
-        }
+        return extract_features(ref, query, self.thermo)
 
     def score_seq_batch(
-        self, pairs: list[tuple[str, str]], config: Config
+        self, pairs: list[tuple[str, str]], config: Config | None = None
     ) -> list[float | None]:
         features_list = []
         valid_indices = []
@@ -332,7 +381,7 @@ class PrimerScorer:
             if ref == query:
                 results[i] = 0.0
                 continue
-            features = self._get_features(ref, query, config)
+            features = self._get_features(ref, query)
             if features:
                 features_list.append(features)
                 valid_indices.append(i)
@@ -347,10 +396,12 @@ class PrimerScorer:
 
         return results
 
-    def score_seq(self, ref: str, query: str, config: Config) -> None | float:
+    def score_seq(
+        self, ref: str, query: str, config: Config | None = None
+    ) -> None | float:
         if ref == query:
             return 0.0
-        features = self._get_features(ref, query, config)
+        features = self._get_features(ref, query)
         if features is None:
             return None
         results = self._score([features])

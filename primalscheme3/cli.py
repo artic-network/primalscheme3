@@ -195,15 +195,12 @@ def scheme_create(
             hidden=True,
         ),
     ] = Config.downsample_target,
-    primer_scorer_model_path: Annotated[
-        pathlib.Path | None,
+    primer_scorer_model: Annotated[
+        str,
         typer.Option(
-            help="Path to the PrimerScorer model (required if using downsampling)",
-            exists=True,
-            readable=True,
-            resolve_path=True,
+            help="Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
         ),
-    ] = Config.primer_scorer_model_path,
+    ] = Config.primer_scorer_model,
 ):
     """
     Creates a tiling overlap scheme for each MSA file
@@ -439,15 +436,12 @@ def panel_create(
             hidden=True,
         ),
     ] = Config.downsample_target,
-    primer_scorer_model_path: Annotated[
-        pathlib.Path | None,
+    primer_scorer_model: Annotated[
+        str,
         typer.Option(
-            help="Path to the PrimerScorer model (required if using downsampling)",
-            exists=True,
-            readable=True,
-            resolve_path=True,
+            help="Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
         ),
-    ] = Config.primer_scorer_model_path,
+    ] = Config.primer_scorer_model,
 ):
     """
     Creates a primer panel
@@ -629,15 +623,11 @@ def visualise_primer_dct(
         ),
     ],
     model: Annotated[
-        pathlib.Path,
+        str,
         typer.Option(
-            help="The path to the primer scorer model",
-            readable=True,
-            exists=True,
-            dir_okay=False,
-            resolve_path=True,
+            help="Primer scorer model: a bundled model id, or the path to a model's .json manifest",
         ),
-    ] = pathlib.Path("q5_gam_surrogate_training_data.joblib"),
+    ] = Config.primer_scorer_model,
     output: Annotated[
         pathlib.Path,
         typer.Option(help="Output location of the plot", dir_okay=False, writable=True),
@@ -656,7 +646,7 @@ def visualise_primer_dct(
     """
     Visualise primer mismatch penalty (DCT) between primers and the input genomes
     """
-    config = Config(primer_scorer_model_path=model)
+    config = Config(primer_scorer_model=model)
 
     array, seqdict = parse_msa(msa)
 

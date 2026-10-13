@@ -18,13 +18,8 @@ dependencies = [
     "primalschemers>=0.1.13,<0.2",
     "numpy>=2.3.0",
     "primalbedtools>=1.0.0",
-    "pandas>=3.0.1",
     "scipy>=1.17.1",
-    "pyarrow>=23.0.1",
-    "joblib>=1.5.3",
-    "xgboost>=3.2.0",
-    "scikit-learn>=1.8.0",
-    "pydot>=4.0.1",
+    "xgboost>=3.2.0,<4",
 ]
 
 [project.urls]
@@ -42,6 +37,13 @@ dev = [
     "pre-commit>=4.0.1,<5",
     "pytest-xdist>=3.6.1,<4",
     "coverage>=7.8.0,<8",
+]
+# Training and exporting primer scorer models (scripts/)
+train = [
+    "pandas>=3.0.1",
+    "pyarrow>=23.0.1",
+    "joblib>=1.5.3",
+    "scikit-learn>=1.8.0",
 ]
 docs = [
     "mkdocs-material>=9.5.27,<10",

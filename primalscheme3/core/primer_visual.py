@@ -23,6 +23,7 @@ from primalscheme3.core.seq_functions import (
     reverse_complement,
 )
 from primalscheme3.core.thermo import calc_annealing_profile
+from primalscheme3.models import ModelNotFound
 
 
 class PlotlyText:
@@ -426,15 +427,10 @@ def primer_dct_heatmap(
     textmap = textmap.tolist()
 
     # Instantiate PrimerScorer
-    if (
-        config.primer_scorer_model_path is None
-        or not config.primer_scorer_model_path.exists()
-    ):
-        raise UsageError(
-            f"Primer scorer model not found at {config.primer_scorer_model_path}"
-        )
-
-    ps = PrimerScorer(config.primer_scorer_model_path)
+    try:
+        ps = PrimerScorer(config.primer_scorer_model)
+    except ModelNotFound as e:
+        raise UsageError(str(e)) from e
 
     # get FPrimer sequences for each basename
     for bn, lines in basename_to_line.items():

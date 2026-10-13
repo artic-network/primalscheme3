@@ -3,6 +3,8 @@ from enum import Enum
 from importlib.metadata import version
 from typing import Any
 
+from primalscheme3.models import DEFAULT_MODEL
+
 
 # Written by Andy Smith, modified by: Chris Kent
 class MappingType(Enum):
@@ -47,7 +49,10 @@ class Config:
     # When True, write a per-cloud downsample graph SVG (+ summary CSV) to
     # <output>/work/downsample_plots. Off by default as it is slow and verbose.
     downsample_plot: bool = False
-    primer_scorer_model_path: pathlib.Path | None = None
+    # Bundled model id (see primalscheme3.models) or a path to a model's
+    # .json manifest. The sha256 of the model used is recorded on load.
+    primer_scorer_model: str = DEFAULT_MODEL
+    primer_scorer_model_sha256: str = ""
     # Amplicon Settings
     amplicon_size: int = 400
     amplicon_size_min: int = 0
@@ -151,7 +156,11 @@ class Config:
             if value is None:
                 continue
 
-            if key in {"input_bedfile", "primer_scorer_model_path"}:
+            # Configs written before primer scorer models were bundled
+            if key == "primer_scorer_model_path":
+                key, value = "primer_scorer_model", str(value)
+
+            if key in {"input_bedfile"}:
                 setattr(self, key, pathlib.Path(value))
                 continue
 
