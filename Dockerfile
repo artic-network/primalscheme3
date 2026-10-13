@@ -1,38 +1,39 @@
-FROM ubuntu:rolling
+# syntax=docker/dockerfile:1
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
-ENV POETRY_VERSION=1.6.1
-ENV POETRY_HOME=/opt/poetry
-ENV POETRY_VENV=/opt/poetry-venv
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 
-ENV PRIMALSCHEME3_VERSION=1.1.5
+WORKDIR /app
 
-# Install python
-RUN apt-get update -y && apt-get install curl -y
-RUN apt-get install -y python3.11 && apt-get install python3-pip -y && apt-get install python3.11-venv -y
+# Install deps first, in their own layer, cached against lockfile changes only
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev --no-group docs
 
-RUN apt-get install autoconf -y
-# Tell Poetry where to place its cache and virtual environment
-ENV POETRY_CACHE_DIR=/opt/.cache
+# Now add the source and install the project itself
+COPY pyproject.toml uv.lock README.md ./
+COPY primalscheme3 ./primalscheme3
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable --no-dev --no-group docs
 
-# Creating a virtual environment just for poetry and install it with pip
-RUN python3 -m venv $POETRY_VENV \
-    && $POETRY_VENV/bin/pip install -U pip setuptools \
-    && $POETRY_VENV/bin/pip install poetry==${POETRY_VERSION}
+FROM python:3.12-slim-bookworm
 
-# Add `poetry` to PATH
-ENV PATH="${PATH}:${POETRY_VENV}/bin"
+# libgomp1 is required at runtime by xgboost
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy only requirements to cache them in docker layer
-WORKDIR /primalscheme3
-COPY poetry.lock pyproject.toml ./
+RUN groupadd --gid 1000 primalscheme3 \
+    && useradd --uid 1000 --gid primalscheme3 --create-home --shell /bin/bash primalscheme3
 
-# Creating folders, and files for a project:
-COPY ./primalscheme3 ./primalscheme3
-COPY README.md ./
+COPY --from=builder --chown=primalscheme3:primalscheme3 /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:${PATH}"
 
+USER primalscheme3
+WORKDIR /home/primalscheme3
 
-# Install all deps
-RUN poetry install
-RUN poetry build
-RUN $POETRY_VENV/bin/pip install dist/primalscheme3-${PRIMALSCHEME3_VERSION}-py3-none-any.whl
-
+ENTRYPOINT []
+CMD ["primalscheme3", "--help"]
