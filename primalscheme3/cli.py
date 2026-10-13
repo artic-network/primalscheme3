@@ -681,7 +681,7 @@ def visualise_bedfile(
     ref_path: Annotated[
         pathlib.Path,
         typer.Argument(
-            help="The bedfile containing the primers",
+            help="The reference.fasta file containing the --ref-id genome",
             readable=True,
             exists=True,
             dir_okay=False,
