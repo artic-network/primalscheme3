@@ -389,7 +389,7 @@ class TestDownsampleWithBundledModel(unittest.TestCase):
         seqs = [BASE, variant(1), variant(15)]
         counts = [20.0, 5.0, 1.0]
         ds._ds_pool_init(DEFAULT_MODEL, self.config)
-        idx, kept = ds._ds_pool_worker((7, seqs, counts, None))
+        idx, kept = ds._ds_pool_worker((7, seqs, counts, None, None))
         self.assertEqual(idx, 7)
         direct = ds.delta_ct_downsample_seqs(
             dict(zip(seqs, counts, strict=True)), self.config, self.ps
@@ -715,6 +715,14 @@ class TestDownsampleCloud(unittest.TestCase):
         kmer = FakeReturnAllKmer([BASE], [1.0], [["LowFreq"]])
         self.assertIsNone(ds.downsample_cloud(kmer))
 
+    def test_self_dimer_fails_the_seq(self):
+        kmer = FakeReturnAllKmer(
+            [BASE, variant(3)], [5.0, 1.0], [[], []], dimers=[(1, 1)]
+        )
+        cloud = ds.downsample_cloud(kmer)
+        self.assertEqual(cloud.failed, {variant(3)})
+        self.assertEqual(cloud.dimers, [])
+
     def test_dimers_only_count_between_kept_seqs(self):
         kmer = FakeReturnAllKmer(
             [BASE, variant(3), variant(5)],
@@ -779,3 +787,78 @@ class TestMSADownsampleReturnAll(unittest.TestCase):
         for k in msa.fkmers:
             for s in k.seqs():
                 self.assertEqual(statuses[(k.end, s)], [], (k.end, s))
+
+
+class TableScorer:
+    """A primer covers a template exactly when (template, primer) is listed;
+    any other mismatch is unknown (None)."""
+
+    def __init__(self, covers):
+        self.covers = set(covers)
+
+    def score_seq_batch(self, pairs, config):
+        return [0.0 if pair in self.covers else None for pair in pairs]
+
+
+class TestDimerAwareSelection(unittest.TestCase):
+    """
+    BASE (10) is always added but covers nothing else. X (3) and Y (3) are
+    one-base variants of BASE; D (1) is one base from each and covers both,
+    so D is the best next primer, unless it dimerises with BASE.
+    """
+
+    X, Y = variant(3), variant(5)
+    D = variant(3, variant(5))
+
+    def setUp(self):
+        self.config = Config(
+            downsample=True,
+            downsample_always_add_prop=0.5,
+            downsample_target=0.85,
+            downsample_max_dct=-4.0,
+            primer_tm_min=TM_MIN,
+        )
+        self.seqs = {BASE: 10.0, self.X: 3.0, self.Y: 3.0, self.D: 1.0}
+        self.ps = TableScorer([(self.X, self.D), (self.Y, self.D)])
+
+    def run_ds(self, dimers):
+        return ds.delta_ct_downsample_seqs(
+            dict(self.seqs), self.config, self.ps, failed_seqs=set(), dimers=dimers
+        )
+
+    def test_without_dimers_the_best_primer_is_chosen(self):
+        self.assertEqual(self.run_ds([]), sorted([BASE, self.D]))
+
+    def test_clashing_best_primer_is_skipped_for_clean_ones(self):
+        result = self.run_ds([(BASE, self.D)])
+        self.assertEqual(result, sorted([BASE, self.X, self.Y]))
+
+    def test_clashes_with_unneeded_seqs_dont_matter(self):
+        self.assertEqual(self.run_ds([(self.X, self.Y)]), sorted([BASE, self.D]))
+
+    def test_clashing_always_added_seqs_reject_the_cloud(self):
+        # X as common as BASE, both above always-add (0.3 x 24 = 7.2)
+        self.seqs[self.X] = 10.0
+        self.config.downsample_always_add_prop = 0.3
+        self.assertIsNone(self.run_ds([(BASE, self.X)]))
+
+    def test_no_clean_way_to_the_target_rejects_the_cloud(self):
+        # D clashes with BASE, and X and Y with each other: only one of them
+        # can be added, short of the target
+        self.assertIsNone(self.run_ds([(BASE, self.D), (self.X, self.Y)]))
+
+    def test_summary_csv_marks_a_clash_as_failed(self):
+        self.seqs[self.X] = 10.0
+        self.config.downsample_always_add_prop = 0.3
+        with tempfile.TemporaryDirectory() as d:
+            ds.delta_ct_downsample_seqs(
+                dict(self.seqs),
+                self.config,
+                self.ps,
+                outdir=d,
+                failed_seqs=set(),
+                dimers=[(BASE, self.X)],
+            )
+            with open(pathlib.Path(d) / "downsample_summary.csv") as fh:
+                rows = list(csv.DictReader(fh))
+        self.assertEqual(rows[0]["passed"], "False")

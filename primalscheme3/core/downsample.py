@@ -344,11 +344,15 @@ def downsample_cloud(kmer: FKmer | RKmer) -> DownsampleCloud | None:
     ]
     if not rows:
         return None
+    pairs = [(all_seqs[i], all_seqs[j]) for i, j in kmer.dimers()]
+    # A primer that dimerises with itself can't be used (as in the normal
+    # digest): it fails, though still counts towards coverage
+    self_dimers = {a for a, b in pairs if a == b}
     return DownsampleCloud(
         seqs=[seq for seq, _, _ in rows],
         counts=[count for _, count, _ in rows],
-        failed={seq for seq, _, tags in rows if tags},
-        dimers=[(all_seqs[i], all_seqs[j]) for i, j in kmer.dimers()],
+        failed={seq for seq, _, tags in rows if tags or seq in self_dimers},
+        dimers=[(a, b) for a, b in pairs if a != b],
     )
 
 
@@ -366,6 +370,7 @@ def delta_ct_downsample_seqs(
     outdir: str | None = None,
     name: str = "downsample",
     failed_seqs: set[str] | None = None,
+    dimers: list[tuple[str, str]] | None = None,
 ):
     """
     Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
@@ -384,6 +389,12 @@ def delta_ct_downsample_seqs(
             seq: THERMO_RESULT.FAIL if seq in failed_seqs else THERMO_RESULT.PASS
             for seq in seq_counts
         }
+
+    # Sequences that dimerise with each other: never selected together
+    clashes: dict[str, set[str]] = {}
+    for a, b in dimers or []:
+        clashes.setdefault(a, set()).add(b)
+        clashes.setdefault(b, set()).add(a)
 
     valid_edit_dist = []
     for n1, n2 in itertools.combinations(seq_counts.keys(), 2):
@@ -435,10 +446,14 @@ def delta_ct_downsample_seqs(
     # Keep track of deltaCt
     seq_delta_ct: dict[str, None | float] = {s: None for s in seq_thermo_dict.keys()}
 
-    # Add all valid sequences above threshold.
+    # Add all valid sequences above threshold. These must be kept, so if two
+    # of them dimerise the cloud can't be used
+    dimer_conflict = False
     for seq, count in seq_counts.items():
         # Skip failed or already added
         if seq not in failed_seqs and count >= always_add_count:
+            if clashes.get(seq, set()) & added_seqs:
+                dimer_conflict = True
             # Calc dct for neighbors
             s = score_cache[seq]
             seq_delta_ct = update_delta_ct(seq_delta_ct, s)
@@ -458,7 +473,8 @@ def delta_ct_downsample_seqs(
         # Sort the sequences to find the ones with highest count-weighted dCt
         tmp_scores = {}
         for s in ordered_seqs:
-            if s not in possible_seqs:
+            # Skip used or failed seqs, and any that dimerise with one added
+            if s not in possible_seqs or clashes.get(s, set()) & added_seqs:
                 continue
             # Score the primer from cache
             scores = score_cache[s]
@@ -539,7 +555,7 @@ def delta_ct_downsample_seqs(
                     len(added_seqs),
                     all_seqs_count,
                     round(tmp_target_prop, 4),
-                    tmp_target_prop >= config.downsample_target,
+                    not dimer_conflict and tmp_target_prop >= config.downsample_target,
                 ]
             )
 
@@ -564,7 +580,7 @@ def delta_ct_downsample_seqs(
             max_dct=config.downsample_max_dct,
             covered_prop=tmp_target_prop,
         )
-    if tmp_target_prop >= config.downsample_target:
+    if not dimer_conflict and tmp_target_prop >= config.downsample_target:
         return sorted(added_seqs)
     else:
         return None
@@ -779,7 +795,7 @@ def _ds_pool_init(model_path, config):
 
 
 def _ds_pool_worker(task):
-    idx, seqs, counts, failed_seqs = task
+    idx, seqs, counts, failed_seqs, dimers = task
     seq_counts = {s: c for s, c in zip(seqs, counts, strict=True)}
     kept = delta_ct_downsample_seqs(
         seq_counts=seq_counts,
@@ -788,6 +804,7 @@ def _ds_pool_worker(task):
         visualise=False,
         outdir=None,
         failed_seqs=failed_seqs,
+        dimers=dimers,
     )
     return idx, kept
 

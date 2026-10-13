@@ -367,8 +367,10 @@ class MSA:
             r_clouds = [(k, c) for k, c in r_clouds if c is not None]
 
             def rebuild(cloud, new_seqs, kmer_cls, pos):
-                if new_seqs is None or forms_dimer(cloud, new_seqs):
+                if new_seqs is None:
                     return None
+                # The selection avoids dimers; this guards against a regression
+                assert not forms_dimer(cloud, new_seqs), "downsampled cloud dimerises"
                 counts = dict(zip(cloud.seqs, cloud.counts, strict=True))
                 return kmer_cls(
                     [s.encode() for s in new_seqs], pos, [counts[s] for s in new_seqs]
@@ -389,6 +391,7 @@ class MSA:
                             outdir=plot_outdir,
                             name=f"{self._chrom_name}_{prefix}_{pos_of(kmer)}",
                             failed_seqs=cloud.failed,
+                            dimers=cloud.dimers,
                         )
                         kept.append(new_seqs)
                     return kept
@@ -399,10 +402,12 @@ class MSA:
                 from multiprocessing import Pool
 
                 f_tasks = [
-                    (i, c.seqs, c.counts, c.failed) for i, (_, c) in enumerate(f_clouds)
+                    (i, c.seqs, c.counts, c.failed, c.dimers)
+                    for i, (_, c) in enumerate(f_clouds)
                 ]
                 r_tasks = [
-                    (i, c.seqs, c.counts, c.failed) for i, (_, c) in enumerate(r_clouds)
+                    (i, c.seqs, c.counts, c.failed, c.dimers)
+                    for i, (_, c) in enumerate(r_clouds)
                 ]
                 chunk = max(1, (len(f_tasks) + len(r_tasks)) // (config.ncores * 4))
                 with Pool(
