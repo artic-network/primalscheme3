@@ -84,10 +84,7 @@ def schemecreate(
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
         config,
     )
-    logger.info(
-        f"[green]Created[/green]: "
-        f"{OUTPUT_DIR.relative_to(OUTPUT_DIR.parent)}/work/mismatch.db",
-    )
+    logger.info(mismatch_db.describe())
 
     # If the bedfile flag is given add the primers into the scheme
     if input_bedfile is not None:

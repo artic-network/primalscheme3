@@ -92,6 +92,35 @@ class Test_MatchDB(unittest.TestCase):
         self.matchdb_path = "./tests/core/testcase"
         self.config = Config()
 
+    def test_describe_in_memory(self):
+        # The default: no file is written, and the log must not claim one
+        self.config.mismatch_kmersize = 20
+        matchdb = MatchDB(
+            self.matchdb_path, ["tests/core/test_mismatch.fasta"], self.config
+        )
+        self.assertTrue(self.config.in_memory_db)
+        self.assertIsNone(matchdb.path)
+        self.assertIn("in-memory", matchdb.describe())
+        self.assertNotIn(".db", matchdb.describe())
+
+    def test_describe_file(self):
+        import pathlib
+        import tempfile
+
+        self.config.mismatch_kmersize = 20
+        self.config.in_memory_db = False
+        with tempfile.TemporaryDirectory() as d:
+            path = pathlib.Path(d) / "mismatch"
+            matchdb = MatchDB(path, ["tests/core/test_mismatch.fasta"], self.config)
+            self.assertEqual(matchdb.path, str(path))
+            self.assertIn(str(path), matchdb.describe())
+            # dbm writes the file(s) next to the given path
+            self.assertTrue(any(pathlib.Path(d).iterdir()))
+
+    def test_describe_unused(self):
+        matchdb = MatchDB(self.matchdb_path, [], self.config)
+        self.assertEqual(matchdb.describe(), "Mismatch database not used")
+
     def test_matchdb_createdb_file(self):
         """
         This tests the creation of the matchdb and the find_match function

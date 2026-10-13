@@ -119,10 +119,7 @@ def panelcreate(
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
         config,
     )
-    logger.info(
-        f"[green]Created[/green]: "
-        f"{OUTPUT_DIR.relative_to(OUTPUT_DIR.parent)}/work/mismatch.db",
-    )
+    logger.info(mismatch_db.describe())
 
     regions_mapping: dict[Region, str | None] | None = None
     # Read in the region_bedfile if given

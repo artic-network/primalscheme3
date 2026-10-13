@@ -36,6 +36,7 @@
   - mismatch scoring failed when primers differed in length (`.` padding).
 - **Repair mode:** primer pools are sized by the highest pool index, so sparse pool numbering no longer raises an IndexError.
 - **`check_for_end_on_gap`:** guarded against index 0.
+- **Mismatch database log:** `scheme-create` and `panel-create` always logged `Created: …/work/mismatch.db`, though by default the database is held in memory and no file is written. The log now says whether it was built in memory, written to disk (with its path), or not used (`--no-use-matchdb`).
 - **Tm reported for an existing bedfile** (`--bedfile` in `scheme-create` / `panel-create`) was about 4 °C too low, because `PrimerPair.calc_tm` passed the DNA concentration (15) as the dNTP concentration (0.8). This only affected that log message: primer selection always used the correct concentrations. Present since 1.3.1 (the June 2024 Typer refactor).
 
 ### Removed
