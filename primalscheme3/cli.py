@@ -184,21 +184,22 @@ def scheme_create(
     downsample: Annotated[
         bool,
         typer.Option(
-            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
             hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
-            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
             hidden=True,
         ),
     ] = Config.downsample_target,
     primer_scorer_model: Annotated[
         str,
         typer.Option(
-            help="Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
+            help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
+            hidden=True,
         ),
     ] = Config.primer_scorer_model,
 ):
@@ -425,21 +426,22 @@ def panel_create(
     downsample: Annotated[
         bool,
         typer.Option(
-            help="EXPERIMENTAL: Reduce number of primers in a cloud by calculating inter-primercloud annealing",
+            help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
             hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
-            help="EXPERIMENTAL: Ensure X proportion of primers have >= annealing (if using downsampling)",
+            help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
             hidden=True,
         ),
     ] = Config.downsample_target,
     primer_scorer_model: Annotated[
         str,
         typer.Option(
-            help="Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
+            help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
+            hidden=True,
         ),
     ] = Config.primer_scorer_model,
 ):
