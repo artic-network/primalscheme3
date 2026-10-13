@@ -77,6 +77,30 @@ class Test_PrimerPair(unittest.TestCase):
 
         self.assertEqual(primerpair.to_bed(), expected_str)
 
+    def test_calc_tm_uses_config_concentrations(self):
+        # Regression: dntp_conc was given config.dna_conc
+        from primalscheme3.core.config import Config
+        from primalscheme3.core.thermo import calc_tm
+
+        config = Config()
+        seqs = ["GGTATAGTCAATTGCCTAGTCTTCTGTTC", "AGCGTGGTTATTGGATGGGTTTG"]
+        primerpair = PrimerPair(
+            fprimer=FKmer([seqs[0].encode()], 100),
+            rprimer=RKmer([seqs[1].encode()], 500),
+            msa_index=0,
+        )
+        expected = [
+            calc_tm(
+                s,
+                mv_conc=config.mv_conc,
+                dv_conc=config.dv_conc,
+                dntp_conc=config.dntp_conc,
+                dna_conc=config.dna_conc,
+            )
+            for s in seqs
+        ]
+        self.assertEqual(primerpair.calc_tm(config), expected)
+
 
 if __name__ == "__main__":
     unittest.main()
