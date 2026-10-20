@@ -5,8 +5,11 @@ import shutil
 import tempfile
 import unittest
 
+from primalschemers import FKmer, RKmer
+
 from primalscheme3.core.config import Config
 from primalscheme3.repair.repair import (
+    check_side,
     repair,
     report_check,
     required_n_pools,
@@ -140,6 +143,101 @@ def read_reference() -> str:
 
 def bed_seqs(bed: str) -> set[str]:
     return {line.split("\t")[6] for line in bed.splitlines() if line and line[0] != "#"}
+
+
+class _SitePP:
+    """The parts of a PrimerPair check_side reads."""
+
+    amplicon_prefix = "scheme"
+    amplicon_number = 1
+    pool = 0
+
+
+class _SiteKmer:
+    """The parts of a return_all FKmer/RKmer check_side reads."""
+
+    def __init__(self, seqs, counts, statuses, errors=(), kmer_statuses=()):
+        self._seqs, self._counts, self._statuses = seqs, counts, statuses
+        self._errors, self._kmer_statuses = list(errors), list(kmer_statuses)
+
+    def seqs(self):
+        return self._seqs
+
+    def counts(self):
+        return self._counts
+
+    def statuses(self):
+        return self._statuses
+
+    def errors(self):
+        return self._errors
+
+    def kmer_statuses(self):
+        return self._kmer_statuses
+
+
+class TestCheckSide(unittest.TestCase):
+    def setUp(self):
+        self.config = Config()
+        self.logger = logging.getLogger("test_repair.check_side")
+        self.existing = FKmer([LEFT_1.encode()], 51, [10.0])
+        self.pools = [[LEFT_1.encode()]]
+
+    def check(self, msa_pos, kmer_at, existing=None, kmer_cls=FKmer):
+        with self.assertLogs(self.logger, level="INFO") as logs:
+            new = check_side(
+                _SitePP(),
+                "LEFT",
+                msa_pos,
+                kmer_at,
+                existing or self.existing,
+                kmer_cls,
+                self.pools,
+                self.config,
+                self.logger,
+            )
+        return new, "\n".join(logs.output)
+
+    def test_site_not_in_msa(self):
+        for msa_pos, kmer_at in ((None, {}), (51, {})):
+            new, log = self.check(msa_pos, kmer_at)
+            self.assertIs(new, self.existing)
+            self.assertIn("CRITICAL", log)
+            self.assertIn("scheme_1_LEFT: no sequences at this site", log)
+
+    def test_errors_and_dimers_are_reported(self):
+        kmer = _SiteKmer(
+            [LEFT_1],
+            [5.0],
+            [[]],
+            errors=[(["ContainsN"], 2.0)],
+            kmer_statuses=["PrimerDimer"],
+        )
+        new, log = self.check(51, {51: kmer})
+        self.assertIn("ContainsN in 2 genomes", log)
+        self.assertIn("PrimerDimer between the sequences found here", log)
+        self.assertEqual(new.seqs(), self.existing.seqs())
+
+    def test_valid_new_seq_is_added_with_its_count(self):
+        kmer = _SiteKmer(
+            [LEFT_1, PASSING, DIMER_A], [5.0, 3.0, 1.0], [[], [], ["Hairpin"]]
+        )
+        new, log = self.check(51, {51: kmer})
+        self.assertEqual(sorted(new.seqs()), sorted([LEFT_1, PASSING]))
+        self.assertEqual(new.end, 51)
+        counts = dict(zip(new.seqs(), new.counts(), strict=True))
+        self.assertEqual(counts, {LEFT_1: 10.0, PASSING: 3.0})
+        self.assertEqual(self.pools, [[LEFT_1.encode(), PASSING.encode()]])
+        self.assertIn("Hairpin", log)
+
+    def test_rkmer_without_counts(self):
+        existing = RKmer([LEFT_1.encode()], 100)
+        kmer = _SiteKmer([PASSING], [3.0], [[]])
+        new, _ = self.check(100, {100: kmer}, existing=existing, kmer_cls=RKmer)
+        self.assertIsInstance(new, RKmer)
+        self.assertEqual(new.start, 100)
+        self.assertEqual(sorted(new.seqs()), sorted([LEFT_1, PASSING]))
+        self.assertIsNone(new.counts())
 
 
 def snp(seq: str, pos: int) -> str:

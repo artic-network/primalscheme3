@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import networkx as nx
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from primalbedtools.bedfiles import group_amplicons
 from primalbedtools.scheme import Scheme
 from primalschemers import FKmer, RKmer
@@ -49,6 +51,20 @@ def _layout(G):
         seed=42,
         k=SPRING_K / math.sqrt(n),
         iterations=400,
+    )
+
+
+def _legend_dot(edge, lw, label):
+    return Line2D(
+        [0],
+        [0],
+        marker="o",
+        color="none",
+        markerfacecolor="#bbbbbb",
+        markeredgecolor=edge,
+        markeredgewidth=lw,
+        markersize=11,
+        label=label,
     )
 
 
@@ -159,27 +175,11 @@ def visualise_graph(
     ax.set_axis_off()
     ax.margins(0.08)
 
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
-
-    def _dot(edge, lw, label):
-        return Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="none",
-            markerfacecolor="#bbbbbb",
-            markeredgecolor=edge,
-            markeredgewidth=lw,
-            markersize=11,
-            label=label,
-        )
-
     legend_elements = [
         Patch(facecolor=C_PASS, edgecolor="none", label="Thermo pass"),
         Patch(facecolor=C_FAIL, edgecolor="none", label="Thermo fail"),
-        _dot(C_ADDED_EDGE, 2.5, "Selected (added)"),
-        _dot(C_ACC_EDGE, 2.0, "Accounted for"),
+        _legend_dot(C_ADDED_EDGE, 2.5, "Selected (added)"),
+        _legend_dot(C_ACC_EDGE, 2.0, "Accounted for"),
     ]
     if directional:
         legend_elements += [

@@ -44,6 +44,19 @@ def covered_by(seq: str, primer_seqs) -> bool:
     return any(seq.endswith(p) or p.endswith(seq) for p in primer_seqs)
 
 
+def log_seq(
+    level,
+    report_seq: str,
+    count: float,
+    status: NewPrimerStatus,
+    reason: str,
+    colour: str,
+):
+    level(
+        f"{report_seq}\t{round(count, 4)}\t[{colour}]{status.value}[/{colour}]: {reason}"
+    )
+
+
 def report_check(
     seq: str,
     count: float,
@@ -63,35 +76,110 @@ def report_check(
     report_seq = seq.rjust(config.primer_size_max + 5, " ")
     failures = [s for s in statuses if s != LOW_FREQ]
 
-    def log(status: NewPrimerStatus, reason: str, colour: str, level=logger.warning):
-        level(
-            f"{report_seq}\t{round(count, 4)}\t"
-            f"[{colour}]{status.value}[/{colour}]: {reason}"
-        )
-
     # Already covered: an existing primer shares this 3' end (one is a
     # 3'-suffix of the other), i.e. the same site walked to another length
     if covered_by(seq, current_primer_seqs):
-        log(NewPrimerStatus.PRESENT, "In scheme", "blue", logger.info)
+        log_seq(
+            logger.info, report_seq, count, NewPrimerStatus.PRESENT, "In scheme", "blue"
+        )
         return False
 
     # Every check the sequence fails
     if failures:
-        log(NewPrimerStatus.FAILED, ", ".join(failures), "red")
+        log_seq(
+            logger.warning,
+            report_seq,
+            count,
+            NewPrimerStatus.FAILED,
+            ", ".join(failures),
+            "red",
+        )
         return False
 
     # Below min_base_freq
     if LOW_FREQ in statuses:
-        log(NewPrimerStatus.FAILED, "Minor allele", "red")
+        log_seq(
+            logger.warning,
+            report_seq,
+            count,
+            NewPrimerStatus.FAILED,
+            "Minor allele",
+            "red",
+        )
         return False
 
     # Dimer with the primers in its pool
     if do_pool_interact([seq.encode()], seqs_bytes_in_pools[pool], dimerscore):
-        log(NewPrimerStatus.FAILED, "Interaction with pool", "red")
+        log_seq(
+            logger.warning,
+            report_seq,
+            count,
+            NewPrimerStatus.FAILED,
+            "Interaction with pool",
+            "red",
+        )
         return False
 
-    log(NewPrimerStatus.VALID, "Can be added", "green", logger.info)
+    log_seq(
+        logger.info, report_seq, count, NewPrimerStatus.VALID, "Can be added", "green"
+    )
     return True
+
+
+def check_side(
+    pp,
+    side: str,
+    msa_pos: int | None,
+    kmer_at,
+    existing,
+    kmer_cls,
+    seqs_bytes_in_pools: list[list[bytes]],
+    config: Config,
+    logger,
+):
+    """Report every sequence at one primer site; return the primer with
+    the valid new sequences added."""
+    name = f"{pp.amplicon_prefix}_{pp.amplicon_number}_{side}"
+    logger.info(f"Checking {name}")
+    kmer = kmer_at.get(msa_pos) if msa_pos is not None else None
+    if kmer is None:
+        logger.critical(f"{name}: no sequences at this site in the MSA")
+        return existing
+
+    # Genomes with no usable sequence here, and why
+    for tags, count in kmer.errors():
+        logger.warning(f"{name}: {', '.join(tags)} in {count:g} genomes")
+    for status in kmer.kmer_statuses():
+        logger.warning(f"{name}: {status} between the sequences found here")
+
+    current = set(existing.seqs())
+    new_seqs, new_counts = [], []
+    statuses = kmer.statuses() or [[] for _ in kmer.seqs()]
+    for seq, count, tags in zip(kmer.seqs(), kmer.counts(), statuses, strict=True):
+        if report_check(
+            seq=seq,
+            count=count,
+            statuses=tags,
+            current_primer_seqs=current,
+            seqs_bytes_in_pools=seqs_bytes_in_pools,
+            pool=pp.pool,
+            dimerscore=config.dimer_score,
+            logger=logger,
+            config=config,
+        ):
+            new_seqs.append(seq)
+            new_counts.append(count)
+            seqs_bytes_in_pools[pp.pool].append(seq.encode())
+    if not new_seqs:
+        return existing
+
+    # Add the new sequences to the primer
+    old_counts = existing.counts()
+    counts = None if old_counts is None else [*old_counts, *new_counts]
+    pos = existing.end if kmer_cls is FKmer else existing.start
+    return kmer_cls(
+        [*existing.seqs_bytes(), *(s.encode() for s in new_seqs)], pos, counts
+    )
 
 
 def repair(
@@ -215,11 +303,13 @@ def repair(
     # sequence with the checks it fails, rather than only passing primers
     msa_obj.create_digester(local_msa_path, config.ncores, remap=False)
 
-    def site(ref_index) -> int | None:
-        return msa_obj._ref_to_msa.get(ref_index)  # type: ignore
-
-    fp_sites = {pp.fprimer.end: site(pp.fprimer.end) for pp in primerpairs_in_msa}
-    rp_sites = {pp.rprimer.start: site(pp.rprimer.start) for pp in primerpairs_in_msa}
+    ref_to_msa = msa_obj._ref_to_msa
+    fp_sites = {
+        pp.fprimer.end: ref_to_msa.get(pp.fprimer.end) for pp in primerpairs_in_msa
+    }
+    rp_sites = {
+        pp.rprimer.start: ref_to_msa.get(pp.rprimer.start) for pp in primerpairs_in_msa
+    }
     fkmers, rkmers, logs = msa_obj._digester.digest(
         findexes=sorted({i for i in fp_sites.values() if i is not None}),
         rindexes=sorted({i for i in rp_sites.values() if i is not None}),
@@ -232,56 +322,28 @@ def repair(
     fkmer_at = {fk.end: fk for fk in fkmers}
     rkmer_at = {rk.start: rk for rk in rkmers}
 
-    def check_side(pp, side: str, ref_pos: int, kmer_at, existing, kmer_cls):
-        """Report every sequence at one primer site; return the primer with
-        the valid new sequences added."""
-        name = f"{pp.amplicon_prefix}_{pp.amplicon_number}_{side}"
-        logger.info(f"Checking {name}")
-        msa_pos = site(ref_pos)
-        kmer = kmer_at.get(msa_pos) if msa_pos is not None else None
-        if kmer is None:
-            logger.critical(f"{name}: no sequences at this site in the MSA")
-            return existing
-
-        # Genomes with no usable sequence here, and why
-        for tags, count in kmer.errors():
-            logger.warning(f"{name}: {', '.join(tags)} in {count:g} genomes")
-        for status in kmer.kmer_statuses():
-            logger.warning(f"{name}: {status} between the sequences found here")
-
-        current = set(existing.seqs())
-        new_seqs, new_counts = [], []
-        statuses = kmer.statuses() or [[] for _ in kmer.seqs()]
-        for seq, count, tags in zip(kmer.seqs(), kmer.counts(), statuses, strict=True):
-            if report_check(
-                seq=seq,
-                count=count,
-                statuses=tags,
-                current_primer_seqs=current,
-                seqs_bytes_in_pools=seqs_bytes_in_pools,
-                pool=pp.pool,
-                dimerscore=config.dimer_score,
-                logger=logger,
-                config=config,
-            ):
-                new_seqs.append(seq)
-                new_counts.append(count)
-                seqs_bytes_in_pools[pp.pool].append(seq.encode())
-        if not new_seqs:
-            return existing
-
-        # Add the new sequences to the primer
-        old_counts = existing.counts()
-        counts = None if old_counts is None else [*old_counts, *new_counts]
-        pos = existing.end if kmer_cls is FKmer else existing.start
-        return kmer_cls(
-            [*existing.seqs_bytes(), *(s.encode() for s in new_seqs)], pos, counts
-        )
-
     for pp in primerpairs_in_msa:
-        pp.fprimer = check_side(pp, "LEFT", pp.fprimer.end, fkmer_at, pp.fprimer, FKmer)
+        pp.fprimer = check_side(
+            pp,
+            "LEFT",
+            fp_sites[pp.fprimer.end],
+            fkmer_at,
+            pp.fprimer,
+            FKmer,
+            seqs_bytes_in_pools,
+            config,
+            logger,
+        )
         pp.rprimer = check_side(
-            pp, "RIGHT", pp.rprimer.start, rkmer_at, pp.rprimer, RKmer
+            pp,
+            "RIGHT",
+            rp_sites[pp.rprimer.start],
+            rkmer_at,
+            pp.rprimer,
+            RKmer,
+            seqs_bytes_in_pools,
+            config,
+            logger,
         )
 
     # Write out the new bedfile
