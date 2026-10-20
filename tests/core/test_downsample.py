@@ -723,6 +723,14 @@ class TestDownsampleCloud(unittest.TestCase):
         self.assertEqual(cloud.counts, [10.0, 2.0])
         self.assertEqual(cloud.failed, {variant(3)})
 
+    def test_to_long_seq_fails_but_keeps_the_cloud(self):
+        longer = "ACGT" + BASE
+        kmer = FakeReturnAllKmer([BASE, longer], [10.0, 2.0], [[], ["ToLong"]])
+        cloud = ds.downsample_cloud(kmer)
+        self.assertEqual(cloud.seqs, [BASE, longer])
+        self.assertEqual(cloud.failed, {longer})
+        self.assertEqual(cloud.fail_tags, {longer: ["ToLong"]})
+
     def test_untagged_error_drops_the_cloud(self):
         kmer = FakeReturnAllKmer([BASE], [1.0], [[]], errors=[(["ContainsN"], 1.0)])
         self.assertIsNone(ds.downsample_cloud(kmer))

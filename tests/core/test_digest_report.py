@@ -116,6 +116,7 @@ class TestFailureTable(unittest.TestCase):
         # Thermodynamic, interaction and alignment checks in that order
         self.assertLess(text.index("HighAnnealing"), text.index("PrimerDimer"))
         self.assertLess(text.index("PrimerDimer"), text.index("ContainsN"))
+        self.assertLess(text.index("ToLong"), text.index("PrimerDimer"))
 
     def test_nothing_rejected(self):
         text = render(failure_table("chrom", [], 10))
@@ -208,9 +209,9 @@ class TestDownsampleFailure(unittest.TestCase):
         ok = FakeReturnAllKmer([BASE], [1.0], [[]])
         self.assertEqual(ds.cloud_failures(ok), checks())
         n = FakeReturnAllKmer(
-            [BASE], [1.0], [[]], errors=[(["ContainsN"], 1.0), (["ToLong"], 1.0)]
+            [BASE], [1.0], [[]], errors=[(["ContainsN"], 1.0), (["MaxWalk"], 1.0)]
         )
-        self.assertEqual(ds.cloud_failures(n), checks("ContainsN", "ToLong"))
+        self.assertEqual(ds.cloud_failures(n), checks("ContainsN", "MaxWalk"))
         low = FakeReturnAllKmer([BASE], [1.0], [["LowFreq"]])
         self.assertEqual(ds.cloud_failures(low), checks("OnlyLowFreq"))
 

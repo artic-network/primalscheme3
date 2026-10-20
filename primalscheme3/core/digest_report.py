@@ -33,6 +33,7 @@ THERMO_CHECKS = {
     "Homopolymer",
     "Hairpin",
     "Fail",
+    "ToLong",
 }
 INTERACTION_CHECKS = {PRIMER_DIMER}
 
