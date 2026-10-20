@@ -6,6 +6,7 @@ from operator import itemgetter
 
 import numpy as np
 
+from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import PrimerPair
 
 # Module imports
@@ -229,11 +230,19 @@ def generate_data(msa: MSA | PanelMSA, last_pp_added: list[PrimerPair]) -> dict:
     ]
 
     # Remap the included primers to the MSA if they have been mapped to an genome
+    # Any change to the kmers will be prop to pp.
+    # Note: Adding primerpairs in novel ways ie replace mode with its BedPrimerPairs can be fragile
     if msa._mapping_array is not None:
         for fkmer in msa.fkmers:
             fkmer.remap(msa._ref_to_msa[fkmer.end])
         for rkmer in msa.rkmers:
             rkmer.remap(msa._ref_to_msa[rkmer.start])
+
+        # Remap BedPrimerPairs
+        for pp in msa_pp:
+            if isinstance(pp, BedPrimerPair):
+                pp.fprimer.remap(msa._ref_to_msa[pp.fprimer.end])
+                pp.rprimer.remap(msa._ref_to_msa[pp.rprimer.start])
 
     # Write all data to a single json file
     data = dict()

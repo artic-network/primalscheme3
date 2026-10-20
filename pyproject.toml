@@ -1,6 +1,6 @@
 [project]
 name = "primalscheme3"
-version = "3.3.0"
+version = "3.4.0"
 description = "Generation of highly multiplexed primer schemes"
 authors = [{ name = "ChrisKent", email = "chrisgkent@gmail.com" }]
 requires-python = ">=3.11,<3.14"
@@ -15,9 +15,14 @@ dependencies = [
     "typer>=0.16.1,<0.17",
     "dnaio>=1.2.3,<2",
     "matplotlib>=3.10.5,<4",
-    "primalschemers>=0.1.10,<0.2",
+    "primalschemers>=0.1.13,<0.2",
     "numpy>=2.3.0",
     "primalbedtools>=1.0.0",
+    "scipy>=1.17.1",
+    # Primer scorer model: pinned to the minor version it was saved with
+    "scikit-learn>=1.8,<1.9",
+    "joblib>=1.5.3",
+    "threadpoolctl>=3.1",
 ]
 
 [project.urls]
@@ -25,6 +30,7 @@ Repository = "https://github.com/artic-network/primalscheme3"
 
 [project.scripts]
 primalscheme3 = "primalscheme3.cli:app"
+ps3 = "primalscheme3.cli:app"
 
 [dependency-groups]
 dev = [
@@ -34,6 +40,11 @@ dev = [
     "pre-commit>=4.0.1,<5",
     "pytest-xdist>=3.6.1,<4",
     "coverage>=7.8.0,<8",
+]
+# Training primer scorer models (scripts/train_primer_scorer.py)
+train = [
+    "pandas>=3.0.1",
+    "pyarrow>=23.0.1",
 ]
 docs = [
     "mkdocs-material>=9.5.27,<10",

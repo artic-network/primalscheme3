@@ -152,3 +152,14 @@ def entropy_score_array(msa: np.ndarray) -> list[float]:
 
         score_array[col] = calc_entropy(proportions)
     return score_array
+
+
+def primer_edit_dist(seq1, seq2) -> int:
+    """
+    Edit distance for 3' variable length primers
+    """
+    mm = 0
+    for b1, b2 in zip(seq1[::-1], seq2[::-1], strict=False):
+        if b1 != b2:
+            mm += 1
+    return mm

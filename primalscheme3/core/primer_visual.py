@@ -16,8 +16,14 @@ from primalscheme3.core.mapping import (
     fix_end_on_gap,
     ref_index_to_msa,
 )
-from primalscheme3.core.seq_functions import extend_ambiguous_base, reverse_complement
+from primalscheme3.core.primerscorer import PrimerScorer
+from primalscheme3.core.seq_functions import (
+    expand_ambs,
+    extend_ambiguous_base,
+    reverse_complement,
+)
 from primalscheme3.core.thermo import calc_annealing_profile
+from primalscheme3.models import ModelNotFound
 
 
 class PlotlyText:
@@ -295,12 +301,17 @@ def primer_mismatch_heatmap(
         hovertemplatestr = ""
 
     # Create the heatmap
+    # zmin/zmax fix the colour axis so the Viridis scale is always anchored:
+    # 0 mismatches (perfect match) maps to the dark-purple end,
+    # 10 mismatches maps to the yellow end, regardless of actual data range.
     fig = go.Figure(
         data=go.Heatmap(
             z=scoremap,
             x=list(basename_to_line.keys()),
             y=[x for x in seqdict.keys()],
             colorscale="Viridis",
+            zmin=0,
+            zmax=6,
             text=textmap if include_seqs else None,  # only show text if not minimal
             hovertemplate=hovertemplatestr,
             xgap=0.1,
@@ -312,7 +323,6 @@ def primer_mismatch_heatmap(
         font=dict(family="Courier New, monospace"),
         hoverlabel=dict(font_family="Courier New, monospace"),
         title_text=f"Primer Mismatches: {list(primary_ref)[0]}",
-        coloraxis=dict(cmax=10, cmin=0),
     )
     fig.update_yaxes(autorange="reversed")
 
@@ -329,7 +339,226 @@ def primer_mismatch_heatmap(
     )
 
     return fig.to_html(
-        include_plotlyjs=True if offline_plots else "cdn", full_html=False
+        include_plotlyjs=True if offline_plots else "cdn", full_html=True
+    )
+
+
+def primer_dct_heatmap(
+    array: np.ndarray,
+    seqdict: dict,
+    bedfile: pathlib.Path,
+    config: Config,
+    include_seqs: bool = True,
+    offline_plots: bool = True,
+    mapping: MappingType = MappingType.FIRST,
+) -> str:
+    """
+    Create a heatmap of primer mismatch penalty (DCT) in an MSA.
+    :param array: The MSA array.
+    :param seqdict: The sequence dictionary.
+    :param bedfile: The bedfile of primers.
+    :param config: The configuration object.
+    :param include_seqs: Reduces plot size by removing hovertext.
+    :raises: click.UsageError
+    """
+    # Read in the bedfile
+
+    _header, bedlines = BedLineParser.from_file(bedfile)
+
+    # Find the mapping genome
+    bed_chrom_names = {bedline.chrom for bedline in bedlines}
+
+    # Reference genome
+    primary_ref = bed_chrom_names.intersection(seqdict.keys())
+
+    if len(primary_ref) == 0:
+        # Try to fix a common issue with Jalview
+        parsed_seqdict = {"_".join(k.split("/")): v for k, v in seqdict.items()}
+        primary_ref = bed_chrom_names.intersection(parsed_seqdict.keys())
+        seqdict = parsed_seqdict
+
+    # handle errors if mapping is set to first
+    if len(primary_ref) == 0 and mapping == MappingType.FIRST:
+        raise UsageError(
+            f"Primer chrom names ({', '.join(bed_chrom_names)}) not found in MSA ({', '.join(seqdict.keys())})"
+        )
+    # If consensus mapping ensure only one chrom in bedfile
+    elif mapping == MappingType.CONSENSUS:
+        primary_ref = ["Consensus"]
+        if len(bed_chrom_names) > 1:
+            raise UsageError(
+                f"Primer chrom names ({', '.join(bed_chrom_names)}) not found in MSA ({', '.join(seqdict.keys())})"
+            )
+    else:  # mapping == MappingType.FIRST & len(primary_ref) > 0
+        # Filter the bedlines for only the reference genome
+        bedlines = [bedline for bedline in bedlines if bedline.chrom in primary_ref]
+
+    kmers_names = [bedline.primername for bedline in bedlines]
+
+    # Create mapping array
+    # Find index of primary ref
+    if mapping == MappingType.FIRST:
+        mapping_index = [
+            i for i, (k, v) in enumerate(seqdict.items()) if k in primary_ref
+        ][0]
+        mapping_array, array = create_mapping(array, mapping_index)
+    else:
+        mapping_array = np.array([x for x in range(array.shape[1])])
+
+    ref_index_to_msa_dict = ref_index_to_msa(mapping_array)
+
+    # Group Primers by basename
+    basename_to_line: dict[str, set[BedLine]] = {
+        "_".join(name.split("_")[:-1]): set() for name in kmers_names
+    }
+    for bedline in bedlines:
+        basename = "_".join(bedline.primername.split("_")[:-1])
+        basename_to_line[basename].add(bedline)
+
+    basename_to_index = {bn: i for i, bn in enumerate(basename_to_line.keys())}
+
+    seq_to_primername = {line.sequence: line.primername for line in bedlines}
+
+    # Create the scoremap
+    scoremap = np.empty((array.shape[0], len(basename_to_line)))
+    scoremap.fill(np.nan)
+    textmap = np.empty((array.shape[0], len(basename_to_line)), dtype="O")
+    textmap.fill("None")
+    textmap = textmap.tolist()
+
+    # Instantiate PrimerScorer
+    try:
+        ps = PrimerScorer(config.primer_scorer_model)
+    except ModelNotFound as e:
+        raise UsageError(str(e)) from e
+
+    # get FPrimer sequences for each basename
+    for bn, lines in basename_to_line.items():
+        # Get primer size
+        primer_len_max = max(len(line.sequence) for line in lines)
+
+        # Set the direction
+        if "LEFT" in bn:
+            forward = True
+            primer_end = list(lines)[0].end
+            # Check for the end on a gap edge case and fix it
+            if check_for_end_on_gap(ref_index_to_msa_dict, primer_end):
+                msa_index = fix_end_on_gap(ref_index_to_msa_dict, primer_end)
+            else:
+                msa_index = ref_index_to_msa_dict[list(lines)[0].end]
+        else:
+            forward = False
+            msa_index = ref_index_to_msa_dict[list(lines)[0].start]
+
+        # Get the primer sequences
+        msa_data = get_primers_from_msa(array, msa_index, forward, primer_len_max)
+
+        # Get the score for each genome
+        primer_seqs = {line.sequence for line in lines}
+
+        # Expand all primer seqs into discrete sequences
+        expanded_primer_seqs = set()
+        for p_seq in primer_seqs:
+            expanded = expand_ambs([p_seq])
+            if expanded:
+                expanded_primer_seqs.update(expanded)
+            else:
+                expanded_primer_seqs.add(p_seq)
+
+        for genome_index, genome_seq in msa_data.items():
+            # Caused by gaps in the msa
+            if genome_seq is None:
+                if forward:
+                    slice_data = array[
+                        genome_index, msa_index - primer_len_max : msa_index
+                    ]
+                    slice_data[slice_data == ""] = "-"
+                    genome_seq_gap = "".join(slice_data)
+                else:
+                    slice_data = array[
+                        genome_index, msa_index : msa_index + primer_len_max
+                    ]
+                    slice_data[slice_data == ""] = "-"
+                    genome_seq_gap = reverse_complement("".join(slice_data))
+
+                textmap[genome_index][basename_to_index[bn]] = PlotlyText(
+                    primer_seq=list(expanded_primer_seqs)[0],
+                    genome_seq=genome_seq_gap,
+                    primer_name=bn,
+                ).format_str()
+                continue
+
+            # Calculate DCT for all expanded primers and pick the most positive
+            scores = []
+            for exp_p in expanded_primer_seqs:
+                dct = ps.score_seq(genome_seq, exp_p, config)
+                if dct is not None:
+                    scores.append((dct, exp_p))
+
+            if not scores:
+                # No expanded primer has 0 or 1 mismatch
+                scoremap[genome_index, basename_to_index[bn]] = np.nan
+                textmap[genome_index][basename_to_index[bn]] = PlotlyText(
+                    primer_seq=list(expanded_primer_seqs)[0],
+                    genome_seq=genome_seq,
+                    primer_name=seq_to_primername.get(
+                        list(expanded_primer_seqs)[0], bn
+                    ),
+                ).format_str()
+                continue
+
+            # Find the one with the most positive dct
+            max_dct, best_p = max(scores, key=lambda x: x[0])
+
+            scoremap[genome_index, basename_to_index[bn]] = max_dct
+            textmap[genome_index][basename_to_index[bn]] = PlotlyText(
+                primer_seq=best_p,
+                genome_seq=genome_seq,
+                primer_name=seq_to_primername.get(best_p, bn),
+            ).format_str()
+
+    # Hovertemplate string
+    if include_seqs:
+        hovertemplatestr = "%{text}<br>" + "<b>DCT penalty: %{z:.3f}</b>"
+    else:
+        hovertemplatestr = "<b>DCT penalty: %{z:.3f}</b>"
+
+    # Create the heatmap
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=scoremap,
+            x=list(basename_to_line.keys()),
+            y=[x for x in seqdict.keys()],
+            colorscale="Viridis",
+            text=textmap if include_seqs else None,  # only show text if not minimal
+            hovertemplate=hovertemplatestr,
+            xgap=0.1,
+            ygap=0.1,
+            name="Primer DCT Penalty",
+        )
+    )
+    fig.update_layout(
+        font=dict(family="Courier New, monospace"),
+        hoverlabel=dict(font_family="Courier New, monospace"),
+        title_text=f"Primer DCT Penalty: {list(primary_ref)[0]}",
+        coloraxis=dict(cmax=0, cmin=-5),
+    )
+    fig.update_yaxes(autorange="reversed")
+
+    # Remove unnecessary plot elements
+    fig.update_layout(
+        modebar_remove=[
+            "select2d",
+            "lasso2d",
+            "select",
+            "autoScale2d",
+            "zoom",
+            "toImage",
+        ]
+    )
+
+    return fig.to_html(
+        include_plotlyjs=True if offline_plots else "cdn", full_html=True
     )
 
 
@@ -498,7 +727,7 @@ def bedfile_plot_html(
 
     # Write a html version of the plot
     return fig.to_html(
-        include_plotlyjs=True if offline_plots else "cdn", full_html=False
+        include_plotlyjs=True if offline_plots else "cdn", full_html=True
     )
 
 
@@ -553,5 +782,5 @@ def plot_primer_thermo_profile_html(
     )
     fig.update_layout(showlegend=False)
     return fig.to_html(
-        include_plotlyjs=True if offline_plots else "cdn", full_html=False
+        include_plotlyjs=True if offline_plots else "cdn", full_html=True
     )
