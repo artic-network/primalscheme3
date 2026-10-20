@@ -1,3 +1,18 @@
+import logging
+
+from rich.console import Console, ConsoleRenderable
+from rich.logging import RichHandler
+
+
+class Handler(RichHandler):
+    """Also logs Rich renderables (e.g. a Table) as themselves."""
+
+    def render_message(self, record, message):
+        if isinstance(record.msg, ConsoleRenderable):
+            return record.msg
+        return super().render_message(record, message)
+
+
 def setup_rich_logger(logfile: str | None = None):
     """
     A logger writing INFO to the console and, if ``logfile`` is given, DEBUG
@@ -5,11 +20,6 @@ def setup_rich_logger(logfile: str | None = None):
     logging.basicConfig, which only takes effect once per process, so every
     run (e.g. several in one Python session) writes its own log file.
     """
-    import logging
-
-    from rich.console import Console
-    from rich.logging import RichHandler
-
     log = logging.getLogger(f"rich-{hash(logfile)}")
     log.setLevel(logging.DEBUG)
     # Replace the handlers of an earlier run with the same logfile
@@ -17,11 +27,11 @@ def setup_rich_logger(logfile: str | None = None):
         log.removeHandler(handler)
         handler.close()
 
-    handlers = [RichHandler(level=logging.INFO, markup=True, show_path=False)]
+    handlers = [Handler(level=logging.INFO, markup=True, show_path=False)]
     # Add an optional file handler
     if logfile is not None:
         handlers.append(
-            RichHandler(
+            Handler(
                 level=logging.DEBUG,
                 console=Console(file=open(logfile, "w")),
                 markup=True,

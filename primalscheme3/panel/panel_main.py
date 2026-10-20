@@ -273,12 +273,6 @@ def panelcreate(
                     indexes=None,
                 )
 
-        # Log the digestion
-        logger.info(
-            f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
-            f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
-            f"[green]{len(msa_obj.rkmers)}[/green] RKmers"
-        )
         if len(msa_obj.fkmers) == 0 or len(msa_obj.rkmers) == 0:
             logger.critical(
                 f"No valid FKmers or RKmers found for [blue]{msa_obj._chrom_name}[/blue]"

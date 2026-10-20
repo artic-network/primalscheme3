@@ -389,12 +389,13 @@ class TestDownsampleWithBundledModel(unittest.TestCase):
         seqs = [BASE, variant(1), variant(15)]
         counts = [20.0, 5.0, 1.0]
         ds._ds_pool_init(DEFAULT_MODEL, self.config)
-        idx, kept = ds._ds_pool_worker((7, seqs, counts, None, None))
+        cloud = ds.DownsampleCloud(seqs, counts, failed=None, dimers=[])
+        idx, result = ds._ds_pool_worker((7, cloud))
         self.assertEqual(idx, 7)
         direct = ds.delta_ct_downsample_seqs(
             dict(zip(seqs, counts, strict=True)), self.config, self.ps
         )
-        self.assertEqual(kept, direct)
+        self.assertEqual(result.kept, direct)
 
 
 class TestAnnealingDownsample(unittest.TestCase):
@@ -680,6 +681,33 @@ class FakeReturnAllKmer:
 
     def dimers(self):
         return self._dimers
+
+
+class TestDownsampledKmer(unittest.TestCase):
+    def setUp(self):
+        self.cloud = ds.DownsampleCloud(
+            seqs=[BASE, variant(3), variant(5)],
+            counts=[10.0, 2.0, 1.0],
+            failed=set(),
+            dimers=[(variant(3), variant(5))],
+        )
+
+    def test_kept_seqs_keep_their_counts(self):
+        k = ds.downsampled_kmer(self.cloud, [variant(5), BASE], FKmer, 120)
+        self.assertIsInstance(k, FKmer)
+        self.assertEqual(k.end, 120)
+        counts = dict(zip(k.seqs(), k.counts(), strict=True))
+        self.assertEqual(counts, {BASE: 10.0, variant(5): 1.0})
+
+    def test_rkmer_position(self):
+        k = ds.downsampled_kmer(self.cloud, [variant(3)], RKmer, 80)
+        self.assertIsInstance(k, RKmer)
+        self.assertEqual(k.start, 80)
+        self.assertEqual(k.counts(), [2.0])
+
+    def test_kept_dimer_pair_raises(self):
+        with self.assertRaises(AssertionError):
+            ds.downsampled_kmer(self.cloud, [variant(3), variant(5)], FKmer, 120)
 
 
 class TestDownsampleCloud(unittest.TestCase):

@@ -145,11 +145,6 @@ def schemecreate(
     for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
         msa_obj.digest_rs(config, None)  # Default to one core
-        logger.info(
-            f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
-            f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
-            f"[green]{len(msa_obj.rkmers)}[/green] RKmers"
-        )
 
         # Add the msa to the scheme
         msa_dict[msa_index] = msa_obj

@@ -16,12 +16,14 @@ from primalschemers import (
 
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import IUPAC_ALL_ALLOWED_DNA, Config, MappingType
+from primalscheme3.core.digest_report import LOW_FREQ, failure_table, site_failures
 from primalscheme3.core.downsample import (
     _ds_pool_init,
     _ds_pool_worker,
-    delta_ct_downsample_seqs,
+    cloud_failures,
     downsample_cloud,
-    forms_dimer,
+    downsample_clouds,
+    downsampled_kmer,
 )
 from primalscheme3.core.errors import (
     MSAFileInvalid,
@@ -170,6 +172,22 @@ def generate_valid_primerpairs(
 
     checked_pp.sort(key=lambda pp: (pp.fprimer.end, -pp.rprimer.start))
     return checked_pp
+
+
+def without_low_freq(kmer: FKmer | RKmer) -> FKmer | RKmer:
+    """A return_all kmer as a normal digest returns it: without its
+    sequences below min_base_freq."""
+    statuses = kmer.statuses() or [[] for _ in kmer.seqs()]
+    rows = [
+        (seq.encode(), count)
+        for seq, count, tags in zip(kmer.seqs(), kmer.counts(), statuses, strict=True)
+        if LOW_FREQ not in tags
+    ]
+    seqs = [seq for seq, _ in rows]
+    counts = [count for _, count in rows]
+    if isinstance(kmer, FKmer):
+        return FKmer(seqs, kmer.end, counts)
+    return RKmer(seqs, kmer.start, counts)
 
 
 def digest_kwargs(config: Config) -> dict:
@@ -324,21 +342,32 @@ class MSA:
             indexes: tuple[None, None] = (None, None)
 
         # Downsampling needs every primer in each cloud, failing ones too, with
-        # the Rust checks' verdict on each: return_all gives them with statuses
+        # the Rust checks' verdict on each
         if config.downsample:
             rs_thermo = True
 
+        # Always return_all: the statuses say why each failing site fails
         self.fkmers, self.rkmers, logs = self._digester.digest(
             findexes=indexes[0],
             rindexes=indexes[1],
             thermo_check=rs_thermo,
-            return_all=config.downsample,
+            return_all=True,
             **digest_kwargs(config),
         )
         # Log
         if self.logger:
             for s in logs:
                 self.logger.debug(s)
+        n_sites = len(self.fkmers) + len(self.rkmers)
+        rejected: list[frozenset[str]] = []
+
+        if not config.downsample:
+            # The sites a normal digest keeps, as a normal digest returns them
+            rejected.extend(
+                site_failures(k) for k in self.fkmers + self.rkmers if not k.passed()
+            )
+            self.fkmers = [without_low_freq(k) for k in self.fkmers if k.passed()]
+            self.rkmers = [without_low_freq(k) for k in self.rkmers if k.passed()]
 
         # Start the downsample
         if config.downsample:
@@ -363,52 +392,36 @@ class MSA:
             # their counts, which fail the Rust checks, and dimer pairs
             f_clouds = [(k, downsample_cloud(k)) for k in self.fkmers]
             r_clouds = [(k, downsample_cloud(k)) for k in self.rkmers]
+            rejected.extend(
+                cloud_failures(k) for k, c in f_clouds + r_clouds if c is None
+            )
             f_clouds = [(k, c) for k, c in f_clouds if c is not None]
             r_clouds = [(k, c) for k, c in r_clouds if c is not None]
-
-            def rebuild(cloud, new_seqs, kmer_cls, pos):
-                if new_seqs is None:
-                    return None
-                # The selection avoids dimers; this guards against a regression
-                assert not forms_dimer(cloud, new_seqs), "downsampled cloud dimerises"
-                counts = dict(zip(cloud.seqs, cloud.counts, strict=True))
-                return kmer_cls(
-                    [s.encode() for s in new_seqs], pos, [counts[s] for s in new_seqs]
-                )
 
             # Plotting writes SVGs via matplotlib and does not parallelise cleanly,
             # so the plot/debug path stays serial. ncores <= 1 also runs serially.
             if config.downsample_plot or config.ncores <= 1:
-
-                def run(clouds, label, prefix, pos_of):
-                    kept = []
-                    for kmer, cloud in tqdm.tqdm(clouds, desc=label):
-                        new_seqs = delta_ct_downsample_seqs(
-                            seq_counts=dict(zip(cloud.seqs, cloud.counts, strict=True)),
-                            config=config,
-                            ps=loaded,
-                            visualise=config.downsample_plot and len(cloud.seqs) > 1,
-                            outdir=plot_outdir,
-                            name=f"{self._chrom_name}_{prefix}_{pos_of(kmer)}",
-                            failed_seqs=cloud.failed,
-                            dimers=cloud.dimers,
-                        )
-                        kept.append(new_seqs)
-                    return kept
-
-                f_res = run(f_clouds, "downsampling FPrimers", "F", lambda k: k.end)
-                r_res = run(r_clouds, "downsampling RPrimers", "R", lambda k: k.start)
+                f_res = downsample_clouds(
+                    [c for _, c in f_clouds],
+                    [f"{self._chrom_name}_F_{k.end}" for k, _ in f_clouds],
+                    config,
+                    loaded,
+                    plot_outdir,
+                    "downsampling FPrimers",
+                )
+                r_res = downsample_clouds(
+                    [c for _, c in r_clouds],
+                    [f"{self._chrom_name}_R_{k.start}" for k, _ in r_clouds],
+                    config,
+                    loaded,
+                    plot_outdir,
+                    "downsampling RPrimers",
+                )
             else:
                 from multiprocessing import Pool
 
-                f_tasks = [
-                    (i, c.seqs, c.counts, c.failed, c.dimers)
-                    for i, (_, c) in enumerate(f_clouds)
-                ]
-                r_tasks = [
-                    (i, c.seqs, c.counts, c.failed, c.dimers)
-                    for i, (_, c) in enumerate(r_clouds)
-                ]
+                f_tasks = [(i, c) for i, (_, c) in enumerate(f_clouds)]
+                r_tasks = [(i, c) for i, (_, c) in enumerate(r_clouds)]
                 chunk = max(1, (len(f_tasks) + len(r_tasks)) // (config.ncores * 4))
                 with Pool(
                     config.ncores,
@@ -436,16 +449,30 @@ class MSA:
                 f_res = [kept for _, kept in sorted(f_out, key=lambda x: x[0])]
                 r_res = [kept for _, kept in sorted(r_out, key=lambda x: x[0])]
 
-            new_fkmers = [
-                rebuild(c, kept, FKmer, k.end)
-                for (k, c), kept in zip(f_clouds, f_res, strict=True)
+            rejected.extend(res.failures for res in f_res + r_res if res.kept is None)
+            self.fkmers = [
+                downsampled_kmer(c, res.kept, FKmer, k.end)
+                for (k, c), res in zip(f_clouds, f_res, strict=True)
+                if res.kept is not None
             ]
-            new_rkmers = [
-                rebuild(c, kept, RKmer, k.start)
-                for (k, c), kept in zip(r_clouds, r_res, strict=True)
+            self.rkmers = [
+                downsampled_kmer(c, res.kept, RKmer, k.start)
+                for (k, c), res in zip(r_clouds, r_res, strict=True)
+                if res.kept is not None
             ]
-            self.fkmers = [k for k in new_fkmers if k is not None]
-            self.rkmers = [k for k in new_rkmers if k is not None]
+
+        if self.logger:
+            stage = " after downsampling" if config.downsample else ""
+            self.logger.info(
+                failure_table(
+                    self._chrom_name,
+                    rejected,
+                    n_sites,
+                    caption=f"Usable{stage}: {len(self.fkmers):,} forward, "
+                    f"{len(self.rkmers):,} reverse. A site can fail several "
+                    "checks; Only failure: sites failing just this one",
+                )
+            )
 
         # The Rust thermo check includes the hairpin check (and downsampling
         # uses it), so the Python filter is only for unchecked digests
