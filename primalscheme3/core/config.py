@@ -71,7 +71,7 @@ class Config:
     primer_tm_max: float = 62.5
     primer_annealing_tempc = 65
     primer_annealing_prop: float | None = None
-    primer_annealing_diff: float = 5
+    primer_annealing_diff: float = 8.0
     _primer_annealing_prop_default: float = 30.0
     use_annealing: bool = False
 
