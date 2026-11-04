@@ -33,7 +33,7 @@ def setup_rich_logger(logfile: str | None = None):
         handlers.append(
             Handler(
                 level=logging.DEBUG,
-                console=Console(file=open(logfile, "w")),
+                console=Console(file=open(logfile, "w"), force_terminal=False),
                 markup=True,
                 show_path=False,
                 omit_repeated_times=False,
