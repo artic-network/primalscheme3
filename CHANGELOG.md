@@ -23,6 +23,7 @@ The move to primalschemers 0.3: thermodynamics, the digest's checks and the misp
 
 - **Python 3.14 is supported** (`requires-python >=3.11,<3.15`) and tested in CI. Now possible with primer3-py removed.
 - **joblib ≥ 1.6 is required.** Earlier versions emit thousands of NumPy 2.5 deprecation warnings when loading the primer scorer model (on Python 3.14, which uses NumPy 2.5), and a future NumPy could stop them loading it.
+- **Typer 0.27 is required** (`>=0.27.3,<0.28`). Typer no longer depends on Click, so neither does primalscheme3: user errors are raised as primalscheme3's own `UsageError` (`core/errors.py`), shown as `Error: …` as before.
 
 ### Fixed
 - The mispriming check never fired: `mismatch_product_size` defaulted to 0 (since 3.1.0), and no distance is between 0 and 0. It now defaults to `amplicon_size_max`.
@@ -33,6 +34,8 @@ The move to primalschemers 0.3: thermodynamics, the digest's checks and the misp
 - Primers no longer exceed `primer_size_max`: primalschemers 0.3.1 fixes the digest returning primers one base over it.
 - `repair-mode` now adds the valid new primers to `primer.bed` (they were reported but never written), and its `config.json` keeps the new MSA's `msa_data` entry.
 - `work/file.log` is written by every run, not only the first in a Python process.
+- `python -m primalscheme3` failed with an `ImportError` (since the move to Typer).
+- `uv sync` on Python 3.14 no longer builds `isal` from source (which needs `nasm`): dnaio, isal, zlib-ng, markupsafe and pyyaml are locked to versions with 3.14 wheels.
 
 ### Removed
 - The on-disk dbm mismatch database and the `in_memory_db` and unused `editdist_max` config fields. `MatchDB` now takes `(msa_paths, background_paths, config)`.
