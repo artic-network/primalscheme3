@@ -4,16 +4,16 @@
 
 ## Overview
 
-At a variable primer site the genomes don't all share one sequence, so each site has a **primer cloud**: every sequence the genomes have there, with how many genomes have each one. Without downsampling, primalscheme3 orders the whole cloud (every sequence above `--min-base-freq`), and rejects the site if any one of those sequences fails a check (Tm, GC, hairpin, homopolymer, or a dimer within the cloud).
+A **primer cloud** is the set of primers covering the diversity at one binding site: one primer for each sequence the genomes have there. On diverse targets, clouds grow with the diversity. 
 
-This has two costs on diverse targets:
+Without downsampling, clouds are trimmed with `--min-base-freq`: sequences rarer than the threshold are dropped. Frequency can't tell two kinds of variant apart:
 
-- **Many primers.** Clouds grow with the number of variants, and every primer is ordered and added to the pool.
-- **Lost sites.** One rare variant with a hairpin is enough to lose a site that is otherwise well conserved.
+- a variant one **tolerable** mismatch from a kept primer, which that primer still amplifies, so it doesn't need a primer of its own;
+- a variant with a **discriminating** mismatch, which needs its own primer however rare it is.
 
-Downsampling relies on a primer still amplifying a template it has a single mismatch with, just a little later. For each cloud it keeps the **smallest useful set of primers** that still amplifies `--downsample-target` of the genomes (99% by default) within `--downsample-max-dct` cycles of a perfect match (−2.0 by default). A primer scorer model predicts the delay (ΔCt) a mismatch causes. See [Primer scorer models](primer-scorer-models.md).
+So a frequency filter keeps common primers that are redundant, and drops rare ones that matter.
 
-So a rare variant one base away from a common primer doesn't need a primer of its own, and a variant that fails a check no longer rejects the site, as long as another primer covers its genomes.
+Downsampling replaces the frequency threshold with a coverage rule. A model predicts how much each single mismatch delays amplification (ΔCt). For each cloud, downsampling keeps the smallest set of primers that amplifies `--downsample-target` of the genomes (99% by default) within `--downsample-max-dct` (−2.0 by default) of a perfect match.
 
 ## The ΔCt model
 
