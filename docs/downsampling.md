@@ -15,6 +15,16 @@ Downsampling relies on a primer still amplifying a template it has a single mism
 
 So a rare variant one base away from a common primer doesn't need a primer of its own, and a variant that fails a check no longer rejects the site, as long as another primer covers its genomes.
 
+## The ΔCt model
+
+- **Measured, not assumed.** The model was fitted to qPCR measurements of 270 single-mismatch primers (SARS-CoV-2 targets, Q5 polymerase), each compared with its perfectly matched primer on the same plate.
+- **What it uses.** The prediction comes from the stability of the primer beyond the mismatch, how far the mismatch is from the 3′ end, the substitution, and its 3′ neighbour. For Q5, the mismatch's position and its downstream context matter more than how much it weakens binding.
+- **Yes or no at −2.** A ΔCt of −2 is about a 4-fold drop in yield. The prediction is only used to decide whether a primer covers a template or not. It isn't used to rank primers.
+- **Accuracy.** Predictions are typically within about 1.4 cycles of the measured value. As a yes/no call at −2 the model is reliable (ROC AUC 0.93).
+- **Cautious by design.** A mismatch outside the range the model was trained on gets no prediction, so it doesn't count as covered. Predictions from several primers aren't added together. Both rules make it keep more primers rather than fewer.
+
+See [Primer scorer models](primer-scorer-models.md) for how the model is built and bundled.
+
 ## How a cloud is downsampled
 
 ### 1. The cloud
