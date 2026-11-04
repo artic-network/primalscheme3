@@ -86,10 +86,9 @@ def replace(
         # else default is -1
 
     if correct_msa_bpp == 0:
-        logger.critical(
+        raise UsageError(
             f"Chroms found in bedfile ({', '.join([c for c in chroms if c is not None])}) do not match MSA chromname ({msa._chrom_name})."
         )
-        exit()
 
     bedprimerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
 
@@ -256,7 +255,7 @@ def replace(
             for i, pp in enumerate(valid_pp, 1):
                 outfile.write(f"# PrimerPair Option: {i}\n")
                 outfile.write(pp.to_bed())
-        exit()
+        return
 
     multiplex.add_primer_pair_to_pool(
         valid_pp[0], valid_pp[0].pool, valid_pp[0].msa_index
