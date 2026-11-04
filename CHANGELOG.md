@@ -35,6 +35,7 @@ The move to primalschemers 0.3: thermodynamics, the digest's checks and the misp
 - `repair-mode` now adds the valid new primers to `primer.bed` (they were reported but never written), and its `config.json` keeps the new MSA's `msa_data` entry.
 - `work/file.log` is written by every run, not only the first in a Python process.
 - `python -m primalscheme3` failed with an `ImportError` (since the move to Typer).
+- `replace-primerpair`: a bedfile whose chroms don't match the MSA now fails with an error (exit code 2); it logged and exited 0. `--mode listall` returns instead of calling `exit()`.
 - `uv sync` on Python 3.14 no longer builds `isal` from source (which needs `nasm`): dnaio, isal, zlib-ng, markupsafe and pyyaml are locked to versions with 3.14 wheels.
 
 ### Removed
