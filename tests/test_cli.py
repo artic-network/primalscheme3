@@ -1,4 +1,5 @@
 import pathlib
+import re
 import tempfile
 import unittest
 from unittest import mock
@@ -6,6 +7,8 @@ from unittest import mock
 from typer.testing import CliRunner
 
 from primalscheme3.cli import app
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 MSA = "tests/core/test_mismatch.fasta"
 
@@ -28,7 +31,7 @@ class TestDownsampleOptions(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, result.output)
             for option in ("--downsample", *DOWNSAMPLE_ARGS):
                 with self.subTest(command=command, option=option):
-                    self.assertIn(option, result.output)
+                    self.assertIn(option, ANSI.sub("", result.output))
 
     def test_passed_to_config(self):
         args = ["--downsample"]
