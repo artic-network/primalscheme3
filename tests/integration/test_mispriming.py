@@ -77,6 +77,10 @@ class TestBackgroundScreening(unittest.TestCase):
             written = json.loads((d / "screened" / "config.json").read_text())
             self.assertEqual(written["background_genomes"], [str(background)])
             self.assertIn(str(background), written["background_data"])
+            checks = written["pair_checks"]
+            self.assertGreater(checks["OK"], 0)
+            self.assertGreater(checks["MISPRIMING"], 0)
+            self.assertIn("background.fasta", checks["mispriming_references"])
 
 
 if __name__ == "__main__":

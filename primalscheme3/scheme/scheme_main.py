@@ -293,6 +293,10 @@ def schemecreate(
         scheme_pt.manual_update(n=scheme_pt.total)
         scheme_pt.close()
 
+    for table in scheme.check_tables():
+        logger.info(table)
+    cfg_dict["pair_checks"] = scheme.check_summary()
+
     # Create the progress tracker for the final steps
     logger.info("Writing output files")
     upload_steps = 8

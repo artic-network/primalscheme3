@@ -1,8 +1,12 @@
+from collections import Counter
 from enum import Enum
 
 import numpy as np
 from primalbedtools.scheme import Scheme
 from primalschemers import PoolHits, do_pool_interact  # type: ignore
+from rich import box
+from rich.bar import Bar
+from rich.table import Table
 
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
@@ -25,6 +29,15 @@ class PrimerPairCheck(Enum):
     MISPRIMING = 3
     OK = 4
     CIRCULAR = 5
+
+
+# The outcomes a primer pair check can have, in the order they are checked
+CHECK_OUTCOMES = (
+    PrimerPairCheck.OVERLAP,
+    PrimerPairCheck.INTERACTING,
+    PrimerPairCheck.MISPRIMING,
+    PrimerPairCheck.OK,
+)
 
 
 class Multiplex:
@@ -70,6 +83,10 @@ class Multiplex:
         self._matchDB = matchDB
         self._last_pp_added = []
         self._msa_dict = msa_dict
+        # Every primer pair check's outcome, and each mispriming product's
+        # (ref_id, formed by the pair alone)
+        self.check_counts: Counter[PrimerPairCheck] = Counter()
+        self.mispriming_counts: Counter[tuple[int, bool]] = Counter()
         # Set up coverage dict
         self.setup_coverage()
 
@@ -151,15 +168,32 @@ class Multiplex:
     def forms_product(self, primerpair: PrimerPair, pool: int) -> bool:
         """
         Would the primerpair amplify an off-target product, alone or with the
-        pool?
+        pool? Counts which reference the product is on
         """
-        return self._matches[pool].forms_product(
+        product = self._matches[pool].find_product(
             primerpair.find_matches(self._matchDB),
             self.config.mismatch_product_size,
             primerpair.expected_matches(),
         )
+        if product is not None:
+            self.mispriming_counts[product] += 1
+        return product is not None
 
     def check_primerpair_can_be_added(
+        self,
+        primerpair: PrimerPair,
+        pool: int,
+        otherseqs_bytes: list[bytes] | None = None,
+    ) -> PrimerPairCheck:
+        """
+        Checks if the primerpair can be added to the multiplex, counting the
+        outcome
+        """
+        result = self._check_primerpair(primerpair, pool, otherseqs_bytes)
+        self.check_counts[result] += 1
+        return result
+
+    def _check_primerpair(
         self,
         primerpair: PrimerPair,
         pool: int,
@@ -193,6 +227,74 @@ class Multiplex:
 
         # If all checks pass, return True
         return PrimerPairCheck.OK
+
+    def check_summary(self) -> dict:
+        """
+        Every primer pair check's outcome, and the references mispriming
+        products were on, for config.json
+        """
+        names = self._matchDB.ref_names()
+        products: dict[str, dict[str, int]] = {}
+        for (ref_id, alone), n in sorted(self.mispriming_counts.items()):
+            by = products.setdefault(names[ref_id], {"alone": 0, "with_pool": 0})
+            by["alone" if alone else "with_pool"] += n
+        return {
+            **{check.name: self.check_counts[check] for check in CHECK_OUTCOMES},
+            "mispriming_references": products,
+        }
+
+    def check_tables(self) -> list[Table]:
+        """
+        Tables for the log: every primer pair check's outcome, and the
+        references mispriming products were on
+        """
+        n_checks = self.check_counts.total()
+        checks = Table(
+            title=f"Primer pair checks: [green]{self.check_counts[PrimerPairCheck.OK]:,}"
+            f"[/green] of {n_checks:,} passed",
+            title_justify="left",
+            caption="A pair is checked in each pool it is tried in, so pairs can "
+            "count more than once. A failed pair stops at its first failing check",
+            caption_justify="left",
+            box=box.SIMPLE_HEAD,
+        )
+        checks.add_column("Check")
+        checks.add_column("Pairs", justify="right")
+        checks.add_column("%", justify="right")
+        checks.add_column("", width=20)
+        for check in CHECK_OUTCOMES:
+            n = self.check_counts[check]
+            share = n / n_checks if n_checks else 0
+            checks.add_row(
+                check.name.capitalize(),
+                f"{n:,}",
+                f"{share:.0%}" if share >= 0.01 or n == 0 else "<1%",
+                Bar(
+                    max(n_checks, 1),
+                    0,
+                    n,
+                    color="green" if check == PrimerPairCheck.OK else "red",
+                ),
+            )
+        tables = [checks]
+
+        summary = self.check_summary()["mispriming_references"]
+        if summary:
+            refs = Table(
+                title="Mispriming products by reference",
+                title_justify="left",
+                caption="Alone: the pair's own sites form the product. "
+                "With pool: its sites and another primer's in the pool",
+                caption_justify="left",
+                box=box.SIMPLE_HEAD,
+            )
+            refs.add_column("Reference")
+            refs.add_column("Alone", justify="right")
+            refs.add_column("With pool", justify="right")
+            for name, by in summary.items():
+                refs.add_row(name, f"{by['alone']:,}", f"{by['with_pool']:,}")
+            tables.append(refs)
+        return tables
 
     def setup_coverage(self) -> None:
         """

@@ -234,6 +234,7 @@ class Scheme(Multiplex):
                     and max(self._pools[pool_index][-1].rprimer.ends())
                     >= min(pp.fprimer.starts())
                 ):
+                    self.check_counts[PrimerPairCheck.OVERLAP] += 1
                     continue
 
                 # Guard for interactions
@@ -242,11 +243,14 @@ class Scheme(Multiplex):
                     index_to_seqs.get(pool_index),
                     self.config.dimer_score,
                 ):
+                    self.check_counts[PrimerPairCheck.INTERACTING] += 1
                     continue
 
                 # Guard for miss priming
                 if self.forms_product(pp, pool_index):
+                    self.check_counts[PrimerPairCheck.MISPRIMING] += 1
                     continue
+                self.check_counts[PrimerPairCheck.OK] += 1
 
                 # If all checks pass add the primerpair to the pool this is a valid alternative
                 # See if the valid alternative had a valid overlap

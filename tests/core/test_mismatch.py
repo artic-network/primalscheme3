@@ -9,6 +9,7 @@ from primalschemers import FKmer, PoolHits, RKmer  # type: ignore
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.mismatches import MatchDB, expected_site
+from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 from primalscheme3.core.seq_functions import reverse_complement
 
 FIXTURE = "tests/core/test_mismatch.fasta"
@@ -194,6 +195,25 @@ class TestMatchDBSynthetic(unittest.TestCase):
                 self.pair.expected_matches(),
             )
         )
+
+    def test_multiplex_counts_checks_and_references(self):
+        config = Config(n_pools=1)
+        matchdb = MatchDB([self.msa], [str(self.background)], config)
+        multiplex = Multiplex(config, matchdb, {})
+        multiplex.does_overlap = lambda pp, pool: False
+        self.assertEqual(
+            multiplex.check_primerpair_can_be_added(self.pair, 0, []),
+            PrimerPairCheck.MISPRIMING,
+        )
+        self.assertEqual(multiplex.check_counts[PrimerPairCheck.MISPRIMING], 1)
+        summary = multiplex.check_summary()
+        self.assertEqual(summary["MISPRIMING"], 1)
+        self.assertEqual(summary["OK"], 0)
+        self.assertEqual(
+            summary["mispriming_references"],
+            {"background.fasta.gz": {"alone": 1, "with_pool": 0}},
+        )
+        self.assertEqual(len(multiplex.check_tables()), 2)
 
     def test_missing_background(self):
         with self.assertRaises(ValueError):

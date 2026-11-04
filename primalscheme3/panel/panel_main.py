@@ -437,6 +437,10 @@ def panelcreate(
                 )
                 region_to_coverage[region] = region_mean_coverage
 
+    for table in panel.check_tables():
+        logger.info(table)
+    config_dict["pair_checks"] = panel.check_summary()
+
     logger.info(
         "Writing outputs...",
     )
