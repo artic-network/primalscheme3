@@ -11,7 +11,7 @@ dependencies = [
     "kaleido==0.2.1",
     "plotly>=5.16.1,<6",
     "tqdm>=4.66.1,<5",
-    "typer>=0.16.1,<0.17",
+    "typer>=0.27.3,<0.28",
     "dnaio>=1.2.3,<2",
     "matplotlib>=3.10.5,<4",
     "primalschemers>=0.3.2,<0.4",

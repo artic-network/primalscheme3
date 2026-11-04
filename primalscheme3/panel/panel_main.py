@@ -8,13 +8,13 @@ import shutil
 import sys
 
 import dnaio
-from click import UsageError
 
 # version import
 from primalscheme3.core.bedfiles import read_in_extra_primers
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import generate_all_plotdata
 from primalscheme3.core.create_reports import generate_all_plots_html
+from primalscheme3.core.errors import UsageError
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
 from primalscheme3.core.mismatches import MatchDB, background_checksums

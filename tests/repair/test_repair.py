@@ -384,7 +384,7 @@ class TestRepairEdgeCases(unittest.TestCase):
             self.assertIn("Checking", (out / "work" / "file.log").read_text(), name)
 
     def test_existing_output_needs_force(self):
-        from click import UsageError
+        from primalscheme3.core.errors import UsageError
 
         ref = read_reference()
         out, _ = run_repair({CHROM: ref}, self.tmp)

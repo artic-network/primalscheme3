@@ -3,8 +3,6 @@ import pathlib
 from collections import Counter
 from enum import Enum
 
-from click import UsageError
-
 # Interaction checker
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
@@ -14,6 +12,7 @@ from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots_html
+from primalscheme3.core.errors import UsageError
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA

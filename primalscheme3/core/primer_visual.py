@@ -2,7 +2,6 @@ import pathlib
 
 import numpy as np
 import plotly.graph_objects as go
-from click import UsageError
 from plotly.subplots import make_subplots
 from primalbedtools.amplicons import create_amplicons
 from primalbedtools.bedfiles import BedLine, BedLineParser
@@ -10,6 +9,7 @@ from primalbedtools.bedfiles import BedLine, BedLineParser
 # Create in the classes from primalscheme3
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import calc_gc
+from primalscheme3.core.errors import UsageError
 from primalscheme3.core.mapping import (
     check_for_end_on_gap,
     create_mapping,
@@ -155,7 +155,7 @@ def primer_mismatch_heatmap(
     :param seqdict: The sequence dictionary.
     :param bedfile: The bedfile of primers.
     :param include_seqs: Reduces plot size by removing hovertext.
-    :raises: click.UsageError
+    :raises: UsageError
     """
     # Read in the bedfile
 
@@ -359,7 +359,7 @@ def primer_dct_heatmap(
     :param bedfile: The bedfile of primers.
     :param config: The configuration object.
     :param include_seqs: Reduces plot size by removing hovertext.
-    :raises: click.UsageError
+    :raises: UsageError
     """
     # Read in the bedfile
 

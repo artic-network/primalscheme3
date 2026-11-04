@@ -4,7 +4,6 @@ import pathlib
 from time import sleep
 
 import dnaio
-from click import UsageError
 
 # Interaction checker
 from primalscheme3.core.bedfiles import (
@@ -15,7 +14,7 @@ from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots_html
-from primalscheme3.core.errors import DigestionFailNoPrimerPairs
+from primalscheme3.core.errors import DigestionFailNoPrimerPairs, UsageError
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import (
     generate_consensus,

@@ -3,12 +3,12 @@ import json
 import pathlib
 from enum import Enum
 
-from click import UsageError
 from primalschemers import FKmer, RKmer, do_pool_interact  # type: ignore
 
 # Core imports
 from primalscheme3.core.bedfiles import read_bedlines_to_bedprimerpairs
 from primalscheme3.core.config import Config
+from primalscheme3.core.errors import UsageError
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.msa import MSA, digest_kwargs
 from primalscheme3.core.progress_tracker import ProgressManager
