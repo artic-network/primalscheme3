@@ -116,7 +116,7 @@ def replace(
 
     # Create the multiplex object.
     msa_dict = {wanted_pp.msa_index: msa}
-    match_db = MatchDB("", [], config)
+    match_db = MatchDB([], [], config)
     multiplex = Multiplex(config, match_db, msa_dict)
 
     # Add all primers into the multiplex

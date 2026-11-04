@@ -318,9 +318,6 @@ def replace_primerpair(
     # Update the config with CLI params
     config.assign_kwargs(**locals())
 
-    # Update the config with required
-    config.in_memory_db = True  # Set up the db
-
     # Check the output directory
     check_output_dir(output, force)
 

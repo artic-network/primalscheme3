@@ -80,8 +80,8 @@ def schemecreate(
         "Creating the Mismatch Database",
     )
     mismatch_db = MatchDB(
-        OUTPUT_DIR / "work/mismatch",
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
+        [],
         config,
     )
     logger.info(mismatch_db.describe())
@@ -180,6 +180,14 @@ def schemecreate(
     if not any(msa_has_primerpairs_bool.values()):
         logger.critical("No valid primers found in any MSA")
         raise DigestionFailNoPrimerPairs("No valid primerpairs found in any MSA")
+
+    # Screen every candidate primer's 3' end against the references once
+    n_screened = mismatch_db.prescreen_msas(
+        msa_dict, bedprimerpairs if input_bedfile is not None else ()
+    )  # type: ignore
+    logger.info(f"Screened {n_screened:,} primer 3' ends for mispriming")
+    for ref_name, n_sites in mismatch_db.site_counts():
+        logger.debug(f"{ref_name}: {n_sites:,} binding sites")
 
     # Create the scheme object early
     scheme = Scheme(config=config, matchDB=mismatch_db, msa_dict=msa_dict)

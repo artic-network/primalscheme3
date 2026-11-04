@@ -115,8 +115,8 @@ def panelcreate(
         "Creating the Mismatch Database",
     )
     mismatch_db = MatchDB(
-        OUTPUT_DIR / "work/mismatch",
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
+        [],
         config,
     )
     logger.info(mismatch_db.describe())
@@ -327,6 +327,14 @@ def panelcreate(
 
     # Create a dict to store how many amplicons have been added to each msa
     msa_index_to_amplicon_count = {k: 0 for k in msa_data.keys()}
+
+    # Screen every candidate primer's 3' end against the references once
+    n_screened = mismatch_db.prescreen_msas(
+        msa_dict, bedprimerpairs if input_bedfile is not None else ()
+    )  # type: ignore
+    logger.info(f"Screened {n_screened:,} primer 3' ends for mispriming")
+    for ref_name, n_sites in mismatch_db.site_counts():
+        logger.debug(f"{ref_name}: {n_sites:,} binding sites")
 
     # Create the panel object
     panel: Panel = Panel(msa_dict, config=config, matchdb=mismatch_db, logger=logger)

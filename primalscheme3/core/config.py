@@ -80,11 +80,9 @@ class Config:
     primer_max_walk: int = 80
     # MatchDB Settings
     use_matchdb: bool = True
-    in_memory_db: bool = True
-    editdist_max: int = 1
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min
-    mismatch_product_size: int = 0
+    mismatch_product_size: int = 0  # 0 uses amplicon_size_max
     # Thermodynamic Parameters
     mv_conc: float = 100.0
     dv_conc: float = 2.0
@@ -113,6 +111,8 @@ class Config:
             self.primer_gc_max = self._primer_gc_default_max
         # Set MisMatch Kmer Size
         self.mismatch_kmersize = self.primer_size_min
+        if self.mismatch_product_size == 0:
+            self.mismatch_product_size = self.amplicon_size_max
         # Set annealing
         if self.use_annealing:
             self.primer_annealing_prop = self._primer_annealing_prop_default

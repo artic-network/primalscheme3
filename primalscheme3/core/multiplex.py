@@ -2,7 +2,7 @@ from enum import Enum
 
 import numpy as np
 from primalbedtools.scheme import Scheme
-from primalschemers import do_pool_interact  # type: ignore
+from primalschemers import PoolHits, do_pool_interact  # type: ignore
 
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
@@ -11,7 +11,7 @@ from primalscheme3.core.bedfiles import (
 )
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
-from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 
 
@@ -42,7 +42,7 @@ class Multiplex:
     - self._current_pool: int. The current pool number
     - self._last_pp_added: list[PrimerPair]. Stack to keep track of the last primer added
     - self._matchDB: MatchDB object
-    - self._matches: list[set[tuple]]. A list of sets with matches for each pool
+    - self._matches: list[PoolHits]. The binding sites of each pool's primers
     - self._msa_dict: dict[int, MSA]. A dict of MSA objects
     - self._coverage: dict[int, np.ndarray]. PrimerTrimmed Coverage for each MSA index
     - self._lookup: dict[int, np.ndarray[npools, ncols]] | None. A lookup for the primerpairs in the multiplex.
@@ -52,7 +52,7 @@ class Multiplex:
     _current_pool: int
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
-    _matches: list[set[tuple]]
+    _matches: list[PoolHits]
     _msa_dict: dict[int, MSA]
     _coverage: dict[int, np.ndarray]  # PrimerTrimmed Coverage for each MSA index
     _lookup: dict[int, np.ndarray]
@@ -63,7 +63,7 @@ class Multiplex:
     ) -> None:
         self.n_pools = config.n_pools
         self._pools = [[] for _ in range(self.n_pools)]
-        self._matches: list[set[tuple]] = [set() for _ in range(self.n_pools)]
+        self._matches: list[PoolHits] = [PoolHits() for _ in range(self.n_pools)]
         self._current_pool = 0
         self._pp_number = 1
         self.config = config
@@ -148,6 +148,17 @@ class Multiplex:
             for seq in ppseq
         ]
 
+    def forms_product(self, primerpair: PrimerPair, pool: int) -> bool:
+        """
+        Would the primerpair amplify an off-target product, alone or with the
+        pool?
+        """
+        return self._matches[pool].forms_product(
+            primerpair.find_matches(self._matchDB),
+            self.config.mismatch_product_size,
+            primerpair.expected_matches(),
+        )
+
     def check_primerpair_can_be_added(
         self,
         primerpair: PrimerPair,
@@ -177,16 +188,7 @@ class Multiplex:
             return PrimerPairCheck.INTERACTING
 
         # Check for other PCR Products
-        if detect_new_products(
-            primerpair.find_matches(
-                self._matchDB,
-                remove_expected=False,
-                kmersize=self.config.mismatch_kmersize,
-                fuzzy=self.config.mismatch_fuzzy,
-            ),
-            self._matches[pool],
-            self.config.mismatch_product_size,
-        ):
+        if self.forms_product(primerpair, pool):
             return PrimerPairCheck.MISPRIMING
 
         # If all checks pass, return True
@@ -318,14 +320,7 @@ class Multiplex:
             primerpair.amplicon_number = self.get_next_amplicon_number(msa_index)
 
         # Adds the primerpair's matches to the pools matches
-        self._matches[pool].update(
-            primerpair.find_matches(
-                self._matchDB,
-                fuzzy=self.config.mismatch_fuzzy,
-                remove_expected=True,
-                kmersize=self.config.mismatch_kmersize,
-            )
-        )
+        self._matches[pool].add(primerpair.find_matches(self._matchDB))
 
         # Adds the primerpair to the pool
         self._pools[pool].append(primerpair)
@@ -355,14 +350,7 @@ class Multiplex:
         self._pools[pp.pool].remove(pp)
 
         # Remove the primerpair's matches from the pool's matches
-        self._matches[pp.pool].difference_update(
-            pp.find_matches(
-                self._matchDB,
-                fuzzy=self.config.mismatch_fuzzy,
-                remove_expected=False,
-                kmersize=self.config.mismatch_kmersize,
-            )
-        )
+        self._matches[pp.pool].remove(pp.find_matches(self._matchDB))
 
         # Update the lookup
         self.update_lookup(pp, add=False)
