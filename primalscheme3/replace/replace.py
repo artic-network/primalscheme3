@@ -3,8 +3,6 @@ import pathlib
 from collections import Counter
 from enum import Enum
 
-from click import UsageError
-
 # Interaction checker
 from primalscheme3.core.bedfiles import (
     read_bedlines_to_bedprimerpairs,
@@ -14,6 +12,7 @@ from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots_html
+from primalscheme3.core.errors import UsageError
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
@@ -87,10 +86,9 @@ def replace(
         # else default is -1
 
     if correct_msa_bpp == 0:
-        logger.critical(
+        raise UsageError(
             f"Chroms found in bedfile ({', '.join([c for c in chroms if c is not None])}) do not match MSA chromname ({msa._chrom_name})."
         )
-        exit()
 
     bedprimerpairs.sort(key=lambda x: (x.chrom_name, x.amplicon_number))
 
@@ -116,7 +114,7 @@ def replace(
 
     # Create the multiplex object.
     msa_dict = {wanted_pp.msa_index: msa}
-    match_db = MatchDB("", [], config)
+    match_db = MatchDB([], [], config)
     multiplex = Multiplex(config, match_db, msa_dict)
 
     # Add all primers into the multiplex
@@ -257,7 +255,7 @@ def replace(
             for i, pp in enumerate(valid_pp, 1):
                 outfile.write(f"# PrimerPair Option: {i}\n")
                 outfile.write(pp.to_bed())
-        exit()
+        return
 
     multiplex.add_primer_pair_to_pool(
         valid_pp[0], valid_pp[0].pool, valid_pp[0].msa_index

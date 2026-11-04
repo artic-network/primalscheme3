@@ -169,6 +169,16 @@ def scheme_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    background_genomes: Annotated[
+        list[pathlib.Path] | None,
+        typer.Option(
+            "--background",
+            help="FASTA (plain or gzipped) of a genome to screen primers against for mispriming products. Can be given multiple times",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ] = None,
     ncores: Annotated[
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),
@@ -185,21 +195,35 @@ def scheme_create(
         bool,
         typer.Option(
             help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
-            hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
             help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
-            hidden=True,
+            min=0.0,
+            max=1.0,
         ),
     ] = Config.downsample_target,
+    downsample_max_dct: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Lowest predicted ΔCt at which a primer still covers a genome (if using downsampling)",
+            max=0.0,
+        ),
+    ] = Config.downsample_max_dct,
+    downsample_always_add_prop: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Always keep primers found in at least this proportion of genomes (if using downsampling)",
+            min=0.0,
+            max=1.0,
+        ),
+    ] = Config.downsample_always_add_prop,
     primer_scorer_model: Annotated[
         str,
         typer.Option(
             help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
-            hidden=True,
         ),
     ] = Config.primer_scorer_model,
 ):
@@ -303,9 +327,6 @@ def replace_primerpair(
 
     # Update the config with CLI params
     config.assign_kwargs(**locals())
-
-    # Update the config with required
-    config.in_memory_db = True  # Set up the db
 
     # Check the output directory
     check_output_dir(output, force)
@@ -411,6 +432,16 @@ def panel_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    background_genomes: Annotated[
+        list[pathlib.Path] | None,
+        typer.Option(
+            "--background",
+            help="FASTA (plain or gzipped) of a genome to screen primers against for mispriming products. Can be given multiple times",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ] = None,
     ncores: Annotated[
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),
@@ -427,21 +458,35 @@ def panel_create(
         bool,
         typer.Option(
             help="EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)",
-            hidden=True,
         ),
     ] = Config.downsample,
     downsample_target: Annotated[
         float,
         typer.Option(
             help="EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)",
-            hidden=True,
+            min=0.0,
+            max=1.0,
         ),
     ] = Config.downsample_target,
+    downsample_max_dct: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Lowest predicted ΔCt at which a primer still covers a genome (if using downsampling)",
+            max=0.0,
+        ),
+    ] = Config.downsample_max_dct,
+    downsample_always_add_prop: Annotated[
+        float,
+        typer.Option(
+            help="EXPERIMENTAL: Always keep primers found in at least this proportion of genomes (if using downsampling)",
+            min=0.0,
+            max=1.0,
+        ),
+    ] = Config.downsample_always_add_prop,
     primer_scorer_model: Annotated[
         str,
         typer.Option(
             help="EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model's .json manifest",
-            hidden=True,
         ),
     ] = Config.primer_scorer_model,
 ):

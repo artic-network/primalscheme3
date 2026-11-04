@@ -8,16 +8,16 @@ import shutil
 import sys
 
 import dnaio
-from click import UsageError
 
 # version import
 from primalscheme3.core.bedfiles import read_in_extra_primers
 from primalscheme3.core.config import Config, MappingType
 from primalscheme3.core.create_report_data import generate_all_plotdata
 from primalscheme3.core.create_reports import generate_all_plots_html
+from primalscheme3.core.errors import UsageError
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
-from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.mismatches import MatchDB, background_checksums
 from primalscheme3.core.primer_visual import (
     plot_primer_thermo_profile_html,
     primer_mismatch_heatmap,
@@ -115,10 +115,12 @@ def panelcreate(
         "Creating the Mismatch Database",
     )
     mismatch_db = MatchDB(
-        OUTPUT_DIR / "work/mismatch",
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
+        config.background_genomes if config.use_matchdb else [],
         config,
     )
+    if config.background_genomes and not config.use_matchdb:
+        logger.warning("Background genomes are ignored as the mismatch db is off")
     logger.info(mismatch_db.describe())
 
     regions_mapping: dict[Region, str | None] | None = None
@@ -273,12 +275,6 @@ def panelcreate(
                     indexes=None,
                 )
 
-        # Log the digestion
-        logger.info(
-            f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
-            f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
-            f"[green]{len(msa_obj.rkmers)}[/green] RKmers"
-        )
         if len(msa_obj.fkmers) == 0 or len(msa_obj.rkmers) == 0:
             logger.critical(
                 f"No valid FKmers or RKmers found for [blue]{msa_obj._chrom_name}[/blue]"
@@ -333,6 +329,15 @@ def panelcreate(
 
     # Create a dict to store how many amplicons have been added to each msa
     msa_index_to_amplicon_count = {k: 0 for k in msa_data.keys()}
+
+    # Screen every candidate primer's 3' end against the references once
+    n_screened = mismatch_db.prescreen_msas(
+        msa_dict, bedprimerpairs if input_bedfile is not None else ()
+    )  # type: ignore
+    logger.info(f"Screened {n_screened:,} primer 3' ends for mispriming")
+    for ref_name, n_sites in mismatch_db.site_counts():
+        logger.debug(f"{ref_name}: {n_sites:,} binding sites")
+    config_dict["background_data"] = background_checksums(config.background_genomes)
 
     # Create the panel object
     panel: Panel = Panel(msa_dict, config=config, matchdb=mismatch_db, logger=logger)
@@ -431,6 +436,10 @@ def panelcreate(
                     f"[{log_percent_col}]{percent}%[/{log_percent_col}] covered",
                 )
                 region_to_coverage[region] = region_mean_coverage
+
+    for table in panel.check_tables():
+        logger.info(table)
+    config_dict["pair_checks"] = panel.check_summary()
 
     logger.info(
         "Writing outputs...",

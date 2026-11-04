@@ -74,8 +74,14 @@ $ primalscheme3 scheme-create [OPTIONS]
 * `--high-gc / --no-high-gc`: Use high GC primers  [default: no-high-gc]
 * `--offline-plots / --online-plots`: Offline plots includes 3Mb of dependencies, so they can be viewed offline  [default: offline-plots]
 * `--use-matchdb / --no-use-matchdb`: Create and use a mispriming database  [default: use-matchdb]
+* `--background FILE`: FASTA (plain or gzipped) of a genome to screen primers against for mispriming products. Can be given multiple times
 * `--ncores INTEGER RANGE`: Number of CPU cores to use during digestion  [default: 1; x&gt;=1]
 * `--use-annealing / --use-tm`: Using annealing proportion rather than Tm to calculate primers  [default: use-tm]
+* `--downsample / --no-downsample`: EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)  [default: no-downsample]
+* `--downsample-target FLOAT RANGE`: EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)  [default: 0.99; 0.0&lt;=x&lt;=1.0]
+* `--downsample-max-dct FLOAT RANGE`: EXPERIMENTAL: Lowest predicted ΔCt at which a primer still covers a genome (if using downsampling)  [default: -2.0; x&lt;=0.0]
+* `--downsample-always-add-prop FLOAT RANGE`: EXPERIMENTAL: Always keep primers found in at least this proportion of genomes (if using downsampling)  [default: 0.25; 0.0&lt;=x&lt;=1.0]
+* `--primer-scorer-model TEXT`: EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model&#x27;s .json manifest  [default: q5_dct_v1]
 * `--help`: Show this message and exit.
 
 ## `primalscheme3 replace-primerpair`
@@ -134,8 +140,14 @@ $ primalscheme3 panel-create [OPTIONS]
 * `--high-gc / --no-high-gc`: Use high GC primers  [default: no-high-gc]
 * `--offline-plots / --online-plots`: Offline plots includes 3Mb of dependencies, so they can be viewed offline  [default: offline-plots]
 * `--use-matchdb / --no-use-matchdb`: Create and use a mispriming database  [default: use-matchdb]
+* `--background FILE`: FASTA (plain or gzipped) of a genome to screen primers against for mispriming products. Can be given multiple times
 * `--ncores INTEGER RANGE`: Number of CPU cores to use during digestion  [default: 1; x&gt;=1]
 * `--use-annealing / --use-tm`: Using annealing proportion rather than Tm to calculate primers  [default: use-tm]
+* `--downsample / --no-downsample`: EXPERIMENTAL: Reduce number of primers in a cloud, keeping those needed to cover the genomes within --downsample-max-dct (predicted ΔCt)  [default: no-downsample]
+* `--downsample-target FLOAT RANGE`: EXPERIMENTAL: Proportion of genomes each downsampled cloud must cover (if using downsampling)  [default: 0.99; 0.0&lt;=x&lt;=1.0]
+* `--downsample-max-dct FLOAT RANGE`: EXPERIMENTAL: Lowest predicted ΔCt at which a primer still covers a genome (if using downsampling)  [default: -2.0; x&lt;=0.0]
+* `--downsample-always-add-prop FLOAT RANGE`: EXPERIMENTAL: Always keep primers found in at least this proportion of genomes (if using downsampling)  [default: 0.25; 0.0&lt;=x&lt;=1.0]
+* `--primer-scorer-model TEXT`: EXPERIMENTAL: Primer scorer model for downsampling: a bundled model id, or the path to a model&#x27;s .json manifest  [default: q5_dct_v1]
 * `--help`: Show this message and exit.
 
 ## `primalscheme3 interactions`
@@ -241,3 +253,4 @@ $ primalscheme3 visualise-bedfile [OPTIONS] BEDFILE REF_PATH
 * `--ref-id TEXT`: The reference genome ID  [required]
 * `--output FILE`: Output location of the plot  [default: bedfile.html]
 * `--help`: Show this message and exit.
+

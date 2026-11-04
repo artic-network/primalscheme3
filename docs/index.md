@@ -60,6 +60,10 @@ primalscheme3 scheme-create --msa example.fasta --output example_out --amplicon-
 
 This will create a titling scheme using 400bp amplicons in 2 pool.
 
+Primer pairs that would amplify an off-target product are rejected. Add `--background host.fasta` to also screen against genomes outside the MSA, such as the host. See [Mispriming](mispriming.md) for how this works.
+
+For diverse targets, `--downsample` (experimental) reduces each degenerate primer cloud to the primers needed to cover the genomes. See [Downsampling](downsampling.md).
+
 
 ### Output files
 

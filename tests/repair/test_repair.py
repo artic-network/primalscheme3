@@ -5,9 +5,11 @@ import shutil
 import tempfile
 import unittest
 
+from primalschemers import FKmer, RKmer
+
 from primalscheme3.core.config import Config
 from primalscheme3.repair.repair import (
-    primers_equal,
+    check_side,
     repair,
     report_check,
     required_n_pools,
@@ -62,31 +64,17 @@ class Test_RequiredNPools(unittest.TestCase):
         self.assertEqual(required_n_pools([], min_pools=2), 2)
 
 
-class TestPrimersEqual(unittest.TestCase):
-    def test_identical(self):
-        self.assertTrue(primers_equal(LEFT_1, LEFT_1))
-
-    def test_substitution(self):
-        self.assertFalse(primers_equal(LEFT_1, LEFT_1[:-1] + "A"))
-
-    @unittest.expectedFailure
-    def test_prefix_is_not_equal(self):
-        # Bug: zip(strict=False) stops at the shorter sequence, so a primer
-        # that is a prefix of another counts as already in the scheme
-        self.assertFalse(primers_equal(LEFT_1[:-3], LEFT_1))
-
-
 class TestReportCheck(unittest.TestCase):
     def setUp(self):
         self.config = Config()
         self.logger = logging.getLogger("test_repair.report_check")
 
-    def check(self, seq, count=1.0, current=(), pool=(), min_base_freq=0.0):
-        self.config.min_base_freq = min_base_freq
+    def check(self, seq, count=1.0, statuses=(), current=(), pool=()):
         with self.assertLogs(self.logger, level="INFO") as logs:
             ok = report_check(
                 seq=seq,
                 count=count,
+                statuses=list(statuses),
                 current_primer_seqs=set(current),
                 seqs_bytes_in_pools=[[s.encode() for s in pool]],
                 pool=0,
@@ -101,18 +89,24 @@ class TestReportCheck(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("Can be added", log)
 
-    def test_thermo_failure_reports_reason(self):
-        ok, log = self.check("A" * 22)
+    def test_every_failure_reason_reported(self):
+        ok, log = self.check("A" * 22, statuses=["LowGC", "Homopolymer"])
         self.assertFalse(ok)
-        self.assertIn("LOW_GC", log)
+        self.assertIn("LowGC, Homopolymer", log)
 
     def test_already_present(self):
         ok, log = self.check(PASSING, current=[PASSING])
         self.assertFalse(ok)
         self.assertIn("In scheme", log)
 
+    def test_prefix_is_not_present(self):
+        # Exact match only: a primer that is a prefix of one in the scheme is new
+        ok, log = self.check(PASSING[:-3], current=[PASSING])
+        self.assertTrue(ok)
+        self.assertNotIn("In scheme", log)
+
     def test_minor_allele(self):
-        ok, log = self.check(PASSING, count=0.05, min_base_freq=0.1)
+        ok, log = self.check(PASSING, count=1.0, statuses=["LowFreq"])
         self.assertFalse(ok)
         self.assertIn("Minor allele", log)
 
@@ -125,12 +119,20 @@ class TestReportCheck(unittest.TestCase):
         ok, _ = self.check(DIMER_A, pool=[PASSING])
         self.assertTrue(ok)
 
-    def test_checks_run_in_order(self):
-        # A thermo failure is reported even if the seq is also present
-        ok, log = self.check("A" * 22, current=["A" * 22])
+    def test_covered_is_checked_first(self):
+        # A genome an existing primer covers needs nothing, so its digest
+        # sequence's failed checks are not reported
+        ok, log = self.check("A" * 22, statuses=["LowGC"], current=["A" * 22])
         self.assertFalse(ok)
-        self.assertIn("LOW_GC", log)
-        self.assertNotIn("In scheme", log)
+        self.assertIn("In scheme", log)
+        self.assertNotIn("LowGC", log)
+
+    def test_same_3p_end_is_present(self):
+        # The digest can walk an existing site to another length
+        for seq in (PASSING[1:], "GC" + PASSING):
+            ok, log = self.check(seq, current=[PASSING])
+            self.assertFalse(ok, seq)
+            self.assertIn("In scheme", log)
 
 
 def read_reference() -> str:
@@ -141,6 +143,101 @@ def read_reference() -> str:
 
 def bed_seqs(bed: str) -> set[str]:
     return {line.split("\t")[6] for line in bed.splitlines() if line and line[0] != "#"}
+
+
+class _SitePP:
+    """The parts of a PrimerPair check_side reads."""
+
+    amplicon_prefix = "scheme"
+    amplicon_number = 1
+    pool = 0
+
+
+class _SiteKmer:
+    """The parts of a return_all FKmer/RKmer check_side reads."""
+
+    def __init__(self, seqs, counts, statuses, errors=(), kmer_statuses=()):
+        self._seqs, self._counts, self._statuses = seqs, counts, statuses
+        self._errors, self._kmer_statuses = list(errors), list(kmer_statuses)
+
+    def seqs(self):
+        return self._seqs
+
+    def counts(self):
+        return self._counts
+
+    def statuses(self):
+        return self._statuses
+
+    def errors(self):
+        return self._errors
+
+    def kmer_statuses(self):
+        return self._kmer_statuses
+
+
+class TestCheckSide(unittest.TestCase):
+    def setUp(self):
+        self.config = Config()
+        self.logger = logging.getLogger("test_repair.check_side")
+        self.existing = FKmer([LEFT_1.encode()], 51, [10.0])
+        self.pools = [[LEFT_1.encode()]]
+
+    def check(self, msa_pos, kmer_at, existing=None, kmer_cls=FKmer):
+        with self.assertLogs(self.logger, level="INFO") as logs:
+            new = check_side(
+                _SitePP(),
+                "LEFT",
+                msa_pos,
+                kmer_at,
+                existing or self.existing,
+                kmer_cls,
+                self.pools,
+                self.config,
+                self.logger,
+            )
+        return new, "\n".join(logs.output)
+
+    def test_site_not_in_msa(self):
+        for msa_pos, kmer_at in ((None, {}), (51, {})):
+            new, log = self.check(msa_pos, kmer_at)
+            self.assertIs(new, self.existing)
+            self.assertIn("CRITICAL", log)
+            self.assertIn("scheme_1_LEFT: no sequences at this site", log)
+
+    def test_errors_and_dimers_are_reported(self):
+        kmer = _SiteKmer(
+            [LEFT_1],
+            [5.0],
+            [[]],
+            errors=[(["ContainsN"], 2.0)],
+            kmer_statuses=["PrimerDimer"],
+        )
+        new, log = self.check(51, {51: kmer})
+        self.assertIn("ContainsN in 2 genomes", log)
+        self.assertIn("PrimerDimer between the sequences found here", log)
+        self.assertEqual(new.seqs(), self.existing.seqs())
+
+    def test_valid_new_seq_is_added_with_its_count(self):
+        kmer = _SiteKmer(
+            [LEFT_1, PASSING, DIMER_A], [5.0, 3.0, 1.0], [[], [], ["Hairpin"]]
+        )
+        new, log = self.check(51, {51: kmer})
+        self.assertEqual(sorted(new.seqs()), sorted([LEFT_1, PASSING]))
+        self.assertEqual(new.end, 51)
+        counts = dict(zip(new.seqs(), new.counts(), strict=True))
+        self.assertEqual(counts, {LEFT_1: 10.0, PASSING: 3.0})
+        self.assertEqual(self.pools, [[LEFT_1.encode(), PASSING.encode()]])
+        self.assertIn("Hairpin", log)
+
+    def test_rkmer_without_counts(self):
+        existing = RKmer([LEFT_1.encode()], 100)
+        kmer = _SiteKmer([PASSING], [3.0], [[]])
+        new, _ = self.check(100, {100: kmer}, existing=existing, kmer_cls=RKmer)
+        self.assertIsInstance(new, RKmer)
+        self.assertEqual(new.start, 100)
+        self.assertEqual(sorted(new.seqs()), sorted([LEFT_1, PASSING]))
+        self.assertIsNone(new.counts())
 
 
 def snp(seq: str, pos: int) -> str:
@@ -226,16 +323,15 @@ class TestRepairIntegration(unittest.TestCase):
         self.assertTrue(bed_seqs(SCHEME_BED.read_text()) <= bed_seqs(self.bed))
         self.assertNotIn("1540b43d_1_LEFT", self.bed)
 
-    @unittest.expectedFailure
     def test_valid_variant_added_to_bed(self):
-        # Bug: valid seqs are only added to the pool list, never to the
-        # primerpair, so primer.bed never gains them
         self.assertIn(self.variant_primer_3p, self.bed)
+        # Added to the same primer (1_LEFT), alongside the original
+        left_1 = [line for line in self.bed.splitlines() if "_1_LEFT_" in line]
+        self.assertEqual(len(left_1), 2)
+        self.assertTrue(any(LEFT_1 in line for line in left_1))
 
-    @unittest.expectedFailure
     def test_config_keeps_msa_data(self):
-        # Bug: config.json is written from config.to_dict(), dropping the
-        # msa_data entry repair adds for the new MSA
+        # The new MSA's entry is added to the original one
         cfg = json.loads((self.out / "config.json").read_text())
         self.assertEqual(len(cfg.get("msa_data") or {}), 2)
 
@@ -247,14 +343,24 @@ class TestRepairEdgeCases(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_rare_variant_not_offered(self):
-        # Below min_base_freq (repair uses 0.1) the digest drops the variant
+    def test_rare_variant_reported_as_minor_allele(self):
+        # Below min_base_freq (repair uses 0.1): reported, but not added
         ref = read_reference()
         variant = snp(ref, SNP_POS)
         seqs = {CHROM: ref, **{f"ref{i}": ref for i in range(10)}, "var": variant}
-        _, log = run_repair(seqs, self.tmp)
-        self.assertNotIn(variant[SNP_POS - 10 : 51], log)
+        out, log = run_repair(seqs, self.tmp)
+        self.assertIn(variant[SNP_POS - 10 : 51], log)
+        self.assertIn("Minor allele", log)
         self.assertNotIn("Can be added", log)
+        self.assertNotIn(variant[SNP_POS - 10 : 51], (out / "primer.bed").read_text())
+
+    def test_genomes_without_a_sequence_are_reported(self):
+        # Ns over the 1_LEFT site in 2 of 4 genomes: reported with their share
+        ref = read_reference()
+        masked = ref[:30] + "N" * 21 + ref[51:]
+        seqs = {CHROM: ref, "copy": ref, "n1": masked, "n2": masked}
+        _, log = run_repair(seqs, self.tmp)
+        self.assertRegex(log, r"1_LEFT: ContainsN in 2 genomes")
 
     def test_identical_genomes_change_nothing(self):
         ref = read_reference()
@@ -268,10 +374,8 @@ class TestRepairEdgeCases(unittest.TestCase):
         with self.assertRaises(SystemExit):
             run_repair({"not_the_ref": ref, "other": ref}, self.tmp)
 
-    @unittest.expectedFailure
     def test_log_file_per_run(self):
-        # Bug: setup_rich_logger uses logging.basicConfig, which only takes
-        # effect once per process, so later runs leave work/file.log empty
+        # Every run in one process writes its own work/file.log
         ref = read_reference()
         for name in ("first", "second"):
             outdir = self.tmp / name
@@ -280,7 +384,7 @@ class TestRepairEdgeCases(unittest.TestCase):
             self.assertIn("Checking", (out / "work" / "file.log").read_text(), name)
 
     def test_existing_output_needs_force(self):
-        from click import UsageError
+        from primalscheme3.core.errors import UsageError
 
         ref = read_reference()
         out, _ = run_repair({CHROM: ref}, self.tmp)

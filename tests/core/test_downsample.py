@@ -52,6 +52,9 @@ class RecordingScorer:
 
 # A thermo-passing primer and single-substitution variants of it
 BASE = "GGTATAGTCAATTGCCTAGTCTTCTGTTC"
+# Selection tests use a wide Tm window: with the digest's formamide, some
+# single-base variants of BASE fall just under the default 59.5 °C minimum
+TM_MIN = 55.0
 
 
 def variant(pos_from_3p: int, seq: str = BASE) -> str:
@@ -283,6 +286,7 @@ class TestDeltaCtDownsampleBehaviour(unittest.TestCase):
             downsample_always_add_prop=0.5,
             downsample_target=0.9,
             downsample_max_dct=-4.0,
+            primer_tm_min=TM_MIN,
         )
 
     def run_ds(self, seq_counts, ps, **kw):
@@ -358,7 +362,9 @@ class TestDeltaCtDownsampleBehaviour(unittest.TestCase):
 
 class TestDownsampleWithBundledModel(unittest.TestCase):
     def setUp(self):
-        self.config = Config(downsample=True, downsample_target=0.9)
+        self.config = Config(
+            downsample=True, downsample_target=0.9, primer_tm_min=TM_MIN
+        )
         self.ps = PrimerScorer()
 
     def test_mild_3p_distal_mismatches_are_covered(self):
@@ -383,19 +389,22 @@ class TestDownsampleWithBundledModel(unittest.TestCase):
         seqs = [BASE, variant(1), variant(15)]
         counts = [20.0, 5.0, 1.0]
         ds._ds_pool_init(DEFAULT_MODEL, self.config)
-        idx, kept = ds._ds_pool_worker((7, seqs, counts))
+        cloud = ds.DownsampleCloud(seqs, counts, failed=None, dimers=[])
+        idx, result = ds._ds_pool_worker((7, cloud))
         self.assertEqual(idx, 7)
         direct = ds.delta_ct_downsample_seqs(
             dict(zip(seqs, counts, strict=True)), self.config, self.ps
         )
-        self.assertEqual(kept, direct)
+        self.assertEqual(result.kept, direct)
 
 
 class TestAnnealingDownsample(unittest.TestCase):
     """downsample_seqs: the annealing-based selection used by downsample_scheme."""
 
     def setUp(self):
-        self.config = Config(downsample_always_add_prop=0.5, downsample_target=0.9)
+        self.config = Config(
+            downsample_always_add_prop=0.5, downsample_target=0.9, primer_tm_min=TM_MIN
+        )
 
     def test_single_seq(self):
         self.assertEqual(ds.downsample_seqs({BASE: 1.0}, self.config), [BASE])
@@ -475,7 +484,7 @@ class TestDownsampleScheme(unittest.TestCase):
 
     def run_ds(self, rows, visualise=False, **cfg):
         bed = write_bed(self.tmp / "primer.bed", rows)
-        config = Config(downsample=True, **cfg)
+        config = Config(downsample=True, **{"primer_tm_min": TM_MIN, **cfg})
         config.output = self.tmp / "out"
         return ds.downsample_scheme(bed, config, visualise=visualise)
 
@@ -649,3 +658,243 @@ class TestDownsampleScheme(unittest.TestCase):
             ["downsample-existing-scheme", str(bed), "--primer-scorer-model", "nope"],
         )
         self.assertNotEqual(bad.exit_code, 0)
+
+
+class FakeReturnAllKmer:
+    """The parts of a return_all FKmer/RKmer that downsampling reads."""
+
+    def __init__(self, seqs, counts, statuses, errors=(), dimers=()):
+        self._seqs, self._counts, self._statuses = seqs, counts, statuses
+        self._errors, self._dimers = list(errors), list(dimers)
+
+    def seqs(self):
+        return self._seqs
+
+    def counts(self):
+        return self._counts
+
+    def statuses(self):
+        return self._statuses
+
+    def errors(self):
+        return self._errors
+
+    def dimers(self):
+        return self._dimers
+
+
+class TestDownsampledKmer(unittest.TestCase):
+    def setUp(self):
+        self.cloud = ds.DownsampleCloud(
+            seqs=[BASE, variant(3), variant(5)],
+            counts=[10.0, 2.0, 1.0],
+            failed=set(),
+            dimers=[(variant(3), variant(5))],
+        )
+
+    def test_kept_seqs_keep_their_counts(self):
+        k = ds.downsampled_kmer(self.cloud, [variant(5), BASE], FKmer, 120)
+        self.assertIsInstance(k, FKmer)
+        self.assertEqual(k.end, 120)
+        counts = dict(zip(k.seqs(), k.counts(), strict=True))
+        self.assertEqual(counts, {BASE: 10.0, variant(5): 1.0})
+
+    def test_rkmer_position(self):
+        k = ds.downsampled_kmer(self.cloud, [variant(3)], RKmer, 80)
+        self.assertIsInstance(k, RKmer)
+        self.assertEqual(k.start, 80)
+        self.assertEqual(k.counts(), [2.0])
+
+    def test_kept_dimer_pair_raises(self):
+        with self.assertRaises(AssertionError):
+            ds.downsampled_kmer(self.cloud, [variant(3), variant(5)], FKmer, 120)
+
+
+class TestDownsampleCloud(unittest.TestCase):
+    def test_failures_and_low_freq(self):
+        kmer = FakeReturnAllKmer(
+            [BASE, variant(3), variant(5)],
+            [10.0, 2.0, 1.0],
+            [[], ["LowTm", "Hairpin"], ["LowFreq"]],
+        )
+        cloud = ds.downsample_cloud(kmer)
+        # LowFreq sequences are dropped, as the normal digest drops them
+        self.assertEqual(cloud.seqs, [BASE, variant(3)])
+        self.assertEqual(cloud.counts, [10.0, 2.0])
+        self.assertEqual(cloud.failed, {variant(3)})
+
+    def test_to_long_seq_fails_but_keeps_the_cloud(self):
+        longer = "ACGT" + BASE
+        kmer = FakeReturnAllKmer([BASE, longer], [10.0, 2.0], [[], ["ToLong"]])
+        cloud = ds.downsample_cloud(kmer)
+        self.assertEqual(cloud.seqs, [BASE, longer])
+        self.assertEqual(cloud.failed, {longer})
+        self.assertEqual(cloud.fail_tags, {longer: ["ToLong"]})
+
+    def test_untagged_error_drops_the_cloud(self):
+        kmer = FakeReturnAllKmer([BASE], [1.0], [[]], errors=[(["ContainsN"], 1.0)])
+        self.assertIsNone(ds.downsample_cloud(kmer))
+
+    def test_ignored_and_low_freq_errors_keep_the_cloud(self):
+        kmer = FakeReturnAllKmer(
+            [BASE],
+            [5.0],
+            [[]],
+            errors=[
+                (["ContainsN", "Ignored"], 1.0),
+                (["GapOnSetBase", "LowFreq"], 0.1),
+            ],
+        )
+        self.assertEqual(ds.downsample_cloud(kmer).seqs, [BASE])
+
+    def test_only_low_freq_left_drops_the_cloud(self):
+        kmer = FakeReturnAllKmer([BASE], [1.0], [["LowFreq"]])
+        self.assertIsNone(ds.downsample_cloud(kmer))
+
+    def test_self_dimer_fails_the_seq(self):
+        kmer = FakeReturnAllKmer(
+            [BASE, variant(3)], [5.0, 1.0], [[], []], dimers=[(1, 1)]
+        )
+        cloud = ds.downsample_cloud(kmer)
+        self.assertEqual(cloud.failed, {variant(3)})
+        self.assertEqual(cloud.dimers, [])
+
+    def test_dimers_only_count_between_kept_seqs(self):
+        kmer = FakeReturnAllKmer(
+            [BASE, variant(3), variant(5)],
+            [5.0, 1.0, 1.0],
+            [[], [], []],
+            dimers=[(0, 2)],
+        )
+        cloud = ds.downsample_cloud(kmer)
+        self.assertEqual(cloud.dimers, [(BASE, variant(5))])
+        self.assertTrue(ds.forms_dimer(cloud, [BASE, variant(5)]))
+        # The partner was downsampled away
+        self.assertFalse(ds.forms_dimer(cloud, [BASE, variant(3)]))
+
+    def test_failed_seqs_replace_the_python_thermo_check(self):
+        from unittest import mock
+
+        config = Config(downsample=True, downsample_target=0.9)
+        seqs = {BASE: 10.0, variant(3): 1.0}
+        with mock.patch.object(
+            ds, "thermo_check", side_effect=AssertionError("called")
+        ):
+            kept = ds.delta_ct_downsample_seqs(
+                seqs, config, FakeScorerAlwaysPass(), failed_seqs=set()
+            )
+            self.assertEqual(kept, [BASE])
+            # A failed sequence is never kept, and can't cover itself: BASE
+            # alone covers 10/11, short of a 0.95 target
+            config.downsample_target = 0.95
+            kept = ds.delta_ct_downsample_seqs(
+                seqs, config, FakeScorerAlwaysFail(), failed_seqs={variant(3)}
+            )
+            self.assertIsNone(kept)
+
+
+class TestMSADownsampleReturnAll(unittest.TestCase):
+    """Downsampled clouds come from the Rust digest's passing sequences."""
+
+    msa_path = pathlib.Path("tests/core/test_mismatch.fasta")
+
+    def test_kept_seqs_pass_the_rust_checks(self):
+        from primalschemers import Digester
+
+        from primalscheme3.core.msa import digest_kwargs
+
+        config = Config(downsample=True, ncores=1)
+        msa = MSA("test", self.msa_path, 0, ProgressManager(), config)
+        msa.digest_rs(config=config)
+        self.assertTrue(msa.fkmers)
+        # Every kept sequence passes all checks in a return_all digest
+        f, _, _ = Digester(str(self.msa_path), 1, False).digest(
+            findexes=[k.end for k in msa.fkmers],
+            rindexes=[],
+            thermo_check=True,
+            return_all=True,
+            **digest_kwargs(config),
+        )
+        statuses = {
+            (k.end, s): tags
+            for k in f
+            for s, tags in zip(k.seqs(), k.statuses(), strict=False)
+        }
+        for k in msa.fkmers:
+            for s in k.seqs():
+                self.assertEqual(statuses[(k.end, s)], [], (k.end, s))
+
+
+class TableScorer:
+    """A primer covers a template exactly when (template, primer) is listed;
+    any other mismatch is unknown (None)."""
+
+    def __init__(self, covers):
+        self.covers = set(covers)
+
+    def score_seq_batch(self, pairs, config):
+        return [0.0 if pair in self.covers else None for pair in pairs]
+
+
+class TestDimerAwareSelection(unittest.TestCase):
+    """
+    BASE (10) is always added but covers nothing else. X (3) and Y (3) are
+    one-base variants of BASE; D (1) is one base from each and covers both,
+    so D is the best next primer, unless it dimerises with BASE.
+    """
+
+    X, Y = variant(3), variant(5)
+    D = variant(3, variant(5))
+
+    def setUp(self):
+        self.config = Config(
+            downsample=True,
+            downsample_always_add_prop=0.5,
+            downsample_target=0.85,
+            downsample_max_dct=-4.0,
+            primer_tm_min=TM_MIN,
+        )
+        self.seqs = {BASE: 10.0, self.X: 3.0, self.Y: 3.0, self.D: 1.0}
+        self.ps = TableScorer([(self.X, self.D), (self.Y, self.D)])
+
+    def run_ds(self, dimers):
+        return ds.delta_ct_downsample_seqs(
+            dict(self.seqs), self.config, self.ps, failed_seqs=set(), dimers=dimers
+        )
+
+    def test_without_dimers_the_best_primer_is_chosen(self):
+        self.assertEqual(self.run_ds([]), sorted([BASE, self.D]))
+
+    def test_clashing_best_primer_is_skipped_for_clean_ones(self):
+        result = self.run_ds([(BASE, self.D)])
+        self.assertEqual(result, sorted([BASE, self.X, self.Y]))
+
+    def test_clashes_with_unneeded_seqs_dont_matter(self):
+        self.assertEqual(self.run_ds([(self.X, self.Y)]), sorted([BASE, self.D]))
+
+    def test_clashing_always_added_seqs_reject_the_cloud(self):
+        # X as common as BASE, both above always-add (0.3 x 24 = 7.2)
+        self.seqs[self.X] = 10.0
+        self.config.downsample_always_add_prop = 0.3
+        self.assertIsNone(self.run_ds([(BASE, self.X)]))
+
+    def test_no_clean_way_to_the_target_rejects_the_cloud(self):
+        # D clashes with BASE, and X and Y with each other: only one of them
+        # can be added, short of the target
+        self.assertIsNone(self.run_ds([(BASE, self.D), (self.X, self.Y)]))
+
+    def test_summary_csv_marks_a_clash_as_failed(self):
+        self.seqs[self.X] = 10.0
+        self.config.downsample_always_add_prop = 0.3
+        with tempfile.TemporaryDirectory() as d:
+            ds.delta_ct_downsample_seqs(
+                dict(self.seqs),
+                self.config,
+                self.ps,
+                outdir=d,
+                failed_seqs=set(),
+                dimers=[(BASE, self.X)],
+            )
+            with open(pathlib.Path(d) / "downsample_summary.csv") as fh:
+                rows = list(csv.DictReader(fh))
+        self.assertEqual(rows[0]["passed"], "False")

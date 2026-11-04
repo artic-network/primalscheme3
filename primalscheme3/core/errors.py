@@ -1,4 +1,11 @@
-from click import UsageError
+import typer
+
+
+class UsageError(typer.BadParameter):
+    """A user error the CLI reports as `Error: <message>`, without a traceback"""
+
+    def format_message(self) -> str:
+        return self.message
 
 
 class CustomErrors(Exception):

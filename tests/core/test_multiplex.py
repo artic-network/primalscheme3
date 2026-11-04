@@ -13,9 +13,8 @@ from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 
 
 class TestMultiplex(unittest.TestCase):
-    db_path = pathlib.Path("./tests/core/mulitplex").absolute()
     config = Config()
-    matchdb = MatchDB(db_path, [], config)  # Create an empty matchdb
+    matchdb = MatchDB([], [], config)  # Create an empty matchdb
     inputfile_path = pathlib.Path("./tests/core/test_mismatch.fasta").absolute()
     nCoV_2019_76_RIGHT_0 = "ACACCTGTGCCTGTTAAACCAT"
     nCoV_2019_18_LEFT_0 = "TGGAAATACCCACAAGTTAATGGTTTAAC"

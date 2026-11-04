@@ -4,7 +4,6 @@ import pathlib
 from time import sleep
 
 import dnaio
-from click import UsageError
 
 # Interaction checker
 from primalscheme3.core.bedfiles import (
@@ -15,13 +14,13 @@ from primalscheme3.core.create_report_data import (
     generate_all_plotdata,
 )
 from primalscheme3.core.create_reports import generate_all_plots_html
-from primalscheme3.core.errors import DigestionFailNoPrimerPairs
+from primalscheme3.core.errors import DigestionFailNoPrimerPairs, UsageError
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import (
     generate_consensus,
     generate_reference,
 )
-from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.mismatches import MatchDB, background_checksums
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.primer_visual import (
     plot_primer_thermo_profile_html,
@@ -80,10 +79,12 @@ def schemecreate(
         "Creating the Mismatch Database",
     )
     mismatch_db = MatchDB(
-        OUTPUT_DIR / "work/mismatch",
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
+        config.background_genomes if config.use_matchdb else [],
         config,
     )
+    if config.background_genomes and not config.use_matchdb:
+        logger.warning("Background genomes are ignored as the mismatch db is off")
     logger.info(mismatch_db.describe())
 
     # If the bedfile flag is given add the primers into the scheme
@@ -145,11 +146,6 @@ def schemecreate(
     for msa_index, msa_obj in msa_dict.items():
         # Digest the MSA into FKmers and RKmers
         msa_obj.digest_rs(config, None)  # Default to one core
-        logger.info(
-            f"[blue]{msa_obj._chrom_name}[/blue]: digested to "
-            f"[green]{len(msa_obj.fkmers)}[/green] FKmers and "
-            f"[green]{len(msa_obj.rkmers)}[/green] RKmers"
-        )
 
         # Add the msa to the scheme
         msa_dict[msa_index] = msa_obj
@@ -185,6 +181,15 @@ def schemecreate(
     if not any(msa_has_primerpairs_bool.values()):
         logger.critical("No valid primers found in any MSA")
         raise DigestionFailNoPrimerPairs("No valid primerpairs found in any MSA")
+
+    # Screen every candidate primer's 3' end against the references once
+    n_screened = mismatch_db.prescreen_msas(
+        msa_dict, bedprimerpairs if input_bedfile is not None else ()
+    )  # type: ignore
+    logger.info(f"Screened {n_screened:,} primer 3' ends for mispriming")
+    for ref_name, n_sites in mismatch_db.site_counts():
+        logger.debug(f"{ref_name}: {n_sites:,} binding sites")
+    cfg_dict["background_data"] = background_checksums(config.background_genomes)
 
     # Create the scheme object early
     scheme = Scheme(config=config, matchDB=mismatch_db, msa_dict=msa_dict)
@@ -286,6 +291,10 @@ def schemecreate(
         # Close the progress tracker
         scheme_pt.manual_update(n=scheme_pt.total)
         scheme_pt.close()
+
+    for table in scheme.check_tables():
+        logger.info(table)
+    cfg_dict["pair_checks"] = scheme.check_summary()
 
     # Create the progress tracker for the final steps
     logger.info("Writing output files")

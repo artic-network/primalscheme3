@@ -3,14 +3,24 @@ import csv
 import itertools
 import math
 import os
+from dataclasses import dataclass, field
 
 import matplotlib.pyplot as plt
 import networkx as nx
+import tqdm
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from primalbedtools.bedfiles import group_amplicons
 from primalbedtools.scheme import Scheme
 from primalschemers import FKmer, RKmer
 
 from primalscheme3.core.config import PRIMER_COUNT_ATTR_STRING, Config
+from primalscheme3.core.digest_report import (
+    LOW_FREQ,
+    ONLY_LOW_FREQ,
+    PRIMER_DIMER,
+    untagged,
+)
 from primalscheme3.core.primerscorer import PrimerScorer
 from primalscheme3.core.seq_functions import primer_edit_dist
 from primalscheme3.core.thermo import THERMO_RESULT, calc_annealing_hetro, thermo_check
@@ -48,6 +58,20 @@ def _layout(G):
         seed=42,
         k=SPRING_K / math.sqrt(n),
         iterations=400,
+    )
+
+
+def _legend_dot(edge, lw, label):
+    return Line2D(
+        [0],
+        [0],
+        marker="o",
+        color="none",
+        markerfacecolor="#bbbbbb",
+        markeredgecolor=edge,
+        markeredgewidth=lw,
+        markersize=11,
+        label=label,
     )
 
 
@@ -158,27 +182,11 @@ def visualise_graph(
     ax.set_axis_off()
     ax.margins(0.08)
 
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
-
-    def _dot(edge, lw, label):
-        return Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="none",
-            markerfacecolor="#bbbbbb",
-            markeredgecolor=edge,
-            markeredgewidth=lw,
-            markersize=11,
-            label=label,
-        )
-
     legend_elements = [
         Patch(facecolor=C_PASS, edgecolor="none", label="Thermo pass"),
         Patch(facecolor=C_FAIL, edgecolor="none", label="Thermo fail"),
-        _dot(C_ADDED_EDGE, 2.5, "Selected (added)"),
-        _dot(C_ACC_EDGE, 2.0, "Accounted for"),
+        _legend_dot(C_ADDED_EDGE, 2.5, "Selected (added)"),
+        _legend_dot(C_ACC_EDGE, 2.0, "Accounted for"),
     ]
     if directional:
         legend_elements += [
@@ -308,6 +316,136 @@ def coverage_prop(
     return accounted_count(seq_counts, seq_delta_ct, max_dct) / total
 
 
+@dataclass
+class DownsampleCloud:
+    """A primer cloud from a return_all digest, ready to downsample."""
+
+    seqs: list[str]
+    counts: list[float]
+    # Sequences failing the Rust digest's checks (kept for coverage only)
+    failed: set[str] | None
+    # Interacting sequence pairs within the cloud
+    dimers: list[tuple[str, str]]
+    # The checks each failed sequence fails, e.g. ["LowTm", "Hairpin"]
+    fail_tags: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class DownsampleResult:
+    # The kept sequences, or None if the cloud can't be used
+    kept: list[str] | None
+    # Why not: the checks involved, e.g. {"Hairpin", "PrimerDimer"}
+    failures: frozenset[str] = frozenset()
+
+
+def cloud_failures(kmer: FKmer | RKmer) -> frozenset[str]:
+    """Why downsample_cloud gives None for ``kmer``: its alignment errors, or
+    OnlyLowFreq. Empty if it gives a cloud."""
+    errors = frozenset(tags[0] for tags, _ in kmer.errors() if untagged(tags))
+    if errors:
+        return errors
+    statuses = kmer.statuses() or [[] for _ in kmer.seqs()]
+    if all(LOW_FREQ in tags for tags in statuses):
+        return frozenset({ONLY_LOW_FREQ})
+    return frozenset()
+
+
+def downsample_cloud(kmer: FKmer | RKmer) -> DownsampleCloud | None:
+    """
+    The cloud a normal digest would consider from a return_all ``kmer``:
+    sequences below min_freq are dropped, as the digest drops them. None if
+    the digest would reject the position outright (an error such as
+    ContainsN, unless ignored) or no sequence is left.
+    """
+    if cloud_failures(kmer):
+        return None
+    all_seqs = kmer.seqs()
+    statuses = kmer.statuses() or [[] for _ in all_seqs]
+    rows = [
+        (seq, count, tags)
+        for seq, count, tags in zip(all_seqs, kmer.counts(), statuses, strict=True)
+        if LOW_FREQ not in tags
+    ]
+    if not rows:
+        return None
+    pairs = [(all_seqs[i], all_seqs[j]) for i, j in kmer.dimers()]
+    # A primer that dimerises with itself can't be used (as in the normal
+    # digest): it fails, though still counts towards coverage
+    self_dimers = {a for a, b in pairs if a == b}
+    fail_tags = {
+        seq: tags + ([PRIMER_DIMER] if seq in self_dimers else [])
+        for seq, _, tags in rows
+        if tags or seq in self_dimers
+    }
+    return DownsampleCloud(
+        seqs=[seq for seq, _, _ in rows],
+        counts=[count for _, count, _ in rows],
+        failed=set(fail_tags),
+        dimers=[(a, b) for a, b in pairs if a != b],
+        fail_tags=fail_tags,
+    )
+
+
+def downsample_clouds(
+    clouds: list[DownsampleCloud],
+    names: list[str],
+    config: Config,
+    ps: PrimerScorer,
+    plot_outdir: str | None,
+    desc: str,
+) -> list[DownsampleResult]:
+    """Downsample each cloud in turn, plotting it if config.downsample_plot."""
+    return [
+        delta_ct_downsample(
+            seq_counts=dict(zip(cloud.seqs, cloud.counts, strict=True)),
+            config=config,
+            ps=ps,
+            visualise=config.downsample_plot and len(cloud.seqs) > 1,
+            outdir=plot_outdir,
+            name=name,
+            failed_seqs=cloud.failed,
+            dimers=cloud.dimers,
+            fail_tags=cloud.fail_tags,
+        )
+        for cloud, name in tqdm.tqdm(
+            zip(clouds, names, strict=True), total=len(clouds), desc=desc
+        )
+    ]
+
+
+def downsampled_kmer(
+    cloud: DownsampleCloud, kept: list[str], kmer_cls, pos: int
+) -> FKmer | RKmer:
+    """The kmer of the sequences kept from ``cloud``, with their counts."""
+    # The selection avoids dimers; this guards against a regression
+    assert not forms_dimer(cloud, kept), "downsampled cloud dimerises"
+    counts = dict(zip(cloud.seqs, cloud.counts, strict=True))
+    return kmer_cls([s.encode() for s in kept], pos, [counts[s] for s in kept])
+
+
+def forms_dimer(cloud: DownsampleCloud, kept: list[str]) -> bool:
+    """Whether two of the kept sequences interact."""
+    kept_set = set(kept)
+    return any(a in kept_set and b in kept_set for a, b in cloud.dimers)
+
+
+def _seq_fail_tags(
+    seq: str,
+    fail_tags: dict[str, list[str]] | None,
+    failed_seqs: set[str],
+    seq_thermo_dict: dict,
+    clashes: dict[str, set[str]],
+    added_seqs: set[str],
+) -> list[str]:
+    """The checks ``seq`` fails in a cloud that couldn't be downsampled."""
+    if fail_tags and seq in fail_tags:
+        return fail_tags[seq]
+    if seq in failed_seqs:
+        return [seq_thermo_dict[seq].name]
+    # Passing, but dimerises with a kept primer
+    return [PRIMER_DIMER] if clashes.get(seq, set()) & added_seqs else []
+
+
 def delta_ct_downsample_seqs(
     seq_counts: dict[str, float],
     config: Config,
@@ -315,7 +453,26 @@ def delta_ct_downsample_seqs(
     visualise: bool = False,
     outdir: str | None = None,
     name: str = "downsample",
-):
+    failed_seqs: set[str] | None = None,
+    dimers: list[tuple[str, str]] | None = None,
+) -> list[str] | None:
+    """The sequences delta_ct_downsample keeps, or None if the cloud can't be used."""
+    return delta_ct_downsample(
+        seq_counts, config, ps, visualise, outdir, name, failed_seqs, dimers
+    ).kept
+
+
+def delta_ct_downsample(
+    seq_counts: dict[str, float],
+    config: Config,
+    ps: PrimerScorer,
+    visualise: bool = False,
+    outdir: str | None = None,
+    name: str = "downsample",
+    failed_seqs: set[str] | None = None,
+    dimers: list[tuple[str, str]] | None = None,
+    fail_tags: dict[str, list[str]] | None = None,
+) -> DownsampleResult:
     """
     Takes a raw Kmer object from PrimalSchemers Kmer. Contains the un-thermo-checked sequence and
     the count of how often that sequence appeared in the MSA
@@ -325,8 +482,20 @@ def delta_ct_downsample_seqs(
         k: v for k, v in sorted(seq_counts.items(), key=lambda x: x[1], reverse=True)
     }
 
-    # Thermo check each sequence.
-    seq_thermo_dict = {seq: thermo_check(seq, config) for seq in seq_counts.keys()}
+    # Thermo check each sequence, unless the Rust digest already did
+    if failed_seqs is None:
+        seq_thermo_dict = {seq: thermo_check(seq, config) for seq in seq_counts}
+    else:
+        seq_thermo_dict = {
+            seq: THERMO_RESULT.FAIL if seq in failed_seqs else THERMO_RESULT.PASS
+            for seq in seq_counts
+        }
+
+    # Sequences that dimerise with each other: never selected together
+    clashes: dict[str, set[str]] = {}
+    for a, b in dimers or []:
+        clashes.setdefault(a, set()).add(b)
+        clashes.setdefault(b, set()).add(a)
 
     valid_edit_dist = []
     for n1, n2 in itertools.combinations(seq_counts.keys(), 2):
@@ -378,10 +547,14 @@ def delta_ct_downsample_seqs(
     # Keep track of deltaCt
     seq_delta_ct: dict[str, None | float] = {s: None for s in seq_thermo_dict.keys()}
 
-    # Add all valid sequences above threshold.
+    # Add all valid sequences above threshold. These must be kept, so if two
+    # of them dimerise the cloud can't be used
+    dimer_conflict = False
     for seq, count in seq_counts.items():
         # Skip failed or already added
         if seq not in failed_seqs and count >= always_add_count:
+            if clashes.get(seq, set()) & added_seqs:
+                dimer_conflict = True
             # Calc dct for neighbors
             s = score_cache[seq]
             seq_delta_ct = update_delta_ct(seq_delta_ct, s)
@@ -401,7 +574,8 @@ def delta_ct_downsample_seqs(
         # Sort the sequences to find the ones with highest count-weighted dCt
         tmp_scores = {}
         for s in ordered_seqs:
-            if s not in possible_seqs:
+            # Skip used or failed seqs, and any that dimerise with one added
+            if s not in possible_seqs or clashes.get(s, set()) & added_seqs:
                 continue
             # Score the primer from cache
             scores = score_cache[s]
@@ -482,7 +656,7 @@ def delta_ct_downsample_seqs(
                     len(added_seqs),
                     all_seqs_count,
                     round(tmp_target_prop, 4),
-                    tmp_target_prop >= config.downsample_target,
+                    not dimer_conflict and tmp_target_prop >= config.downsample_target,
                 ]
             )
 
@@ -507,10 +681,28 @@ def delta_ct_downsample_seqs(
             max_dct=config.downsample_max_dct,
             covered_prop=tmp_target_prop,
         )
-    if tmp_target_prop >= config.downsample_target:
-        return sorted(added_seqs)
-    else:
-        return None
+    if not dimer_conflict and tmp_target_prop >= config.downsample_target:
+        return DownsampleResult(sorted(added_seqs))
+
+    if dimer_conflict:
+        return DownsampleResult(None, frozenset({PRIMER_DIMER}))
+    blamed = seq_counts.keys()
+    if set(seq_counts) - failed_seqs:
+        blamed = [
+            s
+            for s, dct in seq_delta_ct.items()
+            if dct is None or dct < config.downsample_max_dct
+        ]
+    # The checks involved: of all sequences if none passes, else of the
+    # genomes left uncovered
+    checks = frozenset(
+        tag
+        for seq in blamed
+        for tag in _seq_fail_tags(
+            seq, fail_tags, failed_seqs, seq_thermo_dict, clashes, added_seqs
+        )
+    )
+    return DownsampleResult(None, checks or frozenset({"BelowTarget"}))
 
 
 def downsample_seqs(
@@ -721,17 +913,17 @@ def _ds_pool_init(model_path, config):
     _WORKER_CFG = config
 
 
-def _ds_pool_worker(task):
-    idx, seqs, counts = task
-    seq_counts = {s: c for s, c in zip(seqs, counts, strict=True)}
-    kept = delta_ct_downsample_seqs(
-        seq_counts=seq_counts,
+def _ds_pool_worker(task: tuple[int, DownsampleCloud]):
+    idx, cloud = task
+    result = delta_ct_downsample(
+        seq_counts=dict(zip(cloud.seqs, cloud.counts, strict=True)),
         config=_WORKER_CFG,
         ps=_WORKER_PS,
-        visualise=False,
-        outdir=None,
+        failed_seqs=cloud.failed,
+        dimers=cloud.dimers,
+        fail_tags=cloud.fail_tags,
     )
-    return idx, kept
+    return idx, result
 
 
 def downsample_scheme(path, config, visualise: bool = False) -> Scheme:

@@ -71,7 +71,7 @@ class Config:
     primer_tm_max: float = 62.5
     primer_annealing_tempc = 65
     primer_annealing_prop: float | None = None
-    primer_annealing_diff: float = 5
+    primer_annealing_diff: float = 8.0
     _primer_annealing_prop_default: float = 30.0
     use_annealing: bool = False
 
@@ -80,16 +80,18 @@ class Config:
     primer_max_walk: int = 80
     # MatchDB Settings
     use_matchdb: bool = True
-    in_memory_db: bool = True
-    editdist_max: int = 1
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min
-    mismatch_product_size: int = 0
+    mismatch_product_size: int = 0  # 0 uses amplicon_size_max
+    # FASTAs screened for mispriming products alongside the MSAs
+    background_genomes: list[str] = []
     # Thermodynamic Parameters
     mv_conc: float = 100.0
     dv_conc: float = 2.0
     dntp_conc: float = 0.8
     dna_conc: float = 15.0
+    # Formamide (mol/l) in the primer Tm, as the Rust digest uses it
+    formamide_conc: float = 0.8
     dimer_score: float = -26.0
 
     def __init__(self, **kwargs: Any) -> None:
@@ -111,6 +113,8 @@ class Config:
             self.primer_gc_max = self._primer_gc_default_max
         # Set MisMatch Kmer Size
         self.mismatch_kmersize = self.primer_size_min
+        if self.mismatch_product_size == 0:
+            self.mismatch_product_size = self.amplicon_size_max
         # Set annealing
         if self.use_annealing:
             self.primer_annealing_prop = self._primer_annealing_prop_default
@@ -162,6 +166,10 @@ class Config:
 
             if key in {"input_bedfile"}:
                 setattr(self, key, pathlib.Path(value))
+                continue
+
+            if key == "background_genomes":
+                setattr(self, key, [str(path) for path in value])
                 continue
 
             if hasattr(self, key):

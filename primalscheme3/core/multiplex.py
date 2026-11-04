@@ -1,8 +1,12 @@
+from collections import Counter
 from enum import Enum
 
 import numpy as np
 from primalbedtools.scheme import Scheme
-from primalschemers import do_pool_interact  # type: ignore
+from primalschemers import PoolHits, do_pool_interact  # type: ignore
+from rich import box
+from rich.bar import Bar
+from rich.table import Table
 
 from primalscheme3.core.bedfiles import (
     BedPrimerPair,
@@ -11,7 +15,7 @@ from primalscheme3.core.bedfiles import (
 )
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
-from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 
 
@@ -25,6 +29,15 @@ class PrimerPairCheck(Enum):
     MISPRIMING = 3
     OK = 4
     CIRCULAR = 5
+
+
+# The outcomes a primer pair check can have, in the order they are checked
+CHECK_OUTCOMES = (
+    PrimerPairCheck.OVERLAP,
+    PrimerPairCheck.INTERACTING,
+    PrimerPairCheck.MISPRIMING,
+    PrimerPairCheck.OK,
+)
 
 
 class Multiplex:
@@ -42,7 +55,7 @@ class Multiplex:
     - self._current_pool: int. The current pool number
     - self._last_pp_added: list[PrimerPair]. Stack to keep track of the last primer added
     - self._matchDB: MatchDB object
-    - self._matches: list[set[tuple]]. A list of sets with matches for each pool
+    - self._matches: list[PoolHits]. The binding sites of each pool's primers
     - self._msa_dict: dict[int, MSA]. A dict of MSA objects
     - self._coverage: dict[int, np.ndarray]. PrimerTrimmed Coverage for each MSA index
     - self._lookup: dict[int, np.ndarray[npools, ncols]] | None. A lookup for the primerpairs in the multiplex.
@@ -52,7 +65,7 @@ class Multiplex:
     _current_pool: int
     _last_pp_added: list[PrimerPair]  # Stack to keep track of the last primer added
     _matchDB: MatchDB
-    _matches: list[set[tuple]]
+    _matches: list[PoolHits]
     _msa_dict: dict[int, MSA]
     _coverage: dict[int, np.ndarray]  # PrimerTrimmed Coverage for each MSA index
     _lookup: dict[int, np.ndarray]
@@ -63,13 +76,17 @@ class Multiplex:
     ) -> None:
         self.n_pools = config.n_pools
         self._pools = [[] for _ in range(self.n_pools)]
-        self._matches: list[set[tuple]] = [set() for _ in range(self.n_pools)]
+        self._matches: list[PoolHits] = [PoolHits() for _ in range(self.n_pools)]
         self._current_pool = 0
         self._pp_number = 1
         self.config = config
         self._matchDB = matchDB
         self._last_pp_added = []
         self._msa_dict = msa_dict
+        # Every primer pair check's outcome, and each mispriming product's
+        # (ref_id, formed by the pair alone)
+        self.check_counts: Counter[PrimerPairCheck] = Counter()
+        self.mispriming_counts: Counter[tuple[int, bool]] = Counter()
         # Set up coverage dict
         self.setup_coverage()
 
@@ -148,7 +165,35 @@ class Multiplex:
             for seq in ppseq
         ]
 
+    def forms_product(self, primerpair: PrimerPair, pool: int) -> bool:
+        """
+        Would the primerpair amplify an off-target product, alone or with the
+        pool? Counts which reference the product is on
+        """
+        product = self._matches[pool].find_product(
+            primerpair.find_matches(self._matchDB),
+            self.config.mismatch_product_size,
+            primerpair.expected_matches(),
+        )
+        if product is not None:
+            self.mispriming_counts[product] += 1
+        return product is not None
+
     def check_primerpair_can_be_added(
+        self,
+        primerpair: PrimerPair,
+        pool: int,
+        otherseqs_bytes: list[bytes] | None = None,
+    ) -> PrimerPairCheck:
+        """
+        Checks if the primerpair can be added to the multiplex, counting the
+        outcome
+        """
+        result = self._check_primerpair(primerpair, pool, otherseqs_bytes)
+        self.check_counts[result] += 1
+        return result
+
+    def _check_primerpair(
         self,
         primerpair: PrimerPair,
         pool: int,
@@ -177,20 +222,79 @@ class Multiplex:
             return PrimerPairCheck.INTERACTING
 
         # Check for other PCR Products
-        if detect_new_products(
-            primerpair.find_matches(
-                self._matchDB,
-                remove_expected=False,
-                kmersize=self.config.mismatch_kmersize,
-                fuzzy=self.config.mismatch_fuzzy,
-            ),
-            self._matches[pool],
-            self.config.mismatch_product_size,
-        ):
+        if self.forms_product(primerpair, pool):
             return PrimerPairCheck.MISPRIMING
 
         # If all checks pass, return True
         return PrimerPairCheck.OK
+
+    def check_summary(self) -> dict:
+        """
+        Every primer pair check's outcome, and the references mispriming
+        products were on, for config.json
+        """
+        names = self._matchDB.ref_names()
+        products: dict[str, dict[str, int]] = {}
+        for (ref_id, alone), n in sorted(self.mispriming_counts.items()):
+            by = products.setdefault(names[ref_id], {"alone": 0, "with_pool": 0})
+            by["alone" if alone else "with_pool"] += n
+        return {
+            **{check.name: self.check_counts[check] for check in CHECK_OUTCOMES},
+            "mispriming_references": products,
+        }
+
+    def check_tables(self) -> list[Table]:
+        """
+        Tables for the log: every primer pair check's outcome, and the
+        references mispriming products were on
+        """
+        n_checks = self.check_counts.total()
+        checks = Table(
+            title=f"Primer pair checks: [green]{self.check_counts[PrimerPairCheck.OK]:,}"
+            f"[/green] of {n_checks:,} passed",
+            title_justify="left",
+            caption="A pair is checked in each pool it is tried in, so pairs can "
+            "count more than once. A failed pair stops at its first failing check",
+            caption_justify="left",
+            box=box.SIMPLE_HEAD,
+        )
+        checks.add_column("Check")
+        checks.add_column("Pairs", justify="right")
+        checks.add_column("%", justify="right")
+        checks.add_column("", width=20)
+        for check in CHECK_OUTCOMES:
+            n = self.check_counts[check]
+            share = n / n_checks if n_checks else 0
+            checks.add_row(
+                check.name.capitalize(),
+                f"{n:,}",
+                f"{share:.0%}" if share >= 0.01 or n == 0 else "<1%",
+                Bar(
+                    max(n_checks, 1),
+                    0,
+                    n,
+                    color="green" if check == PrimerPairCheck.OK else "red",
+                ),
+            )
+        tables = [checks]
+
+        summary = self.check_summary()["mispriming_references"]
+        if summary:
+            refs = Table(
+                title="Mispriming products by reference",
+                title_justify="left",
+                caption="Alone: the pair's own sites form the product. "
+                "With pool: its sites and another primer's in the pool",
+                caption_justify="left",
+                box=box.SIMPLE_HEAD,
+            )
+            refs.add_column("Reference")
+            refs.add_column("Alone", justify="right")
+            refs.add_column("With pool", justify="right")
+            for name, by in summary.items():
+                refs.add_row(name, f"{by['alone']:,}", f"{by['with_pool']:,}")
+            tables.append(refs)
+        return tables
 
     def setup_coverage(self) -> None:
         """
@@ -318,14 +422,7 @@ class Multiplex:
             primerpair.amplicon_number = self.get_next_amplicon_number(msa_index)
 
         # Adds the primerpair's matches to the pools matches
-        self._matches[pool].update(
-            primerpair.find_matches(
-                self._matchDB,
-                fuzzy=self.config.mismatch_fuzzy,
-                remove_expected=True,
-                kmersize=self.config.mismatch_kmersize,
-            )
-        )
+        self._matches[pool].add(primerpair.find_matches(self._matchDB))
 
         # Adds the primerpair to the pool
         self._pools[pool].append(primerpair)
@@ -355,14 +452,7 @@ class Multiplex:
         self._pools[pp.pool].remove(pp)
 
         # Remove the primerpair's matches from the pool's matches
-        self._matches[pp.pool].difference_update(
-            pp.find_matches(
-                self._matchDB,
-                fuzzy=self.config.mismatch_fuzzy,
-                remove_expected=False,
-                kmersize=self.config.mismatch_kmersize,
-            )
-        )
+        self._matches[pp.pool].remove(pp.find_matches(self._matchDB))
 
         # Update the lookup
         self.update_lookup(pp, add=False)

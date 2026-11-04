@@ -6,7 +6,7 @@ from primalscheme3.core.bedfiles import BedPrimerPair
 from primalscheme3.core.classes import PrimerPair
 from primalscheme3.core.config import Config
 from primalscheme3.core.get_window import get_pp_window
-from primalscheme3.core.mismatches import MatchDB, detect_new_products
+from primalscheme3.core.mismatches import MatchDB
 from primalscheme3.core.msa import MSA
 from primalscheme3.core.multiplex import Multiplex, PrimerPairCheck
 
@@ -60,8 +60,14 @@ class Scheme(Multiplex):
         # Try and add the first primerpair to an empty pool
         for pool_index in range(self.n_pools):
             if not self._pools[pool_index]:
-                self.add_primer_pair_to_pool(primerpairs[0], pool_index, msa_index)
-                return SchemeReturn.ADDED_FIRST_PRIMERPAIR
+                for primerpair in primerpairs:
+                    if (
+                        self.check_primerpair_can_be_added(primerpair, pool_index, [])
+                        == PrimerPairCheck.OK
+                    ):
+                        self.add_primer_pair_to_pool(primerpair, pool_index, msa_index)
+                        return SchemeReturn.ADDED_FIRST_PRIMERPAIR
+                break
 
         # Create a hashmap of what seqs are in each pool for quick look up
         pool_seqs_map: dict[int, list[bytes]] = {
@@ -228,6 +234,7 @@ class Scheme(Multiplex):
                     and max(self._pools[pool_index][-1].rprimer.ends())
                     >= min(pp.fprimer.starts())
                 ):
+                    self.check_counts[PrimerPairCheck.OVERLAP] += 1
                     continue
 
                 # Guard for interactions
@@ -236,20 +243,14 @@ class Scheme(Multiplex):
                     index_to_seqs.get(pool_index),
                     self.config.dimer_score,
                 ):
+                    self.check_counts[PrimerPairCheck.INTERACTING] += 1
                     continue
 
                 # Guard for miss priming
-                if detect_new_products(
-                    pp.find_matches(
-                        self._matchDB,
-                        remove_expected=False,
-                        kmersize=self.config.mismatch_kmersize,
-                        fuzzy=self.config.mismatch_fuzzy,
-                    ),
-                    self._matches[pool_index],
-                    self.config.mismatch_product_size,
-                ):
+                if self.forms_product(pp, pool_index):
+                    self.check_counts[PrimerPairCheck.MISPRIMING] += 1
                     continue
+                self.check_counts[PrimerPairCheck.OK] += 1
 
                 # If all checks pass add the primerpair to the pool this is a valid alternative
                 # See if the valid alternative had a valid overlap

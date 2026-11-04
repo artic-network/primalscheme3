@@ -2,6 +2,7 @@
 from primalschemers import FKmer, RKmer, do_pool_interact  # type: ignore
 
 from primalscheme3.core.config import Config
+from primalscheme3.core.mismatches import Hit, expected_site
 from primalscheme3.core.thermo import calc_tm, gc
 
 
@@ -62,32 +63,27 @@ class PrimerPair:
     def set_pool_number(self, pool_number) -> None:
         self.amplicon_number = pool_number
 
-    def find_matches(self, matchDB, fuzzy, remove_expected, kmersize) -> set[tuple]:
+    def mispriming_kmers(self) -> list[FKmer | RKmer]:
         """
-        Find matches for the FKmer and RKmer
+        The FKmer and RKmer, as screened for mispriming
         """
-        matches = set()
-        # Find the FKmer matches
-        matches.update(
-            matchDB.find_fkmer(
-                self.fprimer,
-                fuzzy=fuzzy,
-                remove_expected=remove_expected,
-                kmersize=kmersize,
-                msaindex=self.msa_index,
-            )
+        return [self.fprimer, self.rprimer]
+
+    def find_matches(self, matchDB) -> list[Hit]:
+        """
+        The distinct sites the FKmer and RKmer bind
+        """
+        return sorted(
+            {hit for kmer in self.mispriming_kmers() for hit in matchDB.find_kmer(kmer)}
         )
-        # Find the RKmer matches
-        matches.update(
-            matchDB.find_rkmer(
-                self.rprimer,
-                fuzzy=fuzzy,
-                remove_expected=remove_expected,
-                kmersize=kmersize,
-                msaindex=self.msa_index,
-            )
-        )
-        return matches
+
+    def expected_matches(self) -> list[Hit]:
+        """
+        The sites the FKmer and RKmer are designed to bind
+        """
+        if self.msa_index is None or self.msa_index < 0:
+            return []
+        return [expected_site(k, self.msa_index) for k in self.mispriming_kmers()]
 
     def kmers(self):
         """
@@ -129,6 +125,7 @@ class PrimerPair:
                 dv_conc=config.dv_conc,
                 dna_conc=config.dna_conc,
                 dntp_conc=config.dntp_conc,
+                formamide_conc=config.formamide_conc,
             )
             for seq in self.all_seqs()
         ]

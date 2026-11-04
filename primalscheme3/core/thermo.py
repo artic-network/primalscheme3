@@ -1,16 +1,15 @@
 from collections.abc import Iterable
 from enum import Enum
 from itertools import groupby
-from math import exp, sqrt
 
-from primer3 import calc_hairpin as p3_calc_hairpin
-from primer3 import calc_heterodimer as p3_calc_heterodimer
-from primer3 import calc_tm as p3_calc_tm
+import primalschemers as ps
 
 from primalscheme3.core.config import Config
 from primalscheme3.core.seq_functions import reverse_complement
 
-T_KELVIN = 273.15
+# Thermodynamics come from primalschemers: thal, as primer3 2.3.0, for
+# hairpins and dimers, and the same nearest-neighbour model for an oligo's Tm
+# and annealing, so these agree with the Rust digest.
 
 
 class THERMO_RESULT(Enum):
@@ -23,6 +22,8 @@ class THERMO_RESULT(Enum):
     MAX_HOMOPOLY = 5
     HAIRPIN = 6
     TO_LONG = 7
+    # Failed one of the Rust digest's checks (see the kmer's statuses)
+    FAIL = 8
     HIGH_ANNEALING = 9
     LOW_ANNEALING = 10
 
@@ -30,24 +31,11 @@ class THERMO_RESULT(Enum):
 ANNEALING_DIFF = 5
 
 
-def calc_thermo(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c):
-    """Returns ThermoResult for the kmer binding to rc of itself."""
-    return p3_calc_heterodimer(
-        seq1=kmer_seq,
-        seq2=reverse_complement(kmer_seq),
-        mv_conc=mv_conc,
-        dv_conc=dv_conc,
-        dntp_conc=dntp_conc,
-        dna_conc=dna_conc,
-        temp_c=temp_c,
-        output_structure=True,
-    )
-
-
 def calc_annealing(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c) -> float:
-    tr = calc_thermo(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, temp_c)
-    ka = exp(-tr.dg / (1.987 * (temp_c + T_KELVIN)))
-    return (1 / (1 + sqrt(1 / ((dna_conc / 4000000000.0) * ka)))) * 100
+    """Percentage of the kmer bound to its complement at temp_c."""
+    return ps.calc_annealing(
+        kmer_seq, dna_conc, mv_conc, dv_conc, dntp_conc, 0.0, 0.6, 0.0, temp_c
+    )
 
 
 def calc_binding(kmer_seq: str, template_seq: str, config: Config):
@@ -72,45 +60,57 @@ def calc_binding_at(
     temp_c: float,
 ):
     """calc_binding at explicit conditions rather than a Config's."""
-    return p3_calc_heterodimer(
-        seq1=kmer_seq,
-        seq2=reverse_complement(template_seq),
+    return ps.calc_heterodimer(
+        kmer_seq,
+        reverse_complement(template_seq),
         mv_conc=mv_conc,
         dv_conc=dv_conc,
         dntp_conc=dntp_conc,
         dna_conc=dna_conc,
         temp_c=temp_c,
-        output_structure=False,
     )
 
 
 def calc_annealing_hetro(kmer_seq: str, template_seq: str, config: Config) -> float:
-    tr = calc_binding(kmer_seq, template_seq, config)
-    ka = exp(-tr.dg / (1.987 * (config.primer_annealing_tempc + T_KELVIN)))
-    return (1 / (1 + sqrt(1 / ((config.dna_conc / 4000000000.0) * ka)))) * 100
+    """Percentage of the kmer bound to the template site at the annealing
+    temperature (0 if no structure forms)."""
+    return ps.calc_annealing_hetero(
+        kmer_seq,
+        reverse_complement(template_seq),
+        config.primer_annealing_tempc,
+        mv_conc=config.mv_conc,
+        dv_conc=config.dv_conc,
+        dntp_conc=config.dntp_conc,
+        dna_conc=config.dna_conc,
+    )
 
 
 def calc_annealing_profile(
     kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, min_temp=40, max_temp=80
 ) -> dict[int, float]:
-    tr = calc_thermo(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, 60)
+    temps = list(range(min_temp, max_temp + 1))
+    profile = ps.calc_annealing_profile(
+        kmer_seq,
+        [float(t) for t in temps],
+        mv_conc=mv_conc,
+        dv_conc=dv_conc,
+        dntp_conc=dntp_conc,
+        dna_conc=dna_conc,
+    )
+    return dict(zip(temps, profile, strict=True))
 
-    results = {}
-    for temp_c in range(min_temp, max_temp + 1):
-        dg = tr.dh - (temp_c + T_KELVIN) * tr.ds
-        ka = exp(-dg / (1.987 * (temp_c + T_KELVIN)))
-        results[temp_c] = (1 / (1 + sqrt(1 / ((dna_conc / 4000000000.0) * ka)))) * 100
-    return results
 
-
-def calc_tm(kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
-    """Return Tm for the kmer sequence."""
-    return p3_calc_tm(
+def calc_tm(
+    kmer_seq, mv_conc, dv_conc, dntp_conc, dna_conc, formamide_conc: float = 0.8
+) -> float:
+    """Return Tm for the kmer sequence, as the digest checks it."""
+    return ps.calc_tm(
         kmer_seq,
         mv_conc=mv_conc,
         dv_conc=dv_conc,
         dntp_conc=dntp_conc,
         dna_conc=dna_conc,
+        formamide_conc=formamide_conc,
     )
 
 
@@ -119,7 +119,7 @@ def calc_hairpin_tm(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
     Calculate the hairpin formation thermodynamics of a DNA sequence.
     Returns tm.
     """
-    return p3_calc_hairpin(
+    return ps.calc_hairpin(
         seq,
         mv_conc=mv_conc,
         dv_conc=dv_conc,
@@ -128,12 +128,14 @@ def calc_hairpin_tm(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
     ).tm
 
 
-def calc_hairpin_struct(seq: str, mv_conc, dv_conc, dntp_conc, dna_conc) -> float:
+def calc_hairpin_struct(
+    seq: str, mv_conc, dv_conc, dntp_conc, dna_conc
+) -> list[str] | None:
     """
     Calculate the hairpin formation thermodynamics of a DNA sequence.
-    Returns tm.
+    Returns the ASCII structure lines.
     """
-    return p3_calc_hairpin(
+    return ps.calc_hairpin(
         seq,
         mv_conc=mv_conc,
         dv_conc=dv_conc,
@@ -149,19 +151,14 @@ def forms_hairpin(seqs: list[str], config: Config) -> bool:
     If any form hairpins it will return True
     If all clear it will return False
     """
-    for seq in seqs:
-        if (
-            calc_hairpin_tm(
-                seq,
-                mv_conc=config.mv_conc,
-                dv_conc=config.dv_conc,
-                dntp_conc=config.dntp_conc,
-                dna_conc=config.dna_conc,
-            )
-            > config.primer_hairpin_th_max
-        ):
-            return True
-    return False
+    results = ps.calc_hairpin_batch(
+        list(seqs),
+        mv_conc=config.mv_conc,
+        dv_conc=config.dv_conc,
+        dntp_conc=config.dntp_conc,
+        dna_conc=config.dna_conc,
+    )
+    return any(r.tm > config.primer_hairpin_th_max for r in results)
 
 
 def gc(kmer_seq: str) -> float:
@@ -224,8 +221,10 @@ def thermo_check(kmer_seq: str, config: Config) -> THERMO_RESULT:
             dv_conc=config.dv_conc,
             dna_conc=config.dna_conc,
             dntp_conc=config.dntp_conc,
+            formamide_conc=config.formamide_conc,
         )
-        if kmer_tm > config.primer_tm_max + 2:
+        # As the Rust digest: fail at or above the maximum
+        if kmer_tm >= config.primer_tm_max:
             return THERMO_RESULT.HIGH_TM
         elif kmer_tm < config.primer_tm_min:
             return THERMO_RESULT.LOW_TM
