@@ -72,7 +72,7 @@ The first product found rejects the pair for that pool, and the reference it is 
 
 ## Not an exhaustive search
 
-The check is a fast filter for near-identical 3′ ends. It doesn't model every place a primer could bind, and there's no alignment or thermodynamic scoring of off-target sites. In particular:
+The check is a fast filter for near-identical 3′ ends against defined background. It doesn't model every place a primer could bind, and there's no alignment or thermodynamic scoring of off-target sites. In particular:
 
 - **Two or more mismatches** in the 3′ kmer, or an **insertion or deletion between the primer and the site**, are not found. Alignment gaps are different: they are removed before scanning, so a site spanning a gap in the MSA is found.
 - **The 5′ end is ignored.** A site matching the last `k` bases is a hit even if the rest of the primer doesn't match there.
