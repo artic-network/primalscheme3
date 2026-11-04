@@ -205,6 +205,11 @@ class TestConfig(unittest.TestCase):
         config = Config(amplicon_size=400)
         self.assertEqual(config.mismatch_product_size, config.amplicon_size_max)
 
+    def test_background_genomes_from_json(self):
+        config = Config(background_genomes=[pathlib.Path("a.fa")])
+        self.assertEqual(config.background_genomes, ["a.fa"])
+        self.assertEqual(config.to_dict()["background_genomes"], ["a.fa"])
+
 
 if __name__ == "__main__":
     unittest.main()

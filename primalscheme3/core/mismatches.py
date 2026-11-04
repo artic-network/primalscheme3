@@ -1,3 +1,4 @@
+import hashlib
 import pathlib
 from collections.abc import Iterable
 
@@ -77,3 +78,12 @@ def expected_site(kmer: FKmer | RKmer, msa_index: int) -> Hit:
     if isinstance(kmer, FKmer):
         return (msa_index, 0, kmer.end - 1, "+")
     return (msa_index, 0, kmer.start, "-")
+
+
+def background_checksums(paths: Iterable[str]) -> dict[str, str]:
+    """The md5 of each background genome file, by path"""
+    checksums = {}
+    for path in paths:
+        with open(path, "rb") as f:
+            checksums[str(path)] = hashlib.file_digest(f, "md5").hexdigest()
+    return checksums

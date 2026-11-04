@@ -83,6 +83,8 @@ class Config:
     mismatch_fuzzy: bool = True
     mismatch_kmersize: int  # Same as primer_size_min
     mismatch_product_size: int = 0  # 0 uses amplicon_size_max
+    # FASTAs screened for mispriming products alongside the MSAs
+    background_genomes: list[str] = []
     # Thermodynamic Parameters
     mv_conc: float = 100.0
     dv_conc: float = 2.0
@@ -164,6 +166,10 @@ class Config:
 
             if key in {"input_bedfile"}:
                 setattr(self, key, pathlib.Path(value))
+                continue
+
+            if key == "background_genomes":
+                setattr(self, key, [str(path) for path in value])
                 continue
 
             if hasattr(self, key):

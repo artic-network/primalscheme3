@@ -169,6 +169,16 @@ def scheme_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    background_genomes: Annotated[
+        list[pathlib.Path] | None,
+        typer.Option(
+            "--background",
+            help="FASTA (plain or gzipped) of a genome to screen primers against for mispriming products. Can be given multiple times",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ] = None,
     ncores: Annotated[
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),
@@ -422,6 +432,16 @@ def panel_create(
             help="Create and use a mispriming database",
         ),
     ] = Config.use_matchdb,
+    background_genomes: Annotated[
+        list[pathlib.Path] | None,
+        typer.Option(
+            "--background",
+            help="FASTA (plain or gzipped) of a genome to screen primers against for mispriming products. Can be given multiple times",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ] = None,
     ncores: Annotated[
         int,
         typer.Option(help="Number of CPU cores to use during digestion", min=1),

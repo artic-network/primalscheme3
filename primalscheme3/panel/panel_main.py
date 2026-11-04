@@ -17,7 +17,7 @@ from primalscheme3.core.create_report_data import generate_all_plotdata
 from primalscheme3.core.create_reports import generate_all_plots_html
 from primalscheme3.core.logger import setup_rich_logger
 from primalscheme3.core.mapping import generate_consensus, generate_reference
-from primalscheme3.core.mismatches import MatchDB
+from primalscheme3.core.mismatches import MatchDB, background_checksums
 from primalscheme3.core.primer_visual import (
     plot_primer_thermo_profile_html,
     primer_mismatch_heatmap,
@@ -116,9 +116,11 @@ def panelcreate(
     )
     mismatch_db = MatchDB(
         [str(x) for x in ARG_MSA] if config.use_matchdb else [],
-        [],
+        config.background_genomes if config.use_matchdb else [],
         config,
     )
+    if config.background_genomes and not config.use_matchdb:
+        logger.warning("Background genomes are ignored as the mismatch db is off")
     logger.info(mismatch_db.describe())
 
     regions_mapping: dict[Region, str | None] | None = None
@@ -335,6 +337,7 @@ def panelcreate(
     logger.info(f"Screened {n_screened:,} primer 3' ends for mispriming")
     for ref_name, n_sites in mismatch_db.site_counts():
         logger.debug(f"{ref_name}: {n_sites:,} binding sites")
+    config_dict["background_data"] = background_checksums(config.background_genomes)
 
     # Create the panel object
     panel: Panel = Panel(msa_dict, config=config, matchdb=mismatch_db, logger=logger)
